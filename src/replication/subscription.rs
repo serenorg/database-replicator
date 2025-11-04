@@ -33,9 +33,60 @@ pub async fn create_subscription(
             if err_str.contains("already exists") {
                 tracing::info!("✓ Subscription '{}' already exists", subscription_name);
                 Ok(())
+            } else if err_str.contains("permission denied") || err_str.contains("must be superuser")
+            {
+                anyhow::bail!(
+                    "Permission denied: Cannot create subscription '{}'.\n\
+                     Only superusers can create subscriptions in PostgreSQL.\n\
+                     Contact your database administrator to:\n\
+                     1. Grant superuser: ALTER ROLE <user> WITH SUPERUSER;\n\
+                     2. Or create the subscription on your behalf\n\
+                     Error: {}",
+                    subscription_name,
+                    err_str
+                )
+            } else if err_str.contains("publication") && err_str.contains("does not exist") {
+                anyhow::bail!(
+                    "Publication does not exist: Cannot create subscription '{}'.\n\
+                     The publication '{}' was not found on the source database.\n\
+                     Make sure the publication exists before creating the subscription.\n\
+                     Error: {}",
+                    subscription_name,
+                    publication_name,
+                    err_str
+                )
+            } else if err_str.contains("could not connect to the publisher")
+                || err_str.contains("connection")
+            {
+                anyhow::bail!(
+                    "Connection failed: Cannot connect to source database for subscription '{}'.\n\
+                     Please verify:\n\
+                     - The source database is accessible from the target\n\
+                     - The connection string is correct\n\
+                     - Firewall rules allow connections\n\
+                     - The source user has REPLICATION privilege\n\
+                     Error: {}",
+                    subscription_name,
+                    err_str
+                )
+            } else if err_str.contains("replication slot") {
+                anyhow::bail!(
+                    "Replication slot error: Cannot create subscription '{}'.\n\
+                     The source database may have reached the maximum number of replication slots.\n\
+                     Check 'max_replication_slots' on the source database.\n\
+                     Error: {}",
+                    subscription_name,
+                    err_str
+                )
             } else {
                 anyhow::bail!(
-                    "Failed to create subscription '{}': {}",
+                    "Failed to create subscription '{}': {}\n\
+                     \n\
+                     Common causes:\n\
+                     - Insufficient privileges (need SUPERUSER on target)\n\
+                     - Publication does not exist on source\n\
+                     - Cannot connect to source database\n\
+                     - max_replication_slots limit reached on source",
                     subscription_name,
                     err_str
                 )
@@ -128,9 +179,21 @@ pub async fn wait_for_sync(
 
         if start.elapsed() > timeout {
             anyhow::bail!(
-                "Timeout waiting for subscription '{}' to sync after {} seconds",
+                "Timeout waiting for subscription '{}' to sync after {} seconds.\n\
+                 The subscription is in state '{}' and has not reached 'ready' (streaming) state.\n\
+                 \n\
+                 Possible causes:\n\
+                 - Large database taking longer than expected to copy\n\
+                 - Network issues slowing down data transfer\n\
+                 - Source database under heavy load\n\
+                 \n\
+                 Suggestions:\n\
+                 - Increase the timeout value and try again\n\
+                 - Check replication status with 'status' command\n\
+                 - Monitor source database load and network connectivity",
                 subscription_name,
-                timeout_secs
+                timeout_secs,
+                state
             );
         }
 

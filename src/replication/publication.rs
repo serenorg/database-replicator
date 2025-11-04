@@ -21,9 +21,33 @@ pub async fn create_publication(client: &Client, publication_name: &str) -> Resu
             if err_str.contains("already exists") {
                 tracing::info!("✓ Publication '{}' already exists", publication_name);
                 Ok(())
+            } else if err_str.contains("permission denied") || err_str.contains("must be owner") {
+                anyhow::bail!(
+                    "Permission denied: Cannot create publication '{}'.\n\
+                     You need superuser or owner privileges on the database.\n\
+                     Grant with: GRANT CREATE ON DATABASE <dbname> TO <user>;\n\
+                     Error: {}",
+                    publication_name,
+                    err_str
+                )
+            } else if err_str.contains("wal_level") || err_str.contains("logical replication") {
+                anyhow::bail!(
+                    "Logical replication not enabled: Cannot create publication '{}'.\n\
+                     The database parameter 'wal_level' must be set to 'logical'.\n\
+                     Contact your database administrator to update postgresql.conf:\n\
+                     wal_level = logical\n\
+                     Error: {}",
+                    publication_name,
+                    err_str
+                )
             } else {
                 anyhow::bail!(
-                    "Failed to create publication '{}': {}",
+                    "Failed to create publication '{}': {}\n\
+                     \n\
+                     Common causes:\n\
+                     - Insufficient privileges (need CREATE privilege on database)\n\
+                     - Logical replication not enabled (wal_level must be 'logical')\n\
+                     - Database does not support publications",
                     publication_name,
                     err_str
                 )

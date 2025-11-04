@@ -14,11 +14,27 @@ pub async fn dump_globals(source_url: &str, output_path: &str) -> Result<()> {
         .arg(format!("--dbname={}", source_url))
         .arg(format!("--file={}", output_path))
         .output()
-        .context("Failed to execute pg_dumpall. Is PostgreSQL client installed?")?;
+        .context(
+            "Failed to execute pg_dumpall. Is PostgreSQL client installed?\n\
+             Install with:\n\
+             - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
+             - macOS: brew install postgresql\n\
+             - RHEL/CentOS: sudo yum install postgresql",
+        )?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("pg_dumpall failed: {}", stderr);
+        bail!(
+            "pg_dumpall failed to dump global objects.\n\
+             Error: {}\n\
+             \n\
+             Common causes:\n\
+             - Connection authentication failed\n\
+             - User lacks sufficient privileges (need SUPERUSER or pg_read_all_settings role)\n\
+             - Network connectivity issues\n\
+             - Invalid connection string",
+            stderr
+        );
     }
 
     tracing::info!("✓ Global objects dumped successfully");
@@ -40,11 +56,28 @@ pub async fn dump_schema(source_url: &str, database: &str, output_path: &str) ->
         .arg(format!("--dbname={}", source_url))
         .arg(format!("--file={}", output_path))
         .output()
-        .context("Failed to execute pg_dump. Is PostgreSQL client installed?")?;
+        .context(
+            "Failed to execute pg_dump. Is PostgreSQL client installed?\n\
+             Install with:\n\
+             - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
+             - macOS: brew install postgresql\n\
+             - RHEL/CentOS: sudo yum install postgresql",
+        )?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("pg_dump failed: {}", stderr);
+        bail!(
+            "pg_dump failed to dump schema for database '{}'.\n\
+             Error: {}\n\
+             \n\
+             Common causes:\n\
+             - Database does not exist\n\
+             - Connection authentication failed\n\
+             - User lacks privileges to read database schema\n\
+             - Network connectivity issues",
+            database,
+            stderr
+        );
     }
 
     tracing::info!("✓ Schema dumped successfully");
@@ -65,11 +98,29 @@ pub async fn dump_data(source_url: &str, database: &str, output_path: &str) -> R
         .arg(format!("--dbname={}", source_url))
         .arg(format!("--file={}", output_path))
         .output()
-        .context("Failed to execute pg_dump")?;
+        .context(
+            "Failed to execute pg_dump. Is PostgreSQL client installed?\n\
+             Install with:\n\
+             - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
+             - macOS: brew install postgresql\n\
+             - RHEL/CentOS: sudo yum install postgresql",
+        )?;
 
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
-        bail!("pg_dump failed: {}", stderr);
+        bail!(
+            "pg_dump failed to dump data for database '{}'.\n\
+             Error: {}\n\
+             \n\
+             Common causes:\n\
+             - Database does not exist\n\
+             - Connection authentication failed\n\
+             - User lacks privileges to read table data\n\
+             - Network connectivity issues\n\
+             - Insufficient disk space for dump file",
+            database,
+            stderr
+        );
     }
 
     tracing::info!("✓ Data dumped successfully");
