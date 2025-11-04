@@ -72,9 +72,7 @@ async fn main() -> anyhow::Result<()> {
             commands::status(&source, &target, None).await
         }
         Commands::Verify { source, target } => {
-            println!("Verifying data integrity from {} to {}", source, target);
-            // TODO: Implement
-            Ok(())
+            commands::verify(&source, &target).await
         }
     }
 }
