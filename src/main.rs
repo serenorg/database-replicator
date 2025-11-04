@@ -66,9 +66,7 @@ async fn main() -> anyhow::Result<()> {
             commands::init(&source, &target).await
         }
         Commands::Sync { source, target } => {
-            println!("Setting up replication from {} to {}", source, target);
-            // TODO: Implement
-            Ok(())
+            commands::sync(&source, &target, None, None, None).await
         }
         Commands::Status { source, target } => {
             println!("Checking replication status from {} to {}", source, target);

@@ -3,6 +3,8 @@
 
 pub mod validate;
 pub mod init;
+pub mod sync;
 
 pub use validate::validate;
 pub use init::init;
+pub use sync::sync;
