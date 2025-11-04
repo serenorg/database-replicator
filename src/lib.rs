@@ -6,3 +6,4 @@ pub mod error;
 pub mod migration;
 pub mod postgres;
 pub mod replication;
+pub mod utils;

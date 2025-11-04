@@ -9,8 +9,10 @@ pub async fn init(source_url: &str, target_url: &str) -> Result<()> {
     tracing::info!("Starting initial migration...");
 
     // Create temporary directory for dump files
+    // TempDir automatically cleans up on drop, even if errors occur
     let temp_dir = TempDir::new().context("Failed to create temp directory")?;
     let temp_path = temp_dir.path();
+    tracing::debug!("Using temp directory: {}", temp_path.display());
 
     // Step 1: Dump global objects
     tracing::info!("Step 1/4: Dumping global objects (roles, tablespaces)...");
@@ -25,6 +27,15 @@ pub async fn init(source_url: &str, target_url: &str) -> Result<()> {
     tracing::info!("Step 3/4: Discovering databases...");
     let source_client = postgres::connect(source_url).await?;
     let databases = migration::list_databases(&source_client).await?;
+
+    if databases.is_empty() {
+        tracing::warn!("⚠ No user databases found on source");
+        tracing::warn!("  This is unusual - the source database appears empty");
+        tracing::warn!("  Only global objects (roles, tablespaces) will be migrated");
+        tracing::info!("✅ Initial migration complete (no databases to migrate)");
+        return Ok(());
+    }
+
     tracing::info!("Found {} database(s) to migrate", databases.len());
 
     // Step 4: Migrate each database

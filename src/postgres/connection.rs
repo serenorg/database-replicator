@@ -1,9 +1,11 @@
 // ABOUTME: PostgreSQL connection utilities for Neon and Seren
 // ABOUTME: Handles connection string parsing, TLS setup, and connection lifecycle
 
+use crate::utils;
 use anyhow::{Context, Result};
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
+use std::time::Duration;
 use tokio_postgres::Client;
 
 /// Connect to PostgreSQL database with TLS support
@@ -87,6 +89,17 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
     });
 
     Ok(client)
+}
+
+/// Connect with automatic retry for transient failures
+pub async fn connect_with_retry(connection_string: &str) -> Result<Client> {
+    utils::retry_with_backoff(
+        || connect(connection_string),
+        3,                      // Max 3 retries
+        Duration::from_secs(1), // Start with 1 second delay
+    )
+    .await
+    .context("Failed to connect after retries")
 }
 
 #[cfg(test)]

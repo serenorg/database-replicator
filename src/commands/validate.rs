@@ -1,11 +1,17 @@
 // ABOUTME: Pre-flight validation command for migration readiness
 // ABOUTME: Checks connectivity, privileges, and version compatibility
 
-use crate::postgres;
+use crate::{postgres, utils};
 use anyhow::{bail, Context, Result};
 
 pub async fn validate(source_url: &str, target_url: &str) -> Result<()> {
     tracing::info!("Starting validation...");
+
+    // Step 0: Validate connection strings
+    tracing::info!("Validating connection strings...");
+    utils::validate_connection_string(source_url).context("Invalid source connection string")?;
+    utils::validate_connection_string(target_url).context("Invalid target connection string")?;
+    tracing::info!("✓ Connection strings are valid");
 
     // Step 1: Connect to source
     tracing::info!("Connecting to source database...");
