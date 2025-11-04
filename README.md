@@ -1,5 +1,11 @@
 # neon-seren-migrator
 
+[![CI](https://github.com/serenorg/neon-seren-migrator/actions/workflows/ci.yml/badge.svg)](https://github.com/serenorg/neon-seren-migrator/actions/workflows/ci.yml)
+[![Security Audit](https://github.com/serenorg/neon-seren-migrator/actions/workflows/ci.yml/badge.svg?event=push)](https://github.com/serenorg/neon-seren-migrator/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
+[![Rust Version](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
+[![Latest Release](https://img.shields.io/github/v/release/serenorg/neon-seren-migrator)](https://github.com/serenorg/neon-seren-migrator/releases)
+
 Zero-downtime database migration tool from Neon to Seren using PostgreSQL logical replication.
 
 ## Overview
@@ -28,11 +34,27 @@ The migration process follows 5 phases:
 
 ### Prerequisites
 
-- Rust 1.70 or later
 - PostgreSQL client tools (pg_dump, pg_dumpall, psql)
 - Access to both Neon and Seren databases with appropriate permissions
 
+### Download Pre-built Binaries
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/serenorg/neon-seren-migrator/releases/latest):
+
+- **Linux (x64)**: `neon-seren-migrator-linux-x64-binary`
+- **macOS (Intel)**: `neon-seren-migrator-macos-x64-binary`
+- **macOS (Apple Silicon)**: `neon-seren-migrator-macos-arm64-binary`
+
+Make the binary executable:
+
+```bash
+chmod +x neon-seren-migrator-*-binary
+./neon-seren-migrator-*-binary --help
+```
+
 ### Build from Source
+
+Requires Rust 1.70 or later:
 
 ```bash
 git clone https://github.com/serenorg/neon-seren-migrator.git
@@ -210,4 +232,4 @@ watch -n 5 './neon-seren-migrator status --source "$SOURCE" --target "$TARGET"'
 
 ## License
 
-MIT
+This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.

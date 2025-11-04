@@ -1,7 +1,13 @@
 [package]
 name = "neon-seren-migrator"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
+license = "Apache-2.0"
+description = "Zero-downtime database migration tool from Neon to Seren using PostgreSQL logical replication"
+repository = "https://github.com/serenorg/neon-seren-migrator"
+readme = "README.md"
+keywords = ["postgresql", "migration", "replication", "database", "neon"]
+categories = ["command-line-utilities", "database"]
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
