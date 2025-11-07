@@ -256,9 +256,17 @@ pub async fn init(
         tracing::info!("");
 
         // Call sync command with the same filter
-        crate::commands::sync(source_url, target_url, Some(filter), None, None, None)
-            .await
-            .context("Failed to set up continuous replication")?;
+        crate::commands::sync(
+            source_url,
+            target_url,
+            Some(filter),
+            None,
+            None,
+            None,
+            false,
+        )
+        .await
+        .context("Failed to set up continuous replication")?;
 
         tracing::info!("");
         tracing::info!("✅ Complete! Snapshot and continuous replication are active");

@@ -3,7 +3,10 @@
 
 use crate::migration;
 use crate::postgres::connect;
-use crate::replication::{create_publication, create_subscription, wait_for_sync};
+use crate::replication::{
+    create_publication, create_subscription, detect_subscription_state, drop_subscription,
+    wait_for_sync, SubscriptionState,
+};
 use anyhow::{Context, Result};
 
 /// Set up logical replication between source and target databases
@@ -12,12 +15,15 @@ use anyhow::{Context, Result};
 /// 1. Discovers all databases on the source
 /// 2. Filters databases based on the provided filter criteria
 /// 3. For each database:
+///    - Checks if subscription already exists (skips or recreates based on state and force flag)
 ///    - Creates a publication on the source database (filtered tables if specified)
 ///    - Creates a subscription on the target database pointing to the source
 ///    - Waits for the initial sync to complete
 ///
 /// After this command succeeds, changes on the source databases will continuously
 /// replicate to the target until the subscriptions are dropped.
+///
+/// This command is idempotent - it can be safely re-run if interrupted or if setup failed partially.
 ///
 /// # Arguments
 ///
@@ -27,6 +33,7 @@ use anyhow::{Context, Result};
 /// * `publication_name` - Optional publication name template (defaults to "seren_migration_pub")
 /// * `subscription_name` - Optional subscription name template (defaults to "seren_migration_sub")
 /// * `sync_timeout_secs` - Optional timeout in seconds per database (defaults to 300)
+/// * `force` - Force recreate subscriptions even if they already exist (defaults to false)
 ///
 /// # Returns
 ///
@@ -55,7 +62,8 @@ use anyhow::{Context, Result};
 ///     None,  // No filter - replicate all databases
 ///     None,  // Use default publication name
 ///     None,  // Use default subscription name
-///     Some(600)  // 10 minute timeout per database
+///     Some(600),  // 10 minute timeout per database
+///     false,  // Don't force recreate
 /// ).await?;
 ///
 /// // Replicate only specific databases
@@ -71,7 +79,8 @@ use anyhow::{Context, Result};
 ///     Some(filter),
 ///     None,
 ///     None,
-///     Some(600)
+///     Some(600),
+///     false,  // Don't force recreate
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -83,6 +92,7 @@ pub async fn sync(
     publication_name: Option<&str>,
     subscription_name: Option<&str>,
     sync_timeout_secs: Option<u64>,
+    force: bool,
 ) -> Result<()> {
     let pub_name_template = publication_name.unwrap_or("seren_migration_pub");
     let sub_name_template = subscription_name.unwrap_or("seren_migration_sub");
@@ -200,26 +210,127 @@ pub async fn sync(
                 db.name
             ))?;
 
-        // Create subscription on target database
-        tracing::info!("Creating subscription on target database...");
-        create_subscription(&target_db_client, &sub_name, &source_db_url, &pub_name)
+        // Check if subscription already exists
+        tracing::info!("Checking subscription state...");
+        let sub_state = detect_subscription_state(&target_db_client, &sub_name)
             .await
             .context(format!(
-                "Failed to create subscription on target database '{}'",
-                db.name
+                "Failed to detect subscription state for '{}'",
+                sub_name
             ))?;
 
-        // Wait for initial sync to complete
-        tracing::info!(
-            "Waiting for initial sync to complete (timeout: {}s)...",
-            timeout
-        );
-        wait_for_sync(&target_db_client, &sub_name, timeout)
-            .await
-            .context(format!(
-                "Failed to wait for initial sync on database '{}'",
-                db.name
-            ))?;
+        match sub_state {
+            SubscriptionState::Streaming => {
+                if force {
+                    tracing::info!(
+                        "⚠ Subscription '{}' is already streaming, but --force flag is set",
+                        sub_name
+                    );
+                    tracing::info!("Dropping existing subscription...");
+                    drop_subscription(&target_db_client, &sub_name)
+                        .await
+                        .context(format!("Failed to drop subscription '{}'", sub_name))?;
+                    tracing::info!("Creating new subscription...");
+                    create_subscription(&target_db_client, &sub_name, &source_db_url, &pub_name)
+                        .await
+                        .context(format!(
+                            "Failed to create subscription on target database '{}'",
+                            db.name
+                        ))?;
+                    tracing::info!(
+                        "Waiting for initial sync to complete (timeout: {}s)...",
+                        timeout
+                    );
+                    wait_for_sync(&target_db_client, &sub_name, timeout)
+                        .await
+                        .context(format!(
+                            "Failed to wait for initial sync on database '{}'",
+                            db.name
+                        ))?;
+                } else {
+                    tracing::info!(
+                        "✓ Subscription '{}' is already streaming and healthy",
+                        sub_name
+                    );
+                    tracing::info!("  Skipping subscription creation (use --force to recreate)");
+                }
+            }
+            SubscriptionState::Initializing
+            | SubscriptionState::Copying
+            | SubscriptionState::Syncing => {
+                tracing::info!(
+                    "ℹ Subscription '{}' already exists and is syncing (state: {:?})",
+                    sub_name,
+                    sub_state
+                );
+                tracing::info!(
+                    "Waiting for existing sync to complete (timeout: {}s)...",
+                    timeout
+                );
+                wait_for_sync(&target_db_client, &sub_name, timeout)
+                    .await
+                    .context(format!(
+                        "Failed to wait for existing sync on database '{}'",
+                        db.name
+                    ))?;
+            }
+            SubscriptionState::Error(err_state) => {
+                tracing::warn!(
+                    "⚠ Subscription '{}' is in error state: {}",
+                    sub_name,
+                    err_state
+                );
+                if force {
+                    tracing::info!("Dropping failed subscription and recreating...");
+                    drop_subscription(&target_db_client, &sub_name)
+                        .await
+                        .context(format!("Failed to drop subscription '{}'", sub_name))?;
+                    tracing::info!("Creating new subscription...");
+                    create_subscription(&target_db_client, &sub_name, &source_db_url, &pub_name)
+                        .await
+                        .context(format!(
+                            "Failed to create subscription on target database '{}'",
+                            db.name
+                        ))?;
+                    tracing::info!(
+                        "Waiting for initial sync to complete (timeout: {}s)...",
+                        timeout
+                    );
+                    wait_for_sync(&target_db_client, &sub_name, timeout)
+                        .await
+                        .context(format!(
+                            "Failed to wait for initial sync on database '{}'",
+                            db.name
+                        ))?;
+                } else {
+                    anyhow::bail!(
+                        "Subscription '{}' is in error state: {}.\n\
+                         Use --force flag to drop and recreate the subscription.",
+                        sub_name,
+                        err_state
+                    );
+                }
+            }
+            SubscriptionState::NotFound => {
+                tracing::info!("Creating subscription on target database...");
+                create_subscription(&target_db_client, &sub_name, &source_db_url, &pub_name)
+                    .await
+                    .context(format!(
+                        "Failed to create subscription on target database '{}'",
+                        db.name
+                    ))?;
+                tracing::info!(
+                    "Waiting for initial sync to complete (timeout: {}s)...",
+                    timeout
+                );
+                wait_for_sync(&target_db_client, &sub_name, timeout)
+                    .await
+                    .context(format!(
+                        "Failed to wait for initial sync on database '{}'",
+                        db.name
+                    ))?;
+            }
+        }
 
         tracing::info!("✓ Replication active for database '{}'", db.name);
     }
@@ -298,6 +409,7 @@ mod tests {
             Some(pub_name),
             Some(sub_name),
             Some(timeout),
+            false,
         )
         .await;
 
@@ -333,7 +445,7 @@ mod tests {
         let source_url = std::env::var("TEST_SOURCE_URL").unwrap();
         let target_url = std::env::var("TEST_TARGET_URL").unwrap();
 
-        let result = sync(&source_url, &target_url, None, None, None, Some(60)).await;
+        let result = sync(&source_url, &target_url, None, None, None, Some(60), false).await;
 
         match &result {
             Ok(_) => println!("✓ Sync with defaults completed successfully"),
@@ -399,7 +511,16 @@ mod tests {
         )
         .expect("Failed to create filter");
 
-        let result = sync(&source_url, &target_url, Some(filter), None, None, Some(60)).await;
+        let result = sync(
+            &source_url,
+            &target_url,
+            Some(filter),
+            None,
+            None,
+            Some(60),
+            false,
+        )
+        .await;
 
         match &result {
             Ok(_) => {

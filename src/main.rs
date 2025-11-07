@@ -88,6 +88,9 @@ enum Commands {
         /// Interactive mode for selecting databases/tables
         #[arg(long)]
         interactive: bool,
+        /// Force recreate subscriptions even if they already exist
+        #[arg(long)]
+        force: bool,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -201,6 +204,7 @@ async fn main() -> anyhow::Result<()> {
             include_tables,
             exclude_tables,
             interactive,
+            force,
         } => {
             let filter = if interactive {
                 // Interactive mode - prompt user to select databases and tables
@@ -214,7 +218,7 @@ async fn main() -> anyhow::Result<()> {
                     exclude_tables,
                 )?
             };
-            commands::sync(&source, &target, Some(filter), None, None, None).await
+            commands::sync(&source, &target, Some(filter), None, None, None, force).await
         }
         Commands::Status {
             source,

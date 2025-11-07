@@ -71,7 +71,16 @@ async fn test_sync_command_integration() {
     println!("⚠ WARNING: This will set up logical replication!");
 
     let filter = postgres_seren_replicator::filters::ReplicationFilter::empty();
-    let result = commands::sync(&source_url, &target_url, Some(filter), None, None, Some(30)).await;
+    let result = commands::sync(
+        &source_url,
+        &target_url,
+        Some(filter),
+        None,
+        None,
+        Some(30),
+        false,
+    )
+    .await;
 
     match &result {
         Ok(_) => {
@@ -364,6 +373,7 @@ async fn test_sync_with_table_filter() {
         Some(pub_name),
         Some(sub_name),
         Some(timeout),
+        false,
     )
     .await;
 

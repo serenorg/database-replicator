@@ -146,6 +146,55 @@ pub async fn drop_subscription(client: &Client, subscription_name: &str) -> Resu
     Ok(())
 }
 
+/// Subscription state enum
+#[derive(Debug, Clone, PartialEq)]
+pub enum SubscriptionState {
+    /// Subscription is streaming changes ('r' state)
+    Streaming,
+    /// Subscription is initializing ('i' state)
+    Initializing,
+    /// Subscription is copying data ('d' state)
+    Copying,
+    /// Subscription is syncing ('s' state)
+    Syncing,
+    /// Subscription has an error or is in unknown state
+    Error(String),
+    /// Subscription does not exist
+    NotFound,
+}
+
+/// Detect the current state of a subscription
+pub async fn detect_subscription_state(
+    client: &Client,
+    subscription_name: &str,
+) -> Result<SubscriptionState> {
+    // Query pg_stat_subscription to get subscription state
+    let rows = client
+        .query(
+            "SELECT srsubstate FROM pg_stat_subscription WHERE subname = $1",
+            &[&subscription_name],
+        )
+        .await
+        .context(format!(
+            "Failed to query subscription status for '{}'",
+            subscription_name
+        ))?;
+
+    if rows.is_empty() {
+        return Ok(SubscriptionState::NotFound);
+    }
+
+    let state: String = rows[0].get(0);
+
+    match state.as_str() {
+        "r" => Ok(SubscriptionState::Streaming),
+        "i" => Ok(SubscriptionState::Initializing),
+        "d" => Ok(SubscriptionState::Copying),
+        "s" => Ok(SubscriptionState::Syncing),
+        other => Ok(SubscriptionState::Error(other.to_string())),
+    }
+}
+
 /// Wait for subscription to complete initial sync and enter streaming state
 /// Returns when subscription reaches 'r' (ready/streaming) state
 pub async fn wait_for_sync(

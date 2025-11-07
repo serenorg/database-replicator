@@ -10,4 +10,7 @@ pub use monitor::{
     SubscriptionStats,
 };
 pub use publication::{create_publication, drop_publication, list_publications};
-pub use subscription::{create_subscription, drop_subscription, list_subscriptions, wait_for_sync};
+pub use subscription::{
+    create_subscription, detect_subscription_state, drop_subscription, list_subscriptions,
+    wait_for_sync, SubscriptionState,
+};
