@@ -108,7 +108,9 @@ pub async fn init(
     // Estimate database sizes and get confirmation
     if !skip_confirmation {
         tracing::info!("Analyzing database sizes...");
-        let size_estimates = migration::estimate_database_sizes(&source_client, &databases).await?;
+        let size_estimates =
+            migration::estimate_database_sizes(source_url, &source_client, &databases, &filter)
+                .await?;
 
         if !confirm_replication(&size_estimates)? {
             bail!("Replication cancelled by user");
