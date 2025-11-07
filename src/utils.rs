@@ -194,6 +194,102 @@ where
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("Operation failed after retries")))
 }
 
+/// Validate a PostgreSQL identifier (database name, schema name, etc.)
+///
+/// Validates that an identifier follows PostgreSQL naming rules to prevent SQL injection.
+/// PostgreSQL identifiers must:
+/// - Be 1-63 characters long
+/// - Start with a letter (a-z, A-Z) or underscore (_)
+/// - Contain only letters, digits (0-9), or underscores
+///
+/// # Arguments
+///
+/// * `identifier` - The identifier to validate (database name, schema name, etc.)
+///
+/// # Returns
+///
+/// Returns `Ok(())` if the identifier is valid.
+///
+/// # Errors
+///
+/// Returns an error if the identifier:
+/// - Is empty or whitespace-only
+/// - Exceeds 63 characters
+/// - Starts with an invalid character (digit or special character)
+/// - Contains invalid characters (anything except a-z, A-Z, 0-9, _)
+///
+/// # Security
+///
+/// This function is critical for preventing SQL injection attacks. All database
+/// names, schema names, and table names from untrusted sources MUST be validated
+/// before use in SQL statements.
+///
+/// # Examples
+///
+/// ```
+/// # use postgres_seren_replicator::utils::validate_postgres_identifier;
+/// # use anyhow::Result;
+/// # fn example() -> Result<()> {
+/// // Valid identifiers
+/// validate_postgres_identifier("mydb")?;
+/// validate_postgres_identifier("my_database")?;
+/// validate_postgres_identifier("_private_db")?;
+///
+/// // Invalid - will return error
+/// assert!(validate_postgres_identifier("123db").is_err());
+/// assert!(validate_postgres_identifier("my-database").is_err());
+/// assert!(validate_postgres_identifier("db\"; DROP TABLE users; --").is_err());
+/// # Ok(())
+/// # }
+/// ```
+pub fn validate_postgres_identifier(identifier: &str) -> Result<()> {
+    // Check for empty or whitespace-only
+    let trimmed = identifier.trim();
+    if trimmed.is_empty() {
+        bail!("Identifier cannot be empty or whitespace-only");
+    }
+
+    // Check length (PostgreSQL limit is 63 characters)
+    if trimmed.len() > 63 {
+        bail!(
+            "Identifier '{}' exceeds maximum length of 63 characters (got {})",
+            sanitize_identifier(trimmed),
+            trimmed.len()
+        );
+    }
+
+    // Get first character
+    let first_char = trimmed.chars().next().unwrap();
+
+    // First character must be a letter or underscore
+    if !first_char.is_ascii_alphabetic() && first_char != '_' {
+        bail!(
+            "Identifier '{}' must start with a letter or underscore, not '{}'",
+            sanitize_identifier(trimmed),
+            first_char
+        );
+    }
+
+    // All characters must be alphanumeric or underscore
+    for (i, c) in trimmed.chars().enumerate() {
+        if !c.is_ascii_alphanumeric() && c != '_' {
+            bail!(
+                "Identifier '{}' contains invalid character '{}' at position {}. \
+                 Only letters, digits, and underscores are allowed",
+                sanitize_identifier(trimmed),
+                if c.is_control() {
+                    format!("\\x{:02x}", c as u32)
+                } else {
+                    c.to_string()
+                },
+                i
+            );
+        }
+    }
+
+    Ok(())
+}
+
 /// Sanitize an identifier (table name, schema name, etc.) for display
 ///
 /// Removes control characters and limits length to prevent log injection attacks
@@ -320,5 +416,51 @@ mod tests {
 
         assert!(result.is_err());
         assert_eq!(attempts, 3); // Initial + 2 retries
+    }
+
+    #[test]
+    fn test_validate_postgres_identifier_valid() {
+        // Valid identifiers
+        assert!(validate_postgres_identifier("mydb").is_ok());
+        assert!(validate_postgres_identifier("my_database").is_ok());
+        assert!(validate_postgres_identifier("_private_db").is_ok());
+        assert!(validate_postgres_identifier("db123").is_ok());
+        assert!(validate_postgres_identifier("Database_2024").is_ok());
+
+        // Maximum length (63 characters)
+        let max_length_name = "a".repeat(63);
+        assert!(validate_postgres_identifier(&max_length_name).is_ok());
+    }
+
+    #[test]
+    fn test_validate_postgres_identifier_invalid() {
+        // SQL injection attempts
+        assert!(validate_postgres_identifier("mydb\"; DROP DATABASE production; --").is_err());
+        assert!(validate_postgres_identifier("db'; DELETE FROM users; --").is_err());
+
+        // Invalid start characters
+        assert!(validate_postgres_identifier("123db").is_err()); // Starts with digit
+        assert!(validate_postgres_identifier("$db").is_err()); // Starts with special char
+        assert!(validate_postgres_identifier("-db").is_err()); // Starts with dash
+
+        // Contains invalid characters
+        assert!(validate_postgres_identifier("my-database").is_err()); // Contains dash
+        assert!(validate_postgres_identifier("my.database").is_err()); // Contains dot
+        assert!(validate_postgres_identifier("my database").is_err()); // Contains space
+        assert!(validate_postgres_identifier("my@db").is_err()); // Contains @
+        assert!(validate_postgres_identifier("my#db").is_err()); // Contains #
+
+        // Empty or too long
+        assert!(validate_postgres_identifier("").is_err());
+        assert!(validate_postgres_identifier("   ").is_err());
+
+        // Over maximum length (64+ characters)
+        let too_long = "a".repeat(64);
+        assert!(validate_postgres_identifier(&too_long).is_err());
+
+        // Control characters
+        assert!(validate_postgres_identifier("my\ndb").is_err());
+        assert!(validate_postgres_identifier("my\tdb").is_err());
+        assert!(validate_postgres_identifier("my\x00db").is_err());
     }
 }

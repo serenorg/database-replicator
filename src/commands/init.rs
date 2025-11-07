@@ -181,6 +181,10 @@ pub async fn init(
             }
         }
 
+        // Validate database name to prevent SQL injection
+        crate::utils::validate_postgres_identifier(&db_info.name)
+            .with_context(|| format!("Invalid database name: '{}'", db_info.name))?;
+
         // Create database if it doesn't exist (or was just dropped)
         if !database_exists(&target_client, &db_info.name).await? {
             let create_query = format!("CREATE DATABASE \"{}\"", db_info.name);
@@ -358,6 +362,10 @@ fn prompt_drop_database(db_name: &str) -> Result<bool> {
 
 /// Drops a database if it exists
 async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<()> {
+    // Validate database name to prevent SQL injection
+    crate::utils::validate_postgres_identifier(db_name)
+        .with_context(|| format!("Invalid database name: '{}'", db_name))?;
+
     tracing::info!("  Dropping existing database '{}'...", db_name);
 
     // Terminate existing connections to the database
