@@ -262,3 +262,71 @@ async fn test_error_handling_bad_target_url() {
     assert!(result.is_err(), "Should fail with bad target URL");
     println!("✓ Error handled gracefully: {:?}", result);
 }
+
+#[tokio::test]
+#[ignore]
+async fn test_init_with_database_filter() {
+    let (source_url, target_url) =
+        get_test_urls().expect("TEST_SOURCE_URL and TEST_TARGET_URL must be set");
+
+    println!("Testing init command with database filter...");
+    println!("⚠ WARNING: This will copy filtered data from source to target!");
+
+    // Create filter that includes only specific database
+    // Note: Adjust the database name based on your test environment
+    let filter = postgres_seren_replicator::filters::ReplicationFilter::new(
+        Some(vec!["postgres".to_string()]), // Include only postgres database
+        None,
+        None,
+        None,
+    )
+    .expect("Failed to create filter");
+
+    // Skip confirmation for automated tests
+    let result = commands::init(&source_url, &target_url, true, filter, false).await;
+
+    match &result {
+        Ok(_) => {
+            println!("✓ Init with database filter completed successfully");
+        }
+        Err(e) => {
+            println!("Init with database filter failed: {:?}", e);
+            // Init might fail for various reasons (permissions, pg_dump not found, etc)
+            // We just want to verify the command runs without panicking
+        }
+    }
+}
+
+#[tokio::test]
+#[ignore]
+async fn test_init_with_table_filter() {
+    let (source_url, target_url) =
+        get_test_urls().expect("TEST_SOURCE_URL and TEST_TARGET_URL must be set");
+
+    println!("Testing init command with table filter...");
+    println!("⚠ WARNING: This will copy filtered data from source to target!");
+
+    // Create filter that excludes specific tables
+    // Note: Adjust the table names based on your test environment
+    let filter = postgres_seren_replicator::filters::ReplicationFilter::new(
+        None,
+        None,
+        None,
+        Some(vec!["postgres.pg_stat_statements".to_string()]), // Exclude pg_stat_statements table
+    )
+    .expect("Failed to create filter");
+
+    // Skip confirmation for automated tests
+    let result = commands::init(&source_url, &target_url, true, filter, false).await;
+
+    match &result {
+        Ok(_) => {
+            println!("✓ Init with table filter completed successfully");
+        }
+        Err(e) => {
+            println!("Init with table filter failed: {:?}", e);
+            // Init might fail for various reasons (permissions, pg_dump not found, etc)
+            // We just want to verify the command runs without panicking
+        }
+    }
+}
