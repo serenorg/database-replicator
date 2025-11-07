@@ -90,15 +90,26 @@ pub async fn init(
     tracing::info!("Step 2/4: Restoring global objects to target...");
     migration::restore_globals(target_url, globals_file.to_str().unwrap()).await?;
 
-    // Step 3: Discover databases
+    // Step 3: Discover and filter databases
     tracing::info!("Step 3/4: Discovering databases...");
     let source_client = postgres::connect(source_url).await?;
-    let databases = migration::list_databases(&source_client).await?;
+    let all_databases = migration::list_databases(&source_client).await?;
+
+    // Apply filtering rules
+    let databases: Vec<_> = all_databases
+        .into_iter()
+        .filter(|db| filter.should_replicate_database(&db.name))
+        .collect();
 
     if databases.is_empty() {
-        tracing::warn!("⚠ No user databases found on source");
-        tracing::warn!("  This is unusual - the source database appears empty");
-        tracing::warn!("  Only global objects (roles, tablespaces) will be replicated");
+        if filter.is_empty() {
+            tracing::warn!("⚠ No user databases found on source");
+            tracing::warn!("  This is unusual - the source database appears empty");
+            tracing::warn!("  Only global objects (roles, tablespaces) will be replicated");
+        } else {
+            tracing::warn!("⚠ No databases matched the filter criteria");
+            tracing::warn!("  Check your --include-databases or --exclude-databases settings");
+        }
         tracing::info!("✅ Initial replication complete (no databases to replicate)");
         return Ok(());
     }
