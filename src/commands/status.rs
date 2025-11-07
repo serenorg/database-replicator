@@ -1,8 +1,8 @@
 // ABOUTME: Status command implementation - Check replication health
 // ABOUTME: Displays real-time replication lag and subscription status
 
-use crate::postgres::connect;
 use crate::replication::{get_replication_lag, get_subscription_status, is_replication_caught_up};
+use crate::{migration, postgres::connect};
 use anyhow::{Context, Result};
 
 /// Format milliseconds into a human-readable duration string
@@ -25,20 +25,22 @@ fn format_duration(ms: i64) -> String {
 /// Check replication status and display health information
 ///
 /// This command performs Phase 4 of the migration process:
-/// 1. Queries pg_stat_replication on source for replication lag
-/// 2. Queries pg_stat_subscription on target for subscription status
-/// 3. Displays health information in human-readable format
+/// 1. Discovers databases and filters them based on criteria
+/// 2. For each filtered database:
+///    - Queries pg_stat_replication on source for replication lag
+///    - Queries pg_stat_subscription on target for subscription status
+///    - Displays health information in human-readable format
 ///
 /// Provides real-time monitoring of replication health including:
-/// - Replication lag (write/flush/replay)
-/// - Subscription state
-/// - Whether target is caught up with source
+/// - Replication lag (write/flush/replay) per database
+/// - Subscription state per database
+/// - Whether each database is caught up with source
 ///
 /// # Arguments
 ///
-/// * `source_url` - PostgreSQL connection string for source (Neon) database
+/// * `source_url` - PostgreSQL connection string for source database
 /// * `target_url` - PostgreSQL connection string for target (Seren) database
-/// * `subscription_name` - Optional subscription name (defaults to "seren_migration_sub")
+/// * `filter` - Optional replication filter for database selection
 ///
 /// # Returns
 ///
@@ -48,6 +50,7 @@ fn format_duration(ms: i64) -> String {
 ///
 /// This function will return an error if:
 /// - Cannot connect to source or target database
+/// - Cannot discover databases on source
 /// - Cannot query replication statistics
 /// - Cannot query subscription status
 ///
@@ -56,11 +59,26 @@ fn format_duration(ms: i64) -> String {
 /// ```no_run
 /// # use anyhow::Result;
 /// # use postgres_seren_replicator::commands::status;
+/// # use postgres_seren_replicator::filters::ReplicationFilter;
 /// # async fn example() -> Result<()> {
+/// // Show status for all databases
 /// status(
-///     "postgresql://user:pass@neon.tech/sourcedb",
-///     "postgresql://user:pass@seren.example.com/targetdb",
-///     None  // Use default subscription name
+///     "postgresql://user:pass@source.example.com/postgres",
+///     "postgresql://user:pass@target.example.com/postgres",
+///     None
+/// ).await?;
+///
+/// // Show status for specific databases only
+/// let filter = ReplicationFilter::new(
+///     Some(vec!["mydb".to_string(), "analytics".to_string()]),
+///     None,
+///     None,
+///     None,
+/// )?;
+/// status(
+///     "postgresql://user:pass@source.example.com/postgres",
+///     "postgresql://user:pass@target.example.com/postgres",
+///     Some(filter)
 /// ).await?;
 /// # Ok(())
 /// # }
@@ -68,12 +86,12 @@ fn format_duration(ms: i64) -> String {
 pub async fn status(
     source_url: &str,
     target_url: &str,
-    _filter: Option<crate::filters::ReplicationFilter>,
+    filter: Option<crate::filters::ReplicationFilter>,
 ) -> Result<()> {
-    let sub_name = "seren_migration_sub";
+    let filter = filter.unwrap_or_else(crate::filters::ReplicationFilter::empty);
+    let sub_name_template = "seren_migration_sub";
 
     tracing::info!("Checking replication status...");
-    tracing::info!("Subscription: '{}'", sub_name);
     tracing::info!("");
 
     // Connect to source database
@@ -82,117 +100,177 @@ pub async fn status(
         .await
         .context("Failed to connect to source database")?;
 
+    // Discover and filter databases
+    tracing::info!("Discovering databases on source...");
+    let all_databases = migration::list_databases(&source_client)
+        .await
+        .context("Failed to list databases on source")?;
+
+    // Apply filtering rules
+    let databases: Vec<_> = all_databases
+        .into_iter()
+        .filter(|db| filter.should_replicate_database(&db.name))
+        .collect();
+
+    if databases.is_empty() {
+        tracing::warn!("⚠ No databases matched the filter criteria");
+        tracing::warn!("  No replication status to show");
+        return Ok(());
+    }
+
+    tracing::info!("Found {} database(s) to check:", databases.len());
+    for db in &databases {
+        tracing::info!("  - {}", db.name);
+    }
+    tracing::info!("");
+
     // Connect to target database
     tracing::info!("Connecting to target database...");
     let target_client = connect(target_url)
         .await
         .context("Failed to connect to target database")?;
-
-    // Query replication lag from source
-    tracing::info!("Querying source replication statistics...");
-    let source_stats = get_replication_lag(&source_client, Some(sub_name))
-        .await
-        .context("Failed to query replication lag from source")?;
-
-    // Query subscription status from target
-    tracing::info!("Querying target subscription statistics...");
-    let target_stats = get_subscription_status(&target_client, Some(sub_name))
-        .await
-        .context("Failed to query subscription status from target")?;
-
-    // Check if caught up
-    let caught_up = is_replication_caught_up(&source_client, Some(sub_name))
-        .await
-        .unwrap_or(false);
-
-    // Display results
     tracing::info!("");
+
+    // Check status for each database
     tracing::info!("========================================");
     tracing::info!("Replication Status Report");
     tracing::info!("========================================");
     tracing::info!("");
 
-    if source_stats.is_empty() {
-        tracing::warn!("⚠ No active replication found on source database");
-        tracing::warn!("  This could mean:");
-        tracing::warn!("  - Subscription is not connected");
-        tracing::warn!("  - Subscription name '{}' does not exist", sub_name);
-        tracing::warn!("  - Replication has not been set up yet");
+    let mut all_caught_up = true;
+    let mut any_active = false;
+
+    for db in &databases {
+        // Build subscription name for this database
+        let sub_name = if databases.len() == 1 {
+            // Single database - use template name as-is
+            sub_name_template.to_string()
+        } else {
+            // Multiple databases - append database name
+            format!("{}_{}", sub_name_template, db.name)
+        };
+
+        tracing::info!("Database: '{}'", db.name);
+        tracing::info!("Subscription: '{}'", sub_name);
         tracing::info!("");
-    } else {
-        for stat in &source_stats {
-            tracing::info!("Source Replication Slot:");
-            tracing::info!("  Application: {}", stat.application_name);
-            tracing::info!("  State: {}", stat.state);
-            tracing::info!("  Sent LSN: {}", stat.sent_lsn);
-            tracing::info!("  Write LSN: {}", stat.write_lsn);
-            tracing::info!("  Flush LSN: {}", stat.flush_lsn);
-            tracing::info!("  Replay LSN: {}", stat.replay_lsn);
 
-            if let Some(lag) = stat.replay_lag_ms {
-                tracing::info!("  Replay Lag: {}", format_duration(lag));
-            } else {
-                tracing::info!("  Replay Lag: N/A");
-            }
+        // Query replication lag from source
+        let source_stats = get_replication_lag(&source_client, Some(&sub_name))
+            .await
+            .context(format!(
+                "Failed to query replication lag for database '{}'",
+                db.name
+            ))?;
 
-            if let Some(lag) = stat.flush_lag_ms {
-                tracing::info!("  Flush Lag: {}", format_duration(lag));
-            }
+        // Query subscription status from target
+        let target_stats = get_subscription_status(&target_client, Some(&sub_name))
+            .await
+            .context(format!(
+                "Failed to query subscription status for database '{}'",
+                db.name
+            ))?;
 
-            if let Some(lag) = stat.write_lag_ms {
-                tracing::info!("  Write Lag: {}", format_duration(lag));
-            }
+        // Check if caught up
+        let caught_up = is_replication_caught_up(&source_client, Some(&sub_name))
+            .await
+            .unwrap_or(false);
 
+        if source_stats.is_empty() {
+            tracing::warn!("⚠ No active replication found for this database");
+            tracing::warn!("  Subscription '{}' may not be set up yet", sub_name);
             tracing::info!("");
-        }
-    }
+            all_caught_up = false;
+        } else {
+            any_active = true;
+            for stat in &source_stats {
+                tracing::info!("Source Replication Slot:");
+                tracing::info!("  Application: {}", stat.application_name);
+                tracing::info!("  State: {}", stat.state);
+                tracing::info!("  Sent LSN: {}", stat.sent_lsn);
+                tracing::info!("  Write LSN: {}", stat.write_lsn);
+                tracing::info!("  Flush LSN: {}", stat.flush_lsn);
+                tracing::info!("  Replay LSN: {}", stat.replay_lsn);
 
-    if target_stats.is_empty() {
-        tracing::warn!("⚠ No subscription found on target database");
-        tracing::warn!("  Subscription '{}' may not exist", sub_name);
+                if let Some(lag) = stat.replay_lag_ms {
+                    tracing::info!("  Replay Lag: {}", format_duration(lag));
+                } else {
+                    tracing::info!("  Replay Lag: N/A");
+                }
+
+                if let Some(lag) = stat.flush_lag_ms {
+                    tracing::info!("  Flush Lag: {}", format_duration(lag));
+                }
+
+                if let Some(lag) = stat.write_lag_ms {
+                    tracing::info!("  Write Lag: {}", format_duration(lag));
+                }
+
+                tracing::info!("");
+            }
+        }
+
+        if target_stats.is_empty() {
+            tracing::warn!("⚠ No subscription found on target");
+            tracing::warn!("  Subscription '{}' may not exist", sub_name);
+            tracing::info!("");
+            all_caught_up = false;
+        } else {
+            for stat in &target_stats {
+                tracing::info!("Target Subscription:");
+                tracing::info!("  Name: {}", stat.subscription_name);
+
+                let state_str = match stat.state.as_str() {
+                    "i" => "Initializing",
+                    "d" => "Copying data",
+                    "s" => "Syncing",
+                    "r" => "Ready (streaming)",
+                    _ => &stat.state,
+                };
+                tracing::info!("  State: {}", state_str);
+
+                if let Some(pid) = stat.pid {
+                    tracing::info!("  Worker PID: {}", pid);
+                } else {
+                    tracing::info!("  Worker PID: Not running");
+                }
+
+                if let Some(lsn) = &stat.received_lsn {
+                    tracing::info!("  Received LSN: {}", lsn);
+                }
+
+                if let Some(lsn) = &stat.latest_end_lsn {
+                    tracing::info!("  Latest End LSN: {}", lsn);
+                }
+
+                tracing::info!("");
+            }
+        }
+
+        // Per-database summary
+        if caught_up {
+            tracing::info!("✓ Database '{}' is CAUGHT UP", db.name);
+        } else {
+            tracing::warn!("⚠ Database '{}' is LAGGING or NOT ACTIVE", db.name);
+            all_caught_up = false;
+        }
+
         tracing::info!("");
-    } else {
-        for stat in &target_stats {
-            tracing::info!("Target Subscription:");
-            tracing::info!("  Name: {}", stat.subscription_name);
-
-            let state_str = match stat.state.as_str() {
-                "i" => "Initializing",
-                "d" => "Copying data",
-                "s" => "Syncing",
-                "r" => "Ready (streaming)",
-                _ => &stat.state,
-            };
-            tracing::info!("  State: {}", state_str);
-
-            if let Some(pid) = stat.pid {
-                tracing::info!("  Worker PID: {}", pid);
-            } else {
-                tracing::info!("  Worker PID: Not running");
-            }
-
-            if let Some(lsn) = &stat.received_lsn {
-                tracing::info!("  Received LSN: {}", lsn);
-            }
-
-            if let Some(lsn) = &stat.latest_end_lsn {
-                tracing::info!("  Latest End LSN: {}", lsn);
-            }
-
-            tracing::info!("");
-        }
+        tracing::info!("----------------------------------------");
+        tracing::info!("");
     }
 
     // Overall health summary
     tracing::info!("========================================");
-    if caught_up {
-        tracing::info!("✓ Replication is CAUGHT UP (lag < 1s)");
-        tracing::info!("  Your target database is fully in sync!");
-    } else if source_stats.is_empty() || target_stats.is_empty() {
+    tracing::info!("Overall Status Summary");
+    tracing::info!("========================================");
+    if all_caught_up && any_active {
+        tracing::info!("✓ All databases are CAUGHT UP (lag < 1s)");
+        tracing::info!("  Your target databases are fully in sync!");
+    } else if !any_active {
         tracing::warn!("✗ Replication is NOT ACTIVE");
         tracing::warn!("  Run 'sync' command to set up replication");
     } else {
-        tracing::warn!("⚠ Replication is LAGGING");
+        tracing::warn!("⚠ Some databases are LAGGING or NOT ACTIVE");
         tracing::warn!("  Wait for replication to catch up before cutover");
     }
     tracing::info!("========================================");
@@ -259,5 +337,57 @@ mod tests {
         }
 
         assert!(result.is_ok(), "Status with defaults failed: {:?}", result);
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_status_with_database_filter() {
+        let source_url = std::env::var("TEST_SOURCE_URL").unwrap();
+        let target_url = std::env::var("TEST_TARGET_URL").unwrap();
+
+        // Create filter that includes only postgres database
+        let filter = crate::filters::ReplicationFilter::new(
+            Some(vec!["postgres".to_string()]),
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to create filter");
+
+        let result = status(&source_url, &target_url, Some(filter)).await;
+
+        match &result {
+            Ok(_) => println!("✓ Status with database filter completed successfully"),
+            Err(e) => {
+                println!("Error in status with database filter: {:?}", e);
+            }
+        }
+
+        assert!(
+            result.is_ok(),
+            "Status with database filter failed: {:?}",
+            result
+        );
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_status_with_no_matching_databases() {
+        let source_url = std::env::var("TEST_SOURCE_URL").unwrap();
+        let target_url = std::env::var("TEST_TARGET_URL").unwrap();
+
+        // Create filter that matches no databases
+        let filter = crate::filters::ReplicationFilter::new(
+            Some(vec!["nonexistent_database".to_string()]),
+            None,
+            None,
+            None,
+        )
+        .expect("Failed to create filter");
+
+        let result = status(&source_url, &target_url, Some(filter)).await;
+
+        // Should succeed but show no status (early return)
+        assert!(result.is_ok(), "Status should succeed even with no matches");
     }
 }
