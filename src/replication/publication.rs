@@ -63,7 +63,10 @@ pub async fn create_publication(
             );
         }
 
-        tracing::info!("Publication will include {} filtered table(s)", filtered_tables.len());
+        tracing::info!(
+            "Publication will include {} filtered table(s)",
+            filtered_tables.len()
+        );
 
         // Build FOR TABLE clause with schema-qualified table names
         let table_list: Vec<String> = filtered_tables
@@ -207,7 +210,9 @@ mod tests {
         let filter = ReplicationFilter::empty();
 
         // Create publication
-        create_publication(&client, db_name, pub_name, &filter).await.unwrap();
+        create_publication(&client, db_name, pub_name, &filter)
+            .await
+            .unwrap();
 
         // Drop it
         let result = drop_publication(&client, pub_name).await;
