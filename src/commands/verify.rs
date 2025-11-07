@@ -184,19 +184,45 @@ pub async fn verify(
                 .progress_chars("##-"),
         );
 
-        // Create additional connections for parallel processing
+        // Create additional connections for parallel processing (3 more pairs for concurrency=4)
         let source_db_client2 = connect(&source_db_url).await.context(format!(
-            "Failed to create additional source connection for database '{}'",
+            "Failed to create additional source connection 2 for database '{}'",
             db.name
         ))?;
         let target_db_client2 = connect(&target_db_url).await.context(format!(
-            "Failed to create additional target connection for database '{}'",
+            "Failed to create additional target connection 2 for database '{}'",
+            db.name
+        ))?;
+        let source_db_client3 = connect(&source_db_url).await.context(format!(
+            "Failed to create additional source connection 3 for database '{}'",
+            db.name
+        ))?;
+        let target_db_client3 = connect(&target_db_url).await.context(format!(
+            "Failed to create additional target connection 3 for database '{}'",
+            db.name
+        ))?;
+        let source_db_client4 = connect(&source_db_url).await.context(format!(
+            "Failed to create additional source connection 4 for database '{}'",
+            db.name
+        ))?;
+        let target_db_client4 = connect(&target_db_url).await.context(format!(
+            "Failed to create additional target connection 4 for database '{}'",
             db.name
         ))?;
 
-        // Store clients in an array for round-robin access
-        let source_clients = [source_db_client, source_db_client2];
-        let target_clients = [target_db_client, target_db_client2];
+        // Store clients in an array for round-robin access (4 connections to match concurrency=4)
+        let source_clients = [
+            source_db_client,
+            source_db_client2,
+            source_db_client3,
+            source_db_client4,
+        ];
+        let target_clients = [
+            target_db_client,
+            target_db_client2,
+            target_db_client3,
+            target_db_client4,
+        ];
 
         // Process tables in parallel with limited concurrency
         let verification_results: Vec<_> = stream::iter(tables.iter().enumerate())
