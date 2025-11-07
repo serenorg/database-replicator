@@ -5,6 +5,7 @@ use crate::{migration, postgres};
 use anyhow::{bail, Context, Result};
 use std::io::{self, Write};
 use tempfile::TempDir;
+use tokio_postgres::Client;
 
 /// Initial replication command for snapshot schema and data copy
 ///
@@ -65,7 +66,7 @@ pub async fn init(
     target_url: &str,
     skip_confirmation: bool,
     _filter: crate::filters::ReplicationFilter,
-    _drop_existing: bool,
+    drop_existing: bool,
 ) -> Result<()> {
     tracing::info!("Starting initial replication...");
 
@@ -123,9 +124,54 @@ pub async fn init(
         let source_db_url = replace_database_in_url(source_url, &db_info.name)?;
         let target_db_url = replace_database_in_url(target_url, &db_info.name)?;
 
-        // Create database on target if it doesn't exist
+        // Handle database creation/existence
         let target_client = postgres::connect(target_url).await?;
-        create_database_if_not_exists(&target_client, &db_info.name).await?;
+
+        // Check if database exists
+        if database_exists(&target_client, &db_info.name).await? {
+            tracing::info!("  Database '{}' already exists on target", db_info.name);
+
+            // Check if empty
+            if database_is_empty(target_url, &db_info.name).await? {
+                tracing::info!(
+                    "  Database '{}' is empty, proceeding with restore",
+                    db_info.name
+                );
+            } else {
+                // Database exists and has data
+                let should_drop = if drop_existing {
+                    // Auto-drop in automated mode with --drop-existing
+                    true
+                } else if skip_confirmation {
+                    // In automated mode without --drop-existing, fail
+                    bail!(
+                        "Database '{}' already exists and contains data. \
+                         Use --drop-existing to overwrite, or manually drop the database first.",
+                        db_info.name
+                    );
+                } else {
+                    // Interactive mode: prompt user
+                    prompt_drop_database(&db_info.name)?
+                };
+
+                if should_drop {
+                    drop_database_if_exists(&target_client, &db_info.name).await?;
+                    // Continue to create fresh database below
+                } else {
+                    bail!("Aborted: Database '{}' already exists", db_info.name);
+                }
+            }
+        }
+
+        // Create database if it doesn't exist (or was just dropped)
+        if !database_exists(&target_client, &db_info.name).await? {
+            let create_query = format!("CREATE DATABASE \"{}\"", db_info.name);
+            target_client
+                .execute(&create_query, &[])
+                .await
+                .with_context(|| format!("Failed to create database '{}'", db_info.name))?;
+            tracing::info!("  Created database '{}'", db_info.name);
+        }
 
         // Dump and restore schema
         tracing::info!("  Dumping schema for '{}'...", db_info.name);
@@ -178,30 +224,6 @@ fn replace_database_in_url(url: &str, new_database: &str) -> Result<String> {
     }
 
     Ok(new_url)
-}
-
-/// Create database if it doesn't already exist
-async fn create_database_if_not_exists(
-    client: &tokio_postgres::Client,
-    database: &str,
-) -> Result<()> {
-    let query = format!("CREATE DATABASE \"{}\"", database);
-
-    match client.execute(&query, &[]).await {
-        Ok(_) => {
-            tracing::info!("  Created database '{}'", database);
-            Ok(())
-        }
-        Err(e) => {
-            // Database might already exist - that's okay
-            if e.to_string().contains("already exists") {
-                tracing::info!("  Database '{}' already exists", database);
-                Ok(())
-            } else {
-                Err(e).context(format!("Failed to create database '{}'", database))
-            }
-        }
-    }
 }
 
 /// Display database size estimates and prompt for confirmation
@@ -263,6 +285,71 @@ fn confirm_replication(sizes: &[migration::DatabaseSizeInfo]) -> Result<bool> {
     Ok(input.trim().to_lowercase() == "y")
 }
 
+/// Checks if a database exists on the target
+async fn database_exists(target_conn: &Client, db_name: &str) -> Result<bool> {
+    let query = "SELECT 1 FROM pg_database WHERE datname = $1";
+    let rows = target_conn.query(query, &[&db_name]).await?;
+    Ok(!rows.is_empty())
+}
+
+/// Checks if a database is empty (no user tables)
+async fn database_is_empty(target_url: &str, db_name: &str) -> Result<bool> {
+    // Need to connect to the specific database to check tables
+    let db_url = replace_database_in_url(target_url, db_name)?;
+    let client = postgres::connect(&db_url).await?;
+
+    let query = "
+        SELECT COUNT(*)
+        FROM information_schema.tables
+        WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
+    ";
+
+    let row = client.query_one(query, &[]).await?;
+    let count: i64 = row.get(0);
+
+    Ok(count == 0)
+}
+
+/// Prompts user to drop existing database
+fn prompt_drop_database(db_name: &str) -> Result<bool> {
+    use std::io::{self, Write};
+
+    print!(
+        "\nWarning: Database '{}' already exists on target and contains data.\n\
+         Drop and recreate database? This will delete all existing data. [y/N]: ",
+        db_name
+    );
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+
+    Ok(input.trim().eq_ignore_ascii_case("y"))
+}
+
+/// Drops a database if it exists
+async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<()> {
+    tracing::info!("  Dropping existing database '{}'...", db_name);
+
+    // Terminate existing connections to the database
+    let terminate_query = "
+        SELECT pg_terminate_backend(pid)
+        FROM pg_stat_activity
+        WHERE datname = $1 AND pid <> pg_backend_pid()
+    ";
+    target_conn.execute(terminate_query, &[&db_name]).await?;
+
+    // Drop the database
+    let drop_query = format!("DROP DATABASE IF EXISTS \"{}\"", db_name);
+    target_conn
+        .execute(&drop_query, &[])
+        .await
+        .with_context(|| format!("Failed to drop database '{}'", db_name))?;
+
+    tracing::info!("  ✓ Database '{}' dropped", db_name);
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -291,5 +378,31 @@ mod tests {
         let url_no_params = "postgresql://user:pass@host:5432/olddb";
         let result = replace_database_in_url(url_no_params, "newdb").unwrap();
         assert_eq!(result, "postgresql://user:pass@host:5432/newdb");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_database_exists() {
+        let url = std::env::var("TEST_TARGET_URL").expect("TEST_TARGET_URL not set");
+        let client = postgres::connect(&url).await.unwrap();
+
+        // postgres database should always exist
+        assert!(database_exists(&client, "postgres").await.unwrap());
+
+        // non-existent database should not exist
+        assert!(!database_exists(&client, "nonexistent_db_test_12345")
+            .await
+            .unwrap());
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn test_database_is_empty() {
+        let url = std::env::var("TEST_TARGET_URL").expect("TEST_TARGET_URL not set");
+
+        // postgres database might be empty of user tables
+        // This test just verifies the function doesn't crash
+        let result = database_is_empty(&url, "postgres").await;
+        assert!(result.is_ok());
     }
 }
