@@ -89,11 +89,24 @@ jobs:
 
           # Generate release notes
           cat > release-notes.md << 'EOF'
-          ## What's Changed
+          ## 🔒 Security Release
 
-          - Fix: CLI commands now show output without requiring RUST_LOG environment variable
-          - Default to INFO level logging for better user experience
-          - Automated release workflow for future versions
+          This release fixes **two critical security vulnerabilities** related to credential handling in PostgreSQL replication operations.
+
+          ### Security Fixes
+
+          **🔴 CRITICAL: Command Injection Vulnerability (Issue #75)**
+          - Fixed command injection vulnerability in pg_dump/pg_dumpall/psql/pg_restore invocations
+          - Credentials are now passed via secure `.pgpass` files instead of command-line arguments
+          - Passwords no longer visible in process listings (`ps` output)
+          - Automatic cleanup of temporary credential files using Rust's RAII pattern
+          - All PostgreSQL tool invocations now use separate connection parameters
+
+          **🟡 Password Exposure in Subscription Metadata (Issue #76)**
+          - Documented PostgreSQL subscription password exposure in system catalogs
+          - Added security warnings when creating subscriptions
+          - Provided comprehensive mitigation guide for using `.pgpass` on target servers
+          - Users can now avoid storing passwords in `pg_subscription` catalog
 
           ### Installation
 
@@ -110,11 +123,16 @@ jobs:
           ./postgres-seren-replicator-*-binary --help
           ```
 
+          ### Upgrade Recommendation
+
+          **All users should upgrade immediately** to protect against credential exposure vulnerabilities.
+
           ### Fixed Issues
 
-          - #33: CLI commands produce no output without RUST_LOG environment variable
+          - #75: Command injection vulnerability in PostgreSQL tool invocations
+          - #76: Password exposure in subscription connection strings
 
-          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v0.2.0...${VERSION}
+          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v1.2.0...${VERSION}
           EOF
 
           # Create release with all binaries
