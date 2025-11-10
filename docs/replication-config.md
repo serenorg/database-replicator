@@ -7,22 +7,22 @@ The `--config` flag lets you describe complex per-database replication rules in 
 ```toml
 # replication-config.toml
 
-[databases.kong]
+[databases.analytics]
 # Tables copied as schema-only (no data)
-schema_only = ["evmlog_strides", "price"]
+schema_only = ["archive_logs", "historical_prices"]
 
 # Arbitrary SQL WHERE predicates
-[[databases.kong.table_filters]]
-table = "output"
-where = "series_time >= NOW() - INTERVAL '6 months'"
+[[databases.analytics.table_filters]]
+table = "events"
+where = "event_time >= NOW() - INTERVAL '6 months'"
 
-[[databases.kong.table_filters]]
-table = "transactions"
+[[databases.analytics.table_filters]]
+table = "orders"
 where = "status IN ('active', 'pending')"
 
 # Time-based shorthand; converted to WHERE column >= NOW() - INTERVAL 'x'
-[[databases.kong.time_filters]]
-table = "metrics"
+[[databases.analytics.time_filters]]
+table = "user_activity"
 column = "created_at"
 last = "1 year"
 ```
