@@ -32,6 +32,11 @@ pub async fn restore_globals(target_url: &str, input_path: &str) -> Result<()> {
         cmd.arg("--username").arg(user);
     }
 
+    // Apply query parameters as environment variables (SSL, channel_binding, etc.)
+    for (env_var, value) in parts.to_pg_env_vars() {
+        cmd.env(env_var, value);
+    }
+
     let status = cmd.status().context(
         "Failed to execute psql. Is PostgreSQL client installed?\n\
          Install with:\n\
@@ -75,6 +80,11 @@ pub async fn restore_schema(target_url: &str, input_path: &str) -> Result<()> {
     // Add username if specified
     if let Some(user) = &parts.user {
         cmd.arg("--username").arg(user);
+    }
+
+    // Apply query parameters as environment variables (SSL, channel_binding, etc.)
+    for (env_var, value) in parts.to_pg_env_vars() {
+        cmd.env(env_var, value);
     }
 
     let status = cmd.status().context(
@@ -148,6 +158,11 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
     // Add username if specified
     if let Some(user) = &parts.user {
         cmd.arg("--username").arg(user);
+    }
+
+    // Apply query parameters as environment variables (SSL, channel_binding, etc.)
+    for (env_var, value) in parts.to_pg_env_vars() {
+        cmd.env(env_var, value);
     }
 
     let status = cmd.status().context(

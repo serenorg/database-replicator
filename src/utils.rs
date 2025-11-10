@@ -450,11 +450,22 @@ pub fn parse_postgres_url(url: &str) -> Result<PostgresUrlParts> {
         .trim_start_matches("postgres://")
         .trim_start_matches("postgresql://");
 
-    // Split into base and query params (ignore query params for comparison)
-    let base = url_without_scheme
-        .split('?')
-        .next()
-        .unwrap_or(url_without_scheme);
+    // Split into base and query params
+    let (base, query_string) = if let Some((b, q)) = url_without_scheme.split_once('?') {
+        (b, Some(q))
+    } else {
+        (url_without_scheme, None)
+    };
+
+    // Parse query parameters into HashMap
+    let mut query_params = std::collections::HashMap::new();
+    if let Some(query) = query_string {
+        for param in query.split('&') {
+            if let Some((key, value)) = param.split_once('=') {
+                query_params.insert(key.to_string(), value.to_string());
+            }
+        }
+    }
 
     // Parse: [user[:password]@]host[:port]/database
     let (auth_and_host, database) = base
@@ -494,6 +505,7 @@ pub fn parse_postgres_url(url: &str) -> Result<PostgresUrlParts> {
         database: database.to_string(), // Database names are case-sensitive in PostgreSQL
         user,
         password,
+        query_params,
     })
 }
 
@@ -545,6 +557,53 @@ pub struct PostgresUrlParts {
     pub database: String,
     pub user: Option<String>,
     pub password: Option<String>,
+    pub query_params: std::collections::HashMap<String, String>,
+}
+
+impl PostgresUrlParts {
+    /// Convert query parameters to PostgreSQL environment variables
+    ///
+    /// Maps common connection URL query parameters to their corresponding
+    /// PostgreSQL environment variable names. This allows SSL/TLS and other
+    /// connection settings to be passed to pg_dump, pg_dumpall, psql, etc.
+    ///
+    /// # Supported Parameters
+    ///
+    /// - `sslmode` → `PGSSLMODE`
+    /// - `sslcert` → `PGSSLCERT`
+    /// - `sslkey` → `PGSSLKEY`
+    /// - `sslrootcert` → `PGSSLROOTCERT`
+    /// - `channel_binding` → `PGCHANNELBINDING`
+    /// - `connect_timeout` → `PGCONNECT_TIMEOUT`
+    /// - `application_name` → `PGAPPNAME`
+    /// - `client_encoding` → `PGCLIENTENCODING`
+    ///
+    /// # Returns
+    ///
+    /// Vec of (env_var_name, value) pairs to be set as environment variables
+    pub fn to_pg_env_vars(&self) -> Vec<(&'static str, String)> {
+        let mut env_vars = Vec::new();
+
+        // Map query parameters to PostgreSQL environment variables
+        let param_mapping = [
+            ("sslmode", "PGSSLMODE"),
+            ("sslcert", "PGSSLCERT"),
+            ("sslkey", "PGSSLKEY"),
+            ("sslrootcert", "PGSSLROOTCERT"),
+            ("channel_binding", "PGCHANNELBINDING"),
+            ("connect_timeout", "PGCONNECT_TIMEOUT"),
+            ("application_name", "PGAPPNAME"),
+            ("client_encoding", "PGCLIENTENCODING"),
+        ];
+
+        for (param_name, env_var_name) in param_mapping {
+            if let Some(value) = self.query_params.get(param_name) {
+                env_vars.push((env_var_name, value.clone()));
+            }
+        }
+
+        env_vars
+    }
 }
 
 /// Managed .pgpass file for secure password passing to PostgreSQL tools
@@ -1112,6 +1171,7 @@ mod tests {
             database: "testdb".to_string(),
             user: Some("testuser".to_string()),
             password: Some("testpass".to_string()),
+            query_params: std::collections::HashMap::new(),
         };
 
         let pgpass = PgPassFile::new(&parts).unwrap();
@@ -1144,6 +1204,7 @@ mod tests {
             database: "testdb".to_string(),
             user: Some("testuser".to_string()),
             password: None,
+            query_params: std::collections::HashMap::new(),
         };
 
         let pgpass = PgPassFile::new(&parts).unwrap();
@@ -1160,6 +1221,7 @@ mod tests {
             database: "testdb".to_string(),
             user: None,
             password: Some("testpass".to_string()),
+            query_params: std::collections::HashMap::new(),
         };
 
         let pgpass = PgPassFile::new(&parts).unwrap();
