@@ -1,6 +1,6 @@
 [package]
 name = "postgres-seren-replicator"
-version = "2.3.2"
+version = "2.3.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "Zero-downtime PostgreSQL replication tool to Seren with continuous sync and monitoring"

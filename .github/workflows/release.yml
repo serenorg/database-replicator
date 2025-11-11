@@ -89,16 +89,24 @@ jobs:
 
           # Generate release notes
           cat > release-notes.md << 'EOF'
-          ## 🔧 Patch Release: v2.3.2
+          ## 🔧 Patch Release: v2.3.3
 
-          This patch release adds the `--version` flag to check the binary version from the command line.
+          This patch release fixes a critical bug where tables selected for time-based or predicate-based filtering were incorrectly excluded from schema dumps, causing "relation does not exist" errors during filtered copy operations.
 
-          ### ✨ New Features
+          ### 🐛 Bug Fixes
 
-          **Added --version Flag**
-          - Users can now check which version of the binary they're running
-          - Usage: `postgres-seren-replicator --version`
-          - Displays version from Cargo.toml (e.g., `postgres-seren-replicator 2.3.2`)
+          **Fixed Filtered Tables Schema Exclusion (#117)**
+          - Tables with time filters or table filters now have their schema properly created on the target database
+          - Previously, these tables were excluded from both schema and data dumps
+          - Now correctly excludes them only from data dumps (schema is created, filtered data copied separately)
+          - Resolves "ERROR: relation does not exist" errors during filtered copy operations
+
+          **Technical Details:**
+          - Split `get_excluded_tables_for_db` into two functions:
+            - `get_schema_excluded_tables_for_db`: Only excludes explicit exclude_tables
+            - `get_data_excluded_tables_for_db`: Excludes explicit, schema_only, and predicate tables
+          - Schema dumps now include tables that will be filtered during data copy
+          - Filtered copy operations can now successfully TRUNCATE and COPY predicate-filtered tables
 
           ### Installation
 
@@ -117,9 +125,9 @@ jobs:
 
           ### Upgrade Recommendation
 
-          Optional upgrade. This release adds convenience functionality for checking the binary version.
+          **Recommended upgrade** for users experiencing "relation does not exist" errors when using time-based or table filters. This fix is critical if you use `--time-filter` or `--table-filter` flags during `init` operations.
 
-          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v2.3.1...${VERSION}
+          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v2.3.2...${VERSION}
           EOF
 
           # Create release with all binaries
