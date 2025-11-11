@@ -89,26 +89,46 @@ jobs:
 
           # Generate release notes
           cat > release-notes.md << 'EOF'
-          ## 🔧 Patch Release: v2.1.2
+          ## ✨ Minor Release: v2.2.0
 
-          This patch release adds automatic recovery from checkpoint metadata mismatches.
+          This release adds intelligent `wal_level` validation to ensure logical replication prerequisites are met.
 
-          ### 🐛 Bug Fixes
+          ### 🎯 New Features
 
-          **Auto-Recovery from Checkpoint Metadata Mismatches**
-          - Tool now automatically detects when checkpoint configuration differs from current run
-          - Logs detailed warning explaining what changed (schema-only tables, time filters, table selection)
-          - Automatically discards stale checkpoint and continues with fresh run
-          - Eliminates need for users to manually add `--no-resume` flag after configuration changes
+          **Intelligent wal_level Validation**
+          - Automatically checks target database `wal_level` setting before logical replication operations
+          - Three-tiered validation strategy for different commands:
+            - **validate**: Non-blocking informational warnings
+            - **init**: Graceful degradation - automatically disables sync and continues with snapshot-only mode
+            - **sync**: Fail-fast with clear error messages and actionable fix instructions
+          - Prevents confusing PostgreSQL warnings and subscription failures
 
-          ### Impact
+          ### Why This Matters
 
-          Previously, when replication configuration changed between runs, the tool would halt with error:
-          ```
-          Error: Checkpoint metadata mismatch. Run with --no-resume to discard the previous state.
-          ```
+          PostgreSQL logical replication requires `wal_level = logical` on the target database. Previously:
+          - Users saw cryptic warnings: "wal_level is insufficient to publish logical changes"
+          - Subscriptions would be created but fail silently
+          - Users had to debug PostgreSQL configuration issues manually
 
-          Users had to manually add `--no-resume` to continue. Now the tool detects the mismatch, logs a clear warning, and automatically recovers without user intervention.
+          Now the tool:
+          - Validates `wal_level` automatically
+          - Provides clear guidance on how to fix the issue
+          - Gracefully falls back to snapshot-only mode when continuous sync isn't possible
+          - Prevents wasted time on operations that cannot succeed
+
+          ### Command-Specific Behavior
+
+          **validate command**: Reports `wal_level` status with warnings if not 'logical', but doesn't fail
+
+          **init command**: Checks `wal_level` after snapshot completes. If not 'logical', automatically:
+          - Disables continuous sync setup
+          - Continues with snapshot-only replication
+          - Logs clear instructions for enabling sync later
+
+          **sync command**: Checks `wal_level` immediately before work begins. If not 'logical':
+          - Fails fast with detailed error message
+          - Provides two fix options: update postgresql.conf or use snapshot-only mode
+          - Prevents wasted effort on operations that cannot succeed
 
           ### Installation
 
@@ -127,9 +147,9 @@ jobs:
 
           ### Upgrade Recommendation
 
-          Recommended for all users. This fix improves the user experience by eliminating manual intervention when configuration changes between replication runs.
+          Recommended for all users, especially those working with managed PostgreSQL services where `wal_level` configuration may require special setup. This release significantly improves the user experience by providing clear guidance and graceful fallbacks.
 
-          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v2.1.1...${VERSION}
+          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v2.1.2...${VERSION}
           EOF
 
           # Create release with all binaries
