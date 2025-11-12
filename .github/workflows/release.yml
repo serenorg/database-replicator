@@ -91,25 +91,34 @@ jobs:
           cat > release-notes.md << 'EOF'
           ## 🔧 Patch Release: v2.4.1
 
-          This patch release adds automatic connection retry logic with exponential backoff to prevent failures during long-running operations when database connections drop unexpectedly.
+          This patch release adds comprehensive automatic connection retry logic with exponential backoff to prevent failures during long-running operations when database connections drop unexpectedly.
 
           ### 🐛 Bug Fixes
 
-          **Automatic Connection Retry with Exponential Backoff (#119)**
+          **Automatic Connection Retry for Direct Database Connections (#119)**
           - Database connections that drop during long operations now automatically retry instead of failing
           - Prevents "Connection error: connection closed" errors during `init`, filtered copy, and schema introspection
-          - Applies to all long-running operations: database discovery, creation, filtered table copy, column queries
+          - Applies to: database discovery, creation, filtered table copy, column queries, wal_level checks
           - Maximum 3 retry attempts with exponential backoff (1s, 2s, 4s delays)
           - Clear logging shows retry attempts and remaining retries
+
+          **Technical Details (#119):**
+          - Exported `connect_with_retry()` function from postgres module
+          - Replaced `connect()` with `connect_with_retry()` in 9 critical locations
+          - Uses existing exponential backoff implementation
+
+          **Automatic Retry for External PostgreSQL Commands (#120)**
+          - External subprocess commands (psql, pg_restore, pg_dump, pg_dumpall) now retry on connection failures
+          - Prevents failures during long-running dump/restore operations (5+ minutes)
+          - All dump and restore operations protected with retry logic
+          - Database connections properly scoped to avoid idle timeouts during subprocess execution
           - Gracefully handles transient network issues, timeouts, and temporary server unavailability
 
-          **Technical Details:**
-          - Exported `connect_with_retry()` function from postgres module (was already implemented but unused)
-          - Replaced `connect()` with `connect_with_retry()` in 9 critical locations:
-            - Init command: database discovery, creation, wal_level checks (4 locations)
-            - Filtered table copy operations (2 locations)
-            - Interactive mode: schema introspection and column queries (3 locations)
-          - Uses existing exponential backoff implementation with configurable retry count and delays
+          **Technical Details (#120):**
+          - Added `retry_subprocess_with_backoff()` utility function for subprocess retry
+          - Wrapped all psql/pg_restore/pg_dump/pg_dumpall calls with retry logic
+          - Maximum 3 retry attempts with exponential backoff (1s, 2s, 4s delays)
+          - Properly scoped database connections to drop before long subprocess operations
 
           ### Installation
 
