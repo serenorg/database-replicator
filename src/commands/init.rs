@@ -111,7 +111,7 @@ pub async fn init(
 
     // Step 3: Discover and filter databases
     tracing::info!("Step 3/4: Discovering databases...");
-    let source_client = postgres::connect(source_url).await?;
+    let source_client = postgres::connect_with_retry(source_url).await?;
     let all_databases = migration::list_databases(&source_client).await?;
 
     // Apply filtering rules
@@ -241,7 +241,7 @@ pub async fn init(
         let target_db_url = replace_database_in_url(target_url, &db_info.name)?;
 
         // Handle database creation atomically to avoid TOCTOU race condition
-        let target_client = postgres::connect(target_url).await?;
+        let target_client = postgres::connect_with_retry(target_url).await?;
 
         // Validate database name to prevent SQL injection
         crate::utils::validate_postgres_identifier(&db_info.name)
@@ -382,7 +382,7 @@ pub async fn init(
     let mut should_enable_sync = enable_sync;
     if enable_sync {
         tracing::info!("Checking target wal_level for logical replication...");
-        let target_client = postgres::connect(target_url).await?;
+        let target_client = postgres::connect_with_retry(target_url).await?;
         let target_wal_level = postgres::check_wal_level(&target_client).await?;
 
         if target_wal_level != "logical" {
@@ -527,7 +527,7 @@ fn confirm_replication(sizes: &[migration::DatabaseSizeInfo]) -> Result<bool> {
 async fn database_is_empty(target_url: &str, db_name: &str) -> Result<bool> {
     // Need to connect to the specific database to check tables
     let db_url = replace_database_in_url(target_url, db_name)?;
-    let client = postgres::connect(&db_url).await?;
+    let client = postgres::connect_with_retry(&db_url).await?;
 
     let query = "
         SELECT COUNT(*)

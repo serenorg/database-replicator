@@ -52,7 +52,7 @@ pub async fn select_databases_and_tables(
 
     // Connect to source database
     tracing::info!("Connecting to source database...");
-    let source_client = postgres::connect(source_url)
+    let source_client = postgres::connect_with_retry(source_url)
         .await
         .context("Failed to connect to source database")?;
     tracing::info!("✓ Connected to source");
@@ -114,7 +114,7 @@ pub async fn select_databases_and_tables(
 
         // Connect to the specific database
         tracing::info!("Discovering tables in database '{}'...", db_name);
-        let db_client = postgres::connect(&db_url)
+        let db_client = postgres::connect_with_retry(&db_url)
             .await
             .context(format!("Failed to connect to database '{}'", db_name))?;
 
@@ -281,8 +281,9 @@ pub async fn select_databases_and_tables(
 
                         if apply_filter {
                             // Query table columns to show actual timestamp columns
-                            let db_client =
-                                postgres::connect(&db_url).await.with_context(|| {
+                            let db_client = postgres::connect_with_retry(&db_url)
+                                .await
+                                .with_context(|| {
                                     format!(
                                         "Failed to connect to database '{}' for column query",
                                         db_name

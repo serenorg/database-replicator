@@ -72,10 +72,10 @@ pub async fn copy_filtered_tables(
         return Ok(());
     }
 
-    let source_client = postgres::connect(source_url)
+    let source_client = postgres::connect_with_retry(source_url)
         .await
         .context("Failed to connect to source database for filtered copy")?;
-    let target_client = postgres::connect(target_url)
+    let target_client = postgres::connect_with_retry(target_url)
         .await
         .context("Failed to connect to target database for filtered copy")?;
 
