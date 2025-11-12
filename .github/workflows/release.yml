@@ -89,25 +89,27 @@ jobs:
 
           # Generate release notes
           cat > release-notes.md << 'EOF'
-          ## ✨ Feature Release: v2.4.0
+          ## 🔧 Patch Release: v2.4.1
 
-          This release adds interactive column selection for time-based filtering, significantly improving the user experience and preventing "column does not exist" errors.
+          This patch release adds automatic connection retry logic with exponential backoff to prevent failures during long-running operations when database connections drop unexpectedly.
 
-          ### 🎯 New Features
+          ### 🐛 Bug Fixes
 
-          **Interactive Column Selection for Time Filters (#118)**
-          - When configuring time-based filtering in interactive mode, the tool now shows actual table columns
-          - Displays timestamp columns (timestamp, timestamptz, date) with their data types
-          - Example: `series_time (timestamptz)`, `block_time (timestamptz)`
-          - Users select from a list instead of manually typing column names
-          - Includes fallback option to enter custom column names for edge cases
-          - Prevents typos and "column does not exist" errors during replication
+          **Automatic Connection Retry with Exponential Backoff (#119)**
+          - Database connections that drop during long operations now automatically retry instead of failing
+          - Prevents "Connection error: connection closed" errors during `init`, filtered copy, and schema introspection
+          - Applies to all long-running operations: database discovery, creation, filtered table copy, column queries
+          - Maximum 3 retry attempts with exponential backoff (1s, 2s, 4s delays)
+          - Clear logging shows retry attempts and remaining retries
+          - Gracefully handles transient network issues, timeouts, and temporary server unavailability
 
           **Technical Details:**
-          - Added `get_table_columns()` function that queries `pg_catalog.pg_attribute` for table schema
-          - New `ColumnInfo` struct captures column name, data type, and timestamp flag
-          - Interactive mode now uses `Select` prompts instead of free-form text input for column selection
-          - Falls back to manual entry if no timestamp columns are detected
+          - Exported `connect_with_retry()` function from postgres module (was already implemented but unused)
+          - Replaced `connect()` with `connect_with_retry()` in 9 critical locations:
+            - Init command: database discovery, creation, wal_level checks (4 locations)
+            - Filtered table copy operations (2 locations)
+            - Interactive mode: schema introspection and column queries (3 locations)
+          - Uses existing exponential backoff implementation with configurable retry count and delays
 
           ### Installation
 
@@ -126,9 +128,9 @@ jobs:
 
           ### Upgrade Recommendation
 
-          **Recommended upgrade** for users who use time-based filtering during replication. This enhancement makes it much easier to configure time filters correctly without needing to know column names in advance.
+          **Recommended upgrade** for all users. This fix significantly improves reliability during long-running replications, especially over unstable network connections or when replicating large databases that may exceed connection timeouts.
 
-          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v2.3.3...${VERSION}
+          **Full Changelog**: https://github.com/serenorg/postgres-seren-replicator/compare/v2.4.0...${VERSION}
           EOF
 
           # Create release with all binaries
