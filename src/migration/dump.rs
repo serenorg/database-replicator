@@ -48,6 +48,11 @@ pub async fn dump_globals(source_url: &str, output_path: &str) -> Result<()> {
                 cmd.env(env_var, value);
             }
 
+            // Apply TCP keepalive parameters to prevent idle connection timeouts
+            for (env_var, value) in crate::utils::get_keepalive_env_vars() {
+                cmd.env(env_var, value);
+            }
+
             cmd.status().context(
                 "Failed to execute pg_dumpall. Is PostgreSQL client installed?\n\
                  Install with:\n\
@@ -147,6 +152,11 @@ pub async fn dump_schema(
 
             // Apply query parameters as environment variables (SSL, channel_binding, etc.)
             for (env_var, value) in &env_vars {
+                cmd.env(env_var, value);
+            }
+
+            // Apply TCP keepalive parameters to prevent idle connection timeouts
+            for (env_var, value) in crate::utils::get_keepalive_env_vars() {
                 cmd.env(env_var, value);
             }
 
@@ -269,6 +279,11 @@ pub async fn dump_data(
 
             // Apply query parameters as environment variables (SSL, channel_binding, etc.)
             for (env_var, value) in &env_vars {
+                cmd.env(env_var, value);
+            }
+
+            // Apply TCP keepalive parameters to prevent idle connection timeouts
+            for (env_var, value) in crate::utils::get_keepalive_env_vars() {
                 cmd.env(env_var, value);
             }
 

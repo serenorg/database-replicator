@@ -5,6 +5,40 @@ use anyhow::{bail, Context, Result};
 use std::time::Duration;
 use which::which;
 
+/// Get TCP keepalive environment variables for PostgreSQL client tools
+///
+/// Returns environment variables that configure TCP keepalives for external
+/// PostgreSQL tools (pg_dump, pg_restore, psql, pg_dumpall). These prevent
+/// idle connection timeouts when connecting through load balancers like AWS ELB.
+///
+/// Environment variables returned:
+/// - `PGKEEPALIVES=1`: Enable TCP keepalives
+/// - `PGKEEPALIVESIDLE=60`: Send first keepalive after 60 seconds of idle time
+/// - `PGKEEPALIVESINTERVAL=10`: Send subsequent keepalives every 10 seconds
+///
+/// # Returns
+///
+/// A vector of (variable_name, value) tuples to be passed to subprocess commands
+///
+/// # Examples
+///
+/// ```
+/// # use postgres_seren_replicator::utils::get_keepalive_env_vars;
+/// # use std::process::Command;
+/// let keepalive_vars = get_keepalive_env_vars();
+/// let mut cmd = Command::new("psql");
+/// for (key, value) in keepalive_vars {
+///     cmd.env(key, value);
+/// }
+/// ```
+pub fn get_keepalive_env_vars() -> Vec<(&'static str, &'static str)> {
+    vec![
+        ("PGKEEPALIVES", "1"),
+        ("PGKEEPALIVESIDLE", "60"),
+        ("PGKEEPALIVESINTERVAL", "10"),
+    ]
+}
+
 /// Validate a PostgreSQL connection string
 ///
 /// Checks that the connection string has proper format and required components:
