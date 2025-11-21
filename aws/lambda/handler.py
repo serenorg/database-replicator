@@ -11,6 +11,7 @@ import os
 import base64
 from datetime import datetime
 from urllib.parse import urlparse, urlunparse
+from botocore.exceptions import ClientError
 
 # AWS clients
 dynamodb = boto3.client('dynamodb')
@@ -188,6 +189,54 @@ def count_active_jobs():
         return 0
 
 
+def retry_with_backoff(func, max_retries=3, initial_delay=1):
+    """Retry a function with exponential backoff
+
+    Args:
+        func: Callable to retry
+        max_retries: Maximum number of retry attempts (default: 3)
+        initial_delay: Initial delay in seconds (default: 1)
+
+    Returns:
+        Result of func()
+
+    Raises:
+        Last exception if all retries fail
+    """
+    delay = initial_delay
+    last_exception = None
+
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except ClientError as e:
+            last_exception = e
+            error_code = e.response.get('Error', {}).get('Code', '')
+
+            # Only retry on transient errors
+            retryable_errors = [
+                'RequestLimitExceeded',
+                'InsufficientInstanceCapacity',
+                'InternalError',
+                'ServiceUnavailable',
+                'Throttling'
+            ]
+
+            if error_code not in retryable_errors:
+                # Not a transient error, raise immediately
+                raise
+
+            if attempt < max_retries - 1:
+                print(f"Retry attempt {attempt + 1}/{max_retries} after {delay}s (error: {error_code})")
+                time.sleep(delay)
+                delay *= 2  # Exponential backoff
+            else:
+                print(f"All {max_retries} retries exhausted")
+
+    # All retries failed
+    raise last_exception
+
+
 def handle_submit_job(event):
     """Handle POST /jobs - submit new replication job"""
 
@@ -326,25 +375,27 @@ set -euo pipefail
 /opt/seren-replicator/worker.sh "{job_id}"
 """
 
-    # Launch instance
-    response = ec2.run_instances(
-        ImageId=WORKER_AMI_ID,
-        InstanceType=instance_type,
-        MinCount=1,
-        MaxCount=1,
-        IamInstanceProfile={'Name': WORKER_IAM_ROLE},
-        UserData=user_data,
-        TagSpecifications=[{
-            'ResourceType': 'instance',
-            'Tags': [
-                {'Key': 'Name', 'Value': f'seren-replication-{job_id}'},
-                {'Key': 'JobId', 'Value': job_id},
-                {'Key': 'ManagedBy', 'Value': 'seren-replication-system'}
-            ]
-        }],
-        InstanceInitiatedShutdownBehavior='terminate',
-    )
+    # Launch instance with retry logic for transient failures
+    def launch_instance():
+        return ec2.run_instances(
+            ImageId=WORKER_AMI_ID,
+            InstanceType=instance_type,
+            MinCount=1,
+            MaxCount=1,
+            IamInstanceProfile={'Name': WORKER_IAM_ROLE},
+            UserData=user_data,
+            TagSpecifications=[{
+                'ResourceType': 'instance',
+                'Tags': [
+                    {'Key': 'Name', 'Value': f'seren-replication-{job_id}'},
+                    {'Key': 'JobId', 'Value': job_id},
+                    {'Key': 'ManagedBy', 'Value': 'seren-replication-system'}
+                ]
+            }],
+            InstanceInitiatedShutdownBehavior='terminate',
+        )
 
+    response = retry_with_backoff(launch_instance, max_retries=3, initial_delay=2)
     instance_id = response['Instances'][0]['InstanceId']
     return instance_id
 
