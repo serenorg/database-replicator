@@ -5,11 +5,34 @@ terraform {
       source  = "hashicorp/aws"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 }
 
 provider "aws" {
   region = var.aws_region
+}
+
+# KMS key for encrypting sensitive data at rest
+resource "aws_kms_key" "replication_data" {
+  description             = "KMS key for encrypting replication job credentials and sensitive data"
+  deletion_window_in_days = 10
+  enable_key_rotation     = true
+
+  tags = {
+    Name      = "${var.project_name}-data-key"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# KMS key alias for easier reference
+resource "aws_kms_alias" "replication_data" {
+  name          = "alias/${var.project_name}-data"
+  target_key_id = aws_kms_key.replication_data.key_id
 }
 
 # DynamoDB table for job state
@@ -45,6 +68,17 @@ resource "aws_dynamodb_table" "replication_jobs" {
   ttl {
     attribute_name = "ttl"
     enabled        = true
+  }
+
+  # Enable encryption at rest with KMS
+  server_side_encryption {
+    enabled     = true
+    kms_key_arn = aws_kms_key.replication_data.arn
+  }
+
+  # Enable point-in-time recovery
+  point_in_time_recovery {
+    enabled = true
   }
 
   tags = {
@@ -119,6 +153,23 @@ resource "aws_iam_role_policy" "lambda_policy" {
       {
         Effect = "Allow"
         Action = [
+          "kms:Encrypt",
+          "kms:Decrypt",
+          "kms:GenerateDataKey",
+          "kms:DescribeKey"
+        ]
+        Resource = aws_kms_key.replication_data.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ssm:GetParameter"
+        ]
+        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/${var.project_name}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "logs:CreateLogGroup",
           "logs:CreateLogStream",
           "logs:PutLogEvents"
@@ -172,6 +223,14 @@ resource "aws_iam_role_policy" "worker_policy" {
       {
         Effect = "Allow"
         Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Resource = aws_kms_key.replication_data.arn
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ]
@@ -209,6 +268,8 @@ resource "aws_lambda_function" "coordinator" {
       WORKER_AMI_ID          = var.worker_ami_id
       WORKER_INSTANCE_TYPE   = var.worker_instance_type
       WORKER_IAM_ROLE        = aws_iam_instance_profile.worker_profile.name
+      KMS_KEY_ID             = aws_kms_key.replication_data.key_id
+      API_KEY_PARAMETER_NAME = aws_ssm_parameter.api_key.name
     }
   }
 
@@ -276,8 +337,62 @@ resource "aws_apigatewayv2_stage" "default" {
   name        = "$default"
   auto_deploy = true
 
+  # Enable access logging
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_logs.arn
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      ip             = "$context.identity.sourceIp"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      routeKey       = "$context.routeKey"
+      status         = "$context.status"
+      protocol       = "$context.protocol"
+      responseLength = "$context.responseLength"
+    })
+  }
+
+  # Configure throttling at stage level (rate limiting)
+  default_route_settings {
+    throttling_burst_limit = 100
+    throttling_rate_limit  = 50
+  }
+
   tags = {
     Name      = "${var.project_name}-api-stage"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# CloudWatch Log Group for API Gateway logs
+resource "aws_cloudwatch_log_group" "api_logs" {
+  name              = "/aws/apigateway/${aws_apigatewayv2_api.api.name}"
+  retention_in_days = 7
+
+  tags = {
+    Name      = "${var.project_name}-api-logs"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# Generate random API key for authentication
+resource "random_password" "api_key" {
+  length  = 32
+  special = false
+}
+
+# Store API key in SSM Parameter Store (encrypted)
+resource "aws_ssm_parameter" "api_key" {
+  name        = "/${var.project_name}/api-key"
+  description = "API key for replication service authentication"
+  type        = "SecureString"
+  value       = random_password.api_key.result
+  key_id      = aws_kms_key.replication_data.id
+
+  tags = {
+    Name      = "${var.project_name}-api-key"
     ManagedBy = "terraform"
     Project   = var.project_name
   }

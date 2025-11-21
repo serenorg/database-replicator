@@ -22,3 +22,14 @@ output "worker_instance_profile_name" {
   description = "IAM instance profile name for worker instances"
   value       = aws_iam_instance_profile.worker_profile.name
 }
+
+output "api_key" {
+  description = "API key for authenticating requests (store securely)"
+  value       = random_password.api_key.result
+  sensitive   = true
+}
+
+output "kms_key_id" {
+  description = "KMS key ID for encrypting sensitive data"
+  value       = aws_kms_key.replication_data.key_id
+}
