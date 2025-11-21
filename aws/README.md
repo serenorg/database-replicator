@@ -304,25 +304,128 @@ aws dynamodb describe-table --table-name replication-jobs \
 
 ## Security
 
-### Secrets Management
+The infrastructure implements comprehensive security features to protect credentials and control access.
 
-- **Never commit credentials**: Use AWS Secrets Manager or Parameter Store
-- **Connection strings**: Pass through API securely, not stored in DynamoDB plaintext
-- **IAM roles**: Use instance profiles, never hardcoded keys
-- **API authentication**: Add API keys or Cognito (not included in basic setup)
+### API Authentication (Required)
+
+All API requests require authentication via API key:
+
+```bash
+# Retrieve API key after deployment
+export SEREN_API_KEY=$(cd aws/terraform && terraform output -raw api_key)
+
+# Set environment variable for CLI
+export SEREN_REMOTE_API_KEY="$SEREN_API_KEY"
+
+# Or pass directly to CLI
+postgres-seren-replicator init --remote \
+  --api-key "$SEREN_API_KEY" \
+  --source "postgresql://..." \
+  --target "postgresql://..." \
+  --yes
+```
+
+**API Key Details:**
+
+- 32-character random key generated during deployment
+- Stored encrypted in AWS SSM Parameter Store
+- Validated on every API request via `x-api-key` header
+- Cached in Lambda for performance
+
+### Encryption at Rest
+
+**KMS Key Management:**
+
+- Dedicated KMS key with automatic key rotation enabled
+- Used for encrypting credentials and DynamoDB data
+- Key alias: `alias/seren-replication-system-data`
+
+**DynamoDB Encryption:**
+
+- Server-side encryption enabled with customer-managed KMS key
+- Point-in-time recovery enabled for data protection
+- Credentials encrypted before storage, decrypted only by workers
+
+**Credential Protection:**
+
+- Source and target URLs encrypted with KMS before DynamoDB storage
+- Workers fetch encrypted credentials and decrypt with KMS
+- No credentials passed via EC2 user-data (only job ID)
+- All connection URLs redacted in CloudWatch logs
+
+### Rate Limiting
+
+API Gateway enforces throttling limits:
+
+- **Burst limit**: 100 requests per second
+- **Steady state**: 50 requests per second
+- **Per-IP throttling**: Managed by API Gateway
+
+### IAM Permissions (Least Privilege)
+
+**Lambda Function:**
+
+- DynamoDB: PutItem, GetItem, UpdateItem, Query
+- EC2: RunInstances, DescribeInstances, CreateTags, TerminateInstances
+- KMS: Encrypt, Decrypt, GenerateDataKey, DescribeKey
+- SSM: GetParameter (for API key)
+- CloudWatch Logs: CreateLogGroup, CreateLogStream, PutLogEvents
+
+**EC2 Workers:**
+
+- DynamoDB: GetItem, UpdateItem (job status only)
+- KMS: Decrypt, DescribeKey (credential decryption only)
+- EC2: TerminateInstances (self-termination only)
+- CloudWatch Logs: CreateLogStream, PutLogEvents
+
+### Logging and Audit Trail
+
+**CloudWatch Logging:**
+
+- API Gateway access logs with request/response details
+- Lambda function logs (credentials redacted)
+- EC2 worker logs (credentials redacted)
+- 7-day retention for cost optimization
+
+**Redaction Policy:**
+
+- All PostgreSQL connection URLs redacted in logs
+- Format: `postgresql://***@hostname:port/database`
+- Credentials never exposed in CloudWatch, user-data, or EC2 metadata
 
 ### Network Security
 
-- **VPC**: Deploy Lambda and EC2 in private subnets (advanced)
-- **Security groups**: Restrict outbound to PostgreSQL ports only
-- **Encryption**: Enable encryption at rest for DynamoDB (default enabled)
+- **VPC** (Optional): Deploy Lambda and EC2 in private subnets
+- **Security Groups**: Restrict outbound to PostgreSQL ports only
+- **TLS**: API Gateway enforces HTTPS for all requests
 
 ### Compliance
 
-- **Logging**: All API calls logged to CloudWatch
-- **Audit trail**: DynamoDB provides complete job history
-- **Data retention**: 30-day TTL on DynamoDB records
-- **GDPR**: Customer responsible for data handling in source/target
+- **Logging**: All API calls logged to CloudWatch with source IP
+- **Audit Trail**: DynamoDB provides complete job history
+- **Data Retention**: 30-day TTL on DynamoDB records
+- **GDPR**: Customer responsible for data handling in source/target databases
+- **Encryption**: Data encrypted at rest (KMS) and in transit (TLS)
+
+### Security Best Practices
+
+1. **Rotate API Keys**: Regenerate API key periodically via Terraform
+
+   ```bash
+   terraform taint random_password.api_key
+   terraform apply
+   ```
+
+2. **Monitor Failed Authentication**: Check CloudWatch logs for 401 responses
+
+   ```bash
+   aws logs filter-pattern '"statusCode": 401' \
+     /aws/lambda/seren-replication-coordinator
+   ```
+
+3. **Review IAM Policies**: Audit permissions quarterly
+4. **Enable AWS CloudTrail**: Track infrastructure changes
+5. **Use VPC Endpoints**: Reduce internet exposure (DynamoDB, KMS, SSM)
 
 ## Advanced Configuration
 
