@@ -18,7 +18,7 @@ sudo apt-get upgrade -y
 
 # Install PostgreSQL 17 repository
 log "Adding PostgreSQL 17 repository..."
-sudo apt-get install -y wget gnupg2 lsb-release
+sudo apt-get install -y wget gnupg2 lsb-release unzip
 wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg
 echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
 sudo apt-get update -y
