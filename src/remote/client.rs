@@ -34,12 +34,12 @@ impl RemoteClient {
             .json(spec)
             .send()
             .await
-            .context("Failed to submit job")?;
+            .context("Failed to submit job to remote service. If the service is unavailable, you can use --local to run replication on your machine instead")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("Job submission failed with status {}: {}", status, body);
+            anyhow::bail!("Job submission failed with status {}: {}. If the remote service is unavailable, you can use --local to run replication on your machine instead", status, body);
         }
 
         let job_response: JobResponse = response
@@ -53,17 +53,18 @@ impl RemoteClient {
     pub async fn get_job_status(&self, job_id: &str) -> Result<JobStatus> {
         let url = format!("{}/jobs/{}", self.api_base_url, job_id);
 
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .context("Failed to get job status")?;
+        let response = self.client.get(&url).send().await.context(
+            "Failed to get job status from remote service. The remote service may be unavailable",
+        )?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("Failed to get job status {}: {}", status, body);
+            anyhow::bail!(
+                "Failed to get job status {}: {}. The remote service may be experiencing issues",
+                status,
+                body
+            );
         }
 
         let job_status: JobStatus = response

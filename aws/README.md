@@ -2,6 +2,16 @@
 
 This directory contains all infrastructure code and scripts for remote replication on AWS.
 
+## SerenAI Managed Service
+
+**Important**: This infrastructure is operated and maintained by SerenAI as a managed service. Users of the `postgres-seren-replicator` CLI tool automatically use this infrastructure by default - no AWS account or setup required.
+
+- **Remote Execution (Default)**: The tool connects to SerenAI's production API and runs replication jobs on SerenAI's AWS infrastructure
+- **Local Execution (Fallback)**: Users can run `--local` to execute replication on their own machine if needed
+- **No User Billing**: SerenAI covers all AWS costs - users are not billed for infrastructure usage
+
+This README is intended for SerenAI engineers deploying and maintaining the service infrastructure.
+
 ## Architecture
 
 ```
@@ -136,24 +146,49 @@ This script will:
 
 ## Usage
 
-### Submit Remote Replication Job
+### Submit Remote Replication Job (Default)
 
 ```bash
-# Set API endpoint (from deployment)
-export SEREN_REMOTE_API="https://xxx.execute-api.us-east-1.amazonaws.com"
-
-# Run remote replication
-postgres-seren-replicator init --remote \
+# Remote execution is the default - no flags needed
+# The tool automatically connects to SerenAI's production API
+postgres-seren-replicator init \
   --source "postgresql://user:pass@source:5432/db" \
   --target "postgresql://user:pass@target:5432/db" \
   --yes
 ```
 
 The CLI will:
-1. Submit job to API
+
+1. Submit job to SerenAI's API
 2. Wait for EC2 worker to provision
 3. Stream status updates
 4. Report final result
+
+### Local Execution (Fallback)
+
+If SerenAI's remote service is unavailable, you can run locally:
+
+```bash
+# Use --local to execute on your machine
+postgres-seren-replicator init --local \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@target:5432/db" \
+  --yes
+```
+
+### Custom API Endpoint (Development)
+
+For testing against a development deployment:
+
+```bash
+# Override API endpoint
+export SEREN_REMOTE_API="https://dev.api.seren.cloud/replication"
+
+postgres-seren-replicator init \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@target:5432/db" \
+  --yes
+```
 
 ### Monitor Jobs
 

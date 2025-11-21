@@ -88,9 +88,9 @@ enum Commands {
         /// Ignore any previous checkpoint and start a fresh run
         #[arg(long)]
         no_resume: bool,
-        /// Execute replication remotely on AWS infrastructure
+        /// Execute replication locally instead of using SerenAI's managed service (fallback mode)
         #[arg(long)]
-        remote: bool,
+        local: bool,
         /// API endpoint for remote execution (defaults to Seren's API)
         #[arg(
             long,
@@ -219,11 +219,11 @@ async fn main() -> anyhow::Result<()> {
             drop_existing,
             no_sync,
             no_resume,
-            remote,
+            local,
             remote_api,
         } => {
-            // Remote execution path
-            if remote {
+            // Remote execution path (default)
+            if !local {
                 return init_remote(
                     source,
                     target,
