@@ -140,6 +140,21 @@ main() {
 
     log "Command: $COMMAND"
 
+    # Get job timeout (default: 28800 seconds = 8 hours)
+    JOB_TIMEOUT=$(echo "$OPTIONS_JSON" | jq -r '.job_timeout // 28800')
+    log "Job timeout: ${JOB_TIMEOUT}s"
+
+    # Start timeout watchdog in background
+    (
+        sleep "$JOB_TIMEOUT"
+        log "Job timeout exceeded ($JOB_TIMEOUT seconds)"
+        update_job_status "timeout" "Job exceeded maximum duration of $JOB_TIMEOUT seconds"
+        # Kill the replicator process and terminate instance
+        pkill -f postgres-seren-replicator || true
+        terminate_self
+    ) &
+    WATCHDOG_PID=$!
+
     # Decrypt credentials
     log "Decrypting credentials..."
     SOURCE_URL=$(decrypt_value "$ENCRYPTED_SOURCE")
@@ -188,10 +203,14 @@ main() {
 
     if "${CMD[@]}"; then
         log "Replication completed successfully"
+        # Kill the timeout watchdog since job completed
+        kill "$WATCHDOG_PID" 2>/dev/null || true
         update_job_status "completed"
     else
         EXIT_CODE=$?
         log "Replication failed with exit code: $EXIT_CODE"
+        # Kill the timeout watchdog since job completed (failed)
+        kill "$WATCHDOG_PID" 2>/dev/null || true
         update_job_status "failed" "Replication command failed with exit code $EXIT_CODE"
     fi
 

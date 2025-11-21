@@ -32,3 +32,9 @@ variable "worker_iam_role_name" {
   type        = string
   default     = "seren-replication-worker"
 }
+
+variable "max_concurrent_jobs" {
+  description = "Maximum number of concurrent replication jobs (cost control)"
+  type        = number
+  default     = 10
+}

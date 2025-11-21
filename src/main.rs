@@ -98,6 +98,9 @@ enum Commands {
                 .unwrap_or_else(|_| "https://api.seren.cloud/replication".to_string())
         )]
         remote_api: String,
+        /// Maximum job duration in seconds before timeout (default: 28800 = 8 hours)
+        #[arg(long, default_value_t = 28800)]
+        job_timeout: u64,
     },
     /// Set up continuous logical replication from source to target
     Sync {
@@ -221,6 +224,7 @@ async fn main() -> anyhow::Result<()> {
             no_resume,
             local,
             remote_api,
+            job_timeout,
         } => {
             // Remote execution path (default)
             if !local {
@@ -235,6 +239,7 @@ async fn main() -> anyhow::Result<()> {
                     drop_existing,
                     no_sync,
                     remote_api,
+                    job_timeout,
                 )
                 .await;
             }
@@ -346,12 +351,56 @@ async fn init_remote(
     drop_existing: bool,
     no_sync: bool,
     remote_api: String,
+    job_timeout: u64,
 ) -> anyhow::Result<()> {
+    use postgres_seren_replicator::migration;
+    use postgres_seren_replicator::postgres;
     use postgres_seren_replicator::remote::{FilterSpec, JobSpec, RemoteClient};
     use std::collections::HashMap;
 
     println!("🌐 Remote execution mode enabled");
     println!("API endpoint: {}", remote_api);
+
+    // Estimate database size for automatic instance selection
+    println!("Analyzing database size...");
+    let filter_for_sizing = postgres_seren_replicator::filters::ReplicationFilter::new(
+        include_databases.clone(),
+        exclude_databases.clone(),
+        include_tables.clone(),
+        exclude_tables.clone(),
+    )?;
+
+    let estimated_size_bytes = {
+        let source_client = postgres::connect_with_retry(&source).await?;
+        let all_databases = migration::list_databases(&source_client).await?;
+
+        // Filter databases
+        let databases: Vec<_> = all_databases
+            .into_iter()
+            .filter(|db| filter_for_sizing.should_replicate_database(&db.name))
+            .collect();
+
+        if databases.is_empty() {
+            // No databases to replicate, use minimal size
+            0i64
+        } else {
+            // Estimate total size
+            let size_estimates = migration::estimate_database_sizes(
+                &source,
+                &source_client,
+                &databases,
+                &filter_for_sizing,
+            )
+            .await?;
+
+            let total_bytes: i64 = size_estimates.iter().map(|s| s.size_bytes).sum();
+            println!(
+                "Total estimated size: {}",
+                migration::format_bytes(total_bytes)
+            );
+            total_bytes
+        }
+    };
 
     // Build job specification
     let filter = if include_databases.is_none()
@@ -374,6 +423,14 @@ async fn init_remote(
     );
     options.insert("yes".to_string(), serde_json::Value::Bool(yes));
     options.insert("enable_sync".to_string(), serde_json::Value::Bool(!no_sync));
+    options.insert(
+        "estimated_size_bytes".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(estimated_size_bytes)),
+    );
+    options.insert(
+        "job_timeout".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(job_timeout)),
+    );
 
     let job_spec = JobSpec {
         version: "1".to_string(),

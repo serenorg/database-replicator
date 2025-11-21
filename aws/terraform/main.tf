@@ -270,6 +270,7 @@ resource "aws_lambda_function" "coordinator" {
       WORKER_IAM_ROLE        = aws_iam_instance_profile.worker_profile.name
       KMS_KEY_ID             = aws_kms_key.replication_data.key_id
       API_KEY_PARAMETER_NAME = aws_ssm_parameter.api_key.name
+      MAX_CONCURRENT_JOBS    = var.max_concurrent_jobs
     }
   }
 
