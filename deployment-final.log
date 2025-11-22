@@ -1,0 +1,369 @@
+[2025-11-21T21:43:29Z] Starting deployment of remote replication infrastructure
+[2025-11-21T21:43:29Z] Region: us-east-1
+[2025-11-21T21:43:29Z] 
+[2025-11-21T21:43:29Z] Checking prerequisites...
+[2025-11-21T21:43:30Z] ✓ All prerequisites satisfied
+[2025-11-21T21:43:30Z] 
+[2025-11-21T21:43:30Z] Building release binary...
+    Finished `release` profile [optimized] target(s) in 0.28s
+[2025-11-21T21:43:31Z] ✓ Built binary version: 2.4.2
+[2025-11-21T21:43:31Z] 
+[2025-11-21T21:43:31Z] Building worker AMI (takes ~10 minutes)...
+[2025-11-21T21:43:32Z] Checking prerequisites...
+[2025-11-21T21:43:32Z] Verifying AWS credentials...
+[2025-11-21T21:43:33Z] Finding latest Ubuntu 24.04 AMI...
+[2025-11-21T21:43:35Z] Using source AMI: ami-09c63204a7d809e8f
+[2025-11-21T21:43:35Z] Generating Packer template...
+[2025-11-21T21:43:35Z] Packer template generated: worker-ami.pkr.hcl
+[2025-11-21T21:43:35Z] Initializing Packer...
+[2025-11-21T21:43:35Z] Validating Packer template...
+The configuration is valid.
+[2025-11-21T21:43:37Z] Building AMI (this takes ~10 minutes)...
+[2025-11-21T21:43:37Z] AMI name: postgres-seren-replicator-worker-20251121-134332
+[2025-11-21T21:43:37Z] 
+[1;32mamazon-ebs.worker: output will be in this color.[0m
+
+[1;32m==> amazon-ebs.worker: Prevalidating any provided VPC information[0m
+[1;32m==> amazon-ebs.worker: Prevalidating AMI Name: postgres-seren-replicator-worker-20251121-134332[0m
+[1;32m==> amazon-ebs.worker: Found Image ID: ami-09c63204a7d809e8f[0m
+[1;32m==> amazon-ebs.worker: Creating temporary keypair: packer_6920dd0a-7e48-23ab-37b6-bec36cbe80d1[0m
+[1;32m==> amazon-ebs.worker: Creating temporary security group for this instance: packer_6920dd0b-fc6b-f9a9-3246-5edc2158c88d[0m
+[1;32m==> amazon-ebs.worker: Authorizing access to port 22 from [0.0.0.0/0] in the temporary security groups...[0m
+[1;32m==> amazon-ebs.worker: Launching a source AWS instance...[0m
+[1;32m==> amazon-ebs.worker: Instance ID: i-0565b29affc554177[0m
+[1;32m==> amazon-ebs.worker: Waiting for instance (i-0565b29affc554177) to become ready...[0m
+[1;32m==> amazon-ebs.worker: Using SSH communicator to connect: 35.172.136.197[0m
+[1;32m==> amazon-ebs.worker: Waiting for SSH to become available...[0m
+[1;32m==> amazon-ebs.worker: Connected to SSH![0m
+[1;32m==> amazon-ebs.worker: Uploading ./setup-worker.sh => /tmp/setup-worker.sh[0m
+[1;32m==> amazon-ebs.worker: Provisioning with shell script: /var/folders/gj/t_y4lqfx4jv0n7x4kd5793m00000gp/T/packer-shell146199121[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:44:06Z] Starting worker AMI setup...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:44:06Z] Updating system packages...[0m
+[1;32m==> amazon-ebs.worker: Hit:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble InRelease[0m
+[1;32m==> amazon-ebs.worker: Get:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB][0m
+[1;32m==> amazon-ebs.worker: Get:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB][0m
+[1;32m==> amazon-ebs.worker: Get:4 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB][0m
+[1;32m==> amazon-ebs.worker: Get:5 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe amd64 Packages [15.0 MB][0m
+[1;32m==> amazon-ebs.worker: Get:6 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1317 kB][0m
+[1;32m==> amazon-ebs.worker: Get:7 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe Translation-en [5982 kB][0m
+[1;32m==> amazon-ebs.worker: Get:8 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe amd64 Components [3871 kB][0m
+[1;32m==> amazon-ebs.worker: Get:9 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe amd64 c-n-f Metadata [301 kB][0m
+[1;32m==> amazon-ebs.worker: Get:10 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse amd64 Packages [269 kB][0m
+[1;32m==> amazon-ebs.worker: Get:11 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse Translation-en [118 kB][0m
+[1;32m==> amazon-ebs.worker: Get:12 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse amd64 Components [35.0 kB][0m
+[1;32m==> amazon-ebs.worker: Get:13 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse amd64 c-n-f Metadata [8328 B][0m
+[1;32m==> amazon-ebs.worker: Get:14 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1619 kB][0m
+[1;32m==> amazon-ebs.worker: Get:15 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [303 kB][0m
+[1;32m==> amazon-ebs.worker: Get:16 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [216 kB][0m
+[1;32m==> amazon-ebs.worker: Get:17 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [175 kB][0m
+[1;32m==> amazon-ebs.worker: Get:18 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [21.6 kB][0m
+[1;32m==> amazon-ebs.worker: Get:19 http://security.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [9452 B][0m
+[1;32m==> amazon-ebs.worker: Get:20 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [909 kB][0m
+[1;32m==> amazon-ebs.worker: Get:21 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [15.7 kB][0m
+[1;32m==> amazon-ebs.worker: Get:22 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1500 kB][0m
+[1;32m==> amazon-ebs.worker: Get:23 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [205 kB][0m
+[1;32m==> amazon-ebs.worker: Get:24 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [52.2 kB][0m
+[1;32m==> amazon-ebs.worker: Get:25 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [304 kB][0m
+[1;32m==> amazon-ebs.worker: Get:26 http://security.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [19.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:27 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2153 kB][0m
+[1;32m==> amazon-ebs.worker: Get:28 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [378 kB][0m
+[1;32m==> amazon-ebs.worker: Get:29 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [31.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:30 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2307 kB][0m
+[1;32m==> amazon-ebs.worker: Get:31 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [490 kB][0m
+[1;32m==> amazon-ebs.worker: Get:32 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:33 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [27.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:34 http://security.ubuntu.com/ubuntu noble-security/multiverse Translation-en [5956 B][0m
+[1;32m==> amazon-ebs.worker: Get:35 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [208 B][0m
+[1;32m==> amazon-ebs.worker: Get:36 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 c-n-f Metadata [384 B][0m
+[1;32m==> amazon-ebs.worker: Get:37 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [526 kB][0m
+[1;32m==> amazon-ebs.worker: Get:38 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:39 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [30.3 kB][0m
+[1;32m==> amazon-ebs.worker: Get:40 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [5808 B][0m
+[1;32m==> amazon-ebs.worker: Get:41 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B][0m
+[1;32m==> amazon-ebs.worker: Get:42 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 c-n-f Metadata [484 B][0m
+[1;32m==> amazon-ebs.worker: Get:43 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main amd64 Packages [40.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:44 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main Translation-en [9208 B][0m
+[1;32m==> amazon-ebs.worker: Get:45 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7132 B][0m
+[1;32m==> amazon-ebs.worker: Get:46 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main amd64 c-n-f Metadata [368 B][0m
+[1;32m==> amazon-ebs.worker: Get:47 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Packages [28.9 kB][0m
+[1;32m==> amazon-ebs.worker: Get:48 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe Translation-en [17.5 kB][0m
+[1;32m==> amazon-ebs.worker: Get:49 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.9 kB][0m
+[1;32m==> amazon-ebs.worker: Get:50 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe amd64 c-n-f Metadata [1444 B][0m
+[1;32m==> amazon-ebs.worker: Get:51 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:52 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 c-n-f Metadata [116 B][0m
+[1;32m==> amazon-ebs.worker: Get:53 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:54 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 c-n-f Metadata [116 B][0m
+[1;32m==> amazon-ebs.worker: Fetched 38.7 MB in 7s (5537 kB/s)[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: Calculating upgrade...[0m
+[1;32m==> amazon-ebs.worker: The following packages have been kept back:[0m
+[1;32m==> amazon-ebs.worker:   linux-aws linux-headers-aws linux-image-aws[0m
+[1;32m==> amazon-ebs.worker: The following packages will be upgraded:[0m
+[1;32m==> amazon-ebs.worker:   gir1.2-packagekitglib-1.0 libdrm-common libdrm2 libpackagekit-glib2-18[0m
+[1;32m==> amazon-ebs.worker:   linux-tools-common packagekit packagekit-tools[0m
+[1;32m==> amazon-ebs.worker: 7 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: Need to get 1430 kB of archives.[0m
+[1;32m==> amazon-ebs.worker: After this operation, 1024 B of additional disk space will be used.[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 libdrm-common all 2.4.122-1~ubuntu0.24.04.2 [8464 B][0m
+[1;32m==> amazon-ebs.worker: Get:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 libdrm2 amd64 2.4.122-1~ubuntu0.24.04.2 [40.6 kB][0m
+[1;32m==> amazon-ebs.worker: Get:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 libpackagekit-glib2-18 amd64 1.2.8-2ubuntu1.4 [120 kB][0m
+[1;32m==> amazon-ebs.worker: Get:4 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-packagekitglib-1.0 amd64 1.2.8-2ubuntu1.4 [25.6 kB][0m
+[1;32m==> amazon-ebs.worker: Get:5 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 linux-tools-common all 6.8.0-88.89 [773 kB][0m
+[1;32m==> amazon-ebs.worker: Get:6 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 packagekit-tools amd64 1.2.8-2ubuntu1.4 [28.3 kB][0m
+[1;32m==> amazon-ebs.worker: Get:7 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 packagekit amd64 1.2.8-2ubuntu1.4 [434 kB][0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker: dpkg-preconfigure: unable to re-open stdin:[0m
+[1;32m==> amazon-ebs.worker: Fetched 1430 kB in 0s (10.8 MB/s)[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 71737 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../0-libdrm-common_2.4.122-1~ubuntu0.24.04.2_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libdrm-common (2.4.122-1~ubuntu0.24.04.2) over (2.4.122-1~ubuntu0.24.04.1) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../1-libdrm2_2.4.122-1~ubuntu0.24.04.2_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libdrm2:amd64 (2.4.122-1~ubuntu0.24.04.2) over (2.4.122-1~ubuntu0.24.04.1) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../2-libpackagekit-glib2-18_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libpackagekit-glib2-18:amd64 (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../3-gir1.2-packagekitglib-1.0_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking gir1.2-packagekitglib-1.0 (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../4-linux-tools-common_6.8.0-88.89_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking linux-tools-common (6.8.0-88.89) over (6.8.0-87.88) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../5-packagekit-tools_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking packagekit-tools (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../6-packagekit_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking packagekit (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libpackagekit-glib2-18:amd64 (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up gir1.2-packagekitglib-1.0 (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up packagekit (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libdrm-common (2.4.122-1~ubuntu0.24.04.2) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up linux-tools-common (6.8.0-88.89) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up packagekit-tools (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libdrm2:amd64 (2.4.122-1~ubuntu0.24.04.2) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for man-db (2.12.0-4build2) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for dbus (1.14.10-4ubuntu4.1) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for libc-bin (2.39-0ubuntu8.6) ...[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: Running kernel seems to be up-to-date.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No services need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No containers need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No user sessions are running outdated binaries.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No VM guests are running outdated hypervisor (qemu) binaries on this host.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:44:46Z] Adding PostgreSQL 17 repository...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: wget is already the newest version (1.21.4-1ubuntu4.1).[0m
+[1;32m==> amazon-ebs.worker: wget set to manually installed.[0m
+[1;32m==> amazon-ebs.worker: lsb-release is already the newest version (12.0-2).[0m
+[1;32m==> amazon-ebs.worker: lsb-release set to manually installed.[0m
+[1;32m==> amazon-ebs.worker: Suggested packages:[0m
+[1;32m==> amazon-ebs.worker:   zip[0m
+[1;32m==> amazon-ebs.worker: The following NEW packages will be installed:[0m
+[1;32m==> amazon-ebs.worker:   gnupg2 unzip[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 2 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: Need to get 179 kB of archives.[0m
+[1;32m==> amazon-ebs.worker: After this operation, 417 kB of additional disk space will be used.[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 unzip amd64 6.0-28ubuntu4.1 [174 kB][0m
+[1;32m==> amazon-ebs.worker: Get:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 gnupg2 all 2.4.4-2ubuntu17.3 [4748 B][0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker: dpkg-preconfigure: unable to re-open stdin:[0m
+[1;32m==> amazon-ebs.worker: Fetched 179 kB in 0s (10.4 MB/s)[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package unzip.[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 71737 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../unzip_6.0-28ubuntu4.1_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking unzip (6.0-28ubuntu4.1) ...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package gnupg2.[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../gnupg2_2.4.4-2ubuntu17.3_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking gnupg2 (2.4.4-2ubuntu17.3) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up gnupg2 (2.4.4-2ubuntu17.3) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up unzip (6.0-28ubuntu4.1) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for man-db (2.12.0-4build2) ...[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: Running kernel seems to be up-to-date.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No services need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No containers need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No user sessions are running outdated binaries.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No VM guests are running outdated hypervisor (qemu) binaries on this host.[0m
+[1;32m==> amazon-ebs.worker: deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt noble-pgdg main[0m
+[1;32m==> amazon-ebs.worker: Hit:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble InRelease[0m
+[1;32m==> amazon-ebs.worker: Get:2 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease [107 kB][0m
+[1;32m==> amazon-ebs.worker: Hit:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates InRelease[0m
+[1;32m==> amazon-ebs.worker: Hit:4 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports InRelease[0m
+[1;32m==> amazon-ebs.worker: Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease[0m
+[1;32m==> amazon-ebs.worker: Get:6 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 Packages [351 kB][0m
+[1;32m==> amazon-ebs.worker: Fetched 458 kB in 3s (150 kB/s)[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:04Z] Installing PostgreSQL 17 client tools...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: The following additional packages will be installed:[0m
+[1;32m==> amazon-ebs.worker:   libpq5 postgresql-client-common[0m
+[1;32m==> amazon-ebs.worker: Suggested packages:[0m
+[1;32m==> amazon-ebs.worker:   libpq-oauth postgresql-17 postgresql-doc-17[0m
+[1;32m==> amazon-ebs.worker: The following NEW packages will be installed:[0m
+[1;32m==> amazon-ebs.worker:   libpq5 postgresql-client-17 postgresql-client-common[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 3 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: Need to get 2323 kB of archives.[0m
+[1;32m==> amazon-ebs.worker: After this operation, 11.4 MB of additional disk space will be used.[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 libpq5 amd64 18.1-1.pgdg24.04+2 [245 kB][0m
+[1;32m==> amazon-ebs.worker: Get:2 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-common all 287.pgdg24.04+1 [47.9 kB][0m
+[1;32m==> amazon-ebs.worker: Get:3 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-17 amd64 17.7-3.pgdg24.04+1 [2030 kB][0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker: dpkg-preconfigure: unable to re-open stdin:[0m
+[1;32m==> amazon-ebs.worker: Fetched 2323 kB in 0s (26.6 MB/s)[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package libpq5:amd64.[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 71761 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../libpq5_18.1-1.pgdg24.04+2_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libpq5:amd64 (18.1-1.pgdg24.04+2) ...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package postgresql-client-common.[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../postgresql-client-common_287.pgdg24.04+1_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking postgresql-client-common (287.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package postgresql-client-17.[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../postgresql-client-17_17.7-3.pgdg24.04+1_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking postgresql-client-17 (17.7-3.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up postgresql-client-common (287.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libpq5:amd64 (18.1-1.pgdg24.04+2) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up postgresql-client-17 (17.7-3.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: update-alternatives: using /usr/share/postgresql/17/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for man-db (2.12.0-4build2) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for libc-bin (2.39-0ubuntu8.6) ...[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: Running kernel seems to be up-to-date.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No services need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No containers need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No user sessions are running outdated binaries.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No VM guests are running outdated hypervisor (qemu) binaries on this host.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:17Z] Verifying PostgreSQL tools installation...[0m
+[1;32m==> amazon-ebs.worker: psql (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: pg_dump (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: pg_dumpall (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: pg_restore (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:18Z] Installing AWS CLI v2...[0m
+[1;31m==> amazon-ebs.worker:   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current[0m
+[1;31m==> amazon-ebs.worker:                                  Dload  Upload   Total   Spent    Left  Speed[0m
+[1;31m==> amazon-ebs.worker: 100 59.8M  100 59.8M    0     0   103M      0 --:--:-- --:--:-- --:--:--  103M[0m
+[1;32m==> amazon-ebs.worker: You can now run: /usr/local/bin/aws --version[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:28Z] Verifying AWS CLI installation...[0m
+[1;32m==> amazon-ebs.worker: aws-cli/2.32.3 Python/3.13.9 Linux/6.14.0-1016-aws exe/x86_64.ubuntu.24[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:30Z] Installing jq...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: jq is already the newest version (1.7.1-3ubuntu0.24.04.1).[0m
+[1;32m==> amazon-ebs.worker: jq set to manually installed.[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:32Z] Verifying jq installation...[0m
+[1;32m==> amazon-ebs.worker: jq-1.7[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:32Z] Installing ec2-metadata...[0m
+[1;31m==> amazon-ebs.worker: --2025-11-21 21:45:32--  http://s3.amazonaws.com/ec2metadata/ec2-metadata[0m
+[1;31m==> amazon-ebs.worker: Resolving s3.amazonaws.com (s3.amazonaws.com)... 16.15.181.65, 52.217.196.104, 3.5.3.251, ...[0m
+[1;31m==> amazon-ebs.worker: Connecting to s3.amazonaws.com (s3.amazonaws.com)|16.15.181.65|:80... connected.[0m
+[1;31m==> amazon-ebs.worker: HTTP request sent, awaiting response... 200 OK[0m
+[1;31m==> amazon-ebs.worker: Length: 7868 (7.7K) [binary/octet-stream][0m
+[1;31m==> amazon-ebs.worker: Saving to: ‘/usr/local/bin/ec2-metadata’[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker:      0K .......                                               100%  413M=0s[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: 2025-11-21 21:45:32 (413 MB/s) - ‘/usr/local/bin/ec2-metadata’ saved [7868/7868][0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:32Z] Verifying ec2-metadata installation...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:32Z] Creating /opt/seren-replicator directory...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:32Z] Installing CloudWatch agent...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package amazon-cloudwatch-agent.[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 72214 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack ./amazon-cloudwatch-agent.deb ...[0m
+[1;32m==> amazon-ebs.worker: create group cwagent, result: 0[0m
+[1;32m==> amazon-ebs.worker: create user cwagent, result: 0[0m
+[1;32m==> amazon-ebs.worker: Unpacking amazon-cloudwatch-agent (1.300062.0b1304-1) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up amazon-cloudwatch-agent (1.300062.0b1304-1) ...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:40Z] Cleaning up...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z] Worker AMI setup complete![0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z] Summary:[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   - PostgreSQL 17 client tools installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   - AWS CLI v2 installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   - jq installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   - ec2-metadata installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   - CloudWatch agent installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   - /opt/seren-replicator directory created[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z][0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z] Next steps:[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   1. Copy postgres-seren-replicator binary to /opt/seren-replicator/[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   2. Copy worker.sh script to /opt/seren-replicator/[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   3. Set executable permissions: chmod +x /opt/seren-replicator/*[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:45:42Z]   4. Create AMI snapshot[0m
+[1;32m==> amazon-ebs.worker: Uploading /Users/taariqlewis/Projects/Seren_Projects/neon-seren-replicator/target/release/postgres-seren-replicator => /tmp/postgres-seren-replicator[0m
+[1;32m==> amazon-ebs.worker: Uploading ./worker.sh => /tmp/worker.sh[0m
+[1;32m==> amazon-ebs.worker: Provisioning with shell script: /var/folders/gj/t_y4lqfx4jv0n7x4kd5793m00000gp/T/packer-shell4005819542[0m
+[1;32m==> amazon-ebs.worker: total 9368[0m
+[1;32m==> amazon-ebs.worker: drwxr-xr-x 2 root   root      4096 Nov 21 21:45 .[0m
+[1;32m==> amazon-ebs.worker: drwxr-xr-x 4 root   root      4096 Nov 21 21:45 ..[0m
+[1;32m==> amazon-ebs.worker: -rwxr-xr-x 1 ubuntu ubuntu 9575952 Nov 21 21:45 postgres-seren-replicator[0m
+[1;32m==> amazon-ebs.worker: -rwx--x--x 1 ubuntu ubuntu    5128 Nov 21 21:45 worker.sh[0m
+[1;32m==> amazon-ebs.worker: Provisioning with shell script: /var/folders/gj/t_y4lqfx4jv0n7x4kd5793m00000gp/T/packer-shell2797225112[0m
+[1;32m==> amazon-ebs.worker: Verifying installation...[0m
+[1;31m==> amazon-ebs.worker: /tmp/script_5354.sh: 3: /opt/seren-replicator/postgres-seren-replicator: Exec format error[0m
+[1;32m==> amazon-ebs.worker: Provisioning step had errors: Running the cleanup provisioner, if present...[0m
+[1;32m==> amazon-ebs.worker: Terminating the source AWS instance...[0m
+[1;32m==> amazon-ebs.worker: Cleaning up any extra volumes...[0m
+[1;32m==> amazon-ebs.worker: No volumes to clean up, skipping[0m
+[1;32m==> amazon-ebs.worker: Deleting temporary security group...[0m
+[1;32m==> amazon-ebs.worker: Deleting temporary keypair...[0m
+[1;31mBuild 'amazon-ebs.worker' errored after 3 minutes 36 seconds: Script exited with non-zero exit status: 126. Allowed exit codes are: [0][0m
+
+==> Wait completed after 3 minutes 36 seconds
+
+==> Some builds didn't complete successfully and had errors:
+--> amazon-ebs.worker: Script exited with non-zero exit status: 126. Allowed exit codes are: [0]
+
+==> Builds finished but no artifacts were created.
+[2025-11-21T21:47:14Z] ERROR: Failed to build AMI

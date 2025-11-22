@@ -1,0 +1,824 @@
+[2025-11-21T21:50:08Z] Starting deployment of remote replication infrastructure
+[2025-11-21T21:50:08Z] Region: us-east-1
+[2025-11-21T21:50:08Z] 
+[2025-11-21T21:50:08Z] Checking prerequisites...
+[2025-11-21T21:50:09Z] ✓ All prerequisites satisfied
+[2025-11-21T21:50:09Z] 
+[2025-11-21T21:50:09Z] Building release binary...
+    Finished `release` profile [optimized] target(s) in 0.26s
+[2025-11-21T21:50:10Z] ✓ Built binary version: 2.4.2
+[2025-11-21T21:50:10Z] 
+[2025-11-21T21:50:10Z] Building worker AMI (takes ~10 minutes)...
+[2025-11-21T21:50:10Z] Checking prerequisites...
+[2025-11-21T21:50:10Z] Verifying AWS credentials...
+[2025-11-21T21:50:11Z] Finding latest Ubuntu 24.04 AMI...
+[2025-11-21T21:50:13Z] Using source AMI: ami-09c63204a7d809e8f
+[2025-11-21T21:50:13Z] Generating Packer template...
+[2025-11-21T21:50:13Z] Packer template generated: worker-ami.pkr.hcl
+[2025-11-21T21:50:13Z] Initializing Packer...
+[2025-11-21T21:50:13Z] Validating Packer template...
+The configuration is valid.
+[2025-11-21T21:50:15Z] Building AMI (this takes ~10 minutes)...
+[2025-11-21T21:50:15Z] AMI name: postgres-seren-replicator-worker-20251121-135010
+[2025-11-21T21:50:15Z] 
+[1;32mamazon-ebs.worker: output will be in this color.[0m
+
+[1;32m==> amazon-ebs.worker: Prevalidating any provided VPC information[0m
+[1;32m==> amazon-ebs.worker: Prevalidating AMI Name: postgres-seren-replicator-worker-20251121-135010[0m
+[1;32m==> amazon-ebs.worker: Found Image ID: ami-09c63204a7d809e8f[0m
+[1;32m==> amazon-ebs.worker: Creating temporary keypair: packer_6920de97-fe41-74d4-8213-56ba658b8baf[0m
+[1;32m==> amazon-ebs.worker: Creating temporary security group for this instance: packer_6920de99-7380-1ecf-5007-c7e2213081cf[0m
+[1;32m==> amazon-ebs.worker: Authorizing access to port 22 from [0.0.0.0/0] in the temporary security groups...[0m
+[1;32m==> amazon-ebs.worker: Launching a source AWS instance...[0m
+[1;32m==> amazon-ebs.worker: Instance ID: i-0bff15855d9db64a9[0m
+[1;32m==> amazon-ebs.worker: Waiting for instance (i-0bff15855d9db64a9) to become ready...[0m
+[1;32m==> amazon-ebs.worker: Using SSH communicator to connect: 44.197.209.198[0m
+[1;32m==> amazon-ebs.worker: Waiting for SSH to become available...[0m
+[1;32m==> amazon-ebs.worker: Connected to SSH![0m
+[1;32m==> amazon-ebs.worker: Uploading ./setup-worker.sh => /tmp/setup-worker.sh[0m
+[1;32m==> amazon-ebs.worker: Provisioning with shell script: /var/folders/gj/t_y4lqfx4jv0n7x4kd5793m00000gp/T/packer-shell1866552928[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:06Z] Starting worker AMI setup...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:06Z] Updating system packages...[0m
+[1;32m==> amazon-ebs.worker: Hit:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble InRelease[0m
+[1;32m==> amazon-ebs.worker: Get:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates InRelease [126 kB][0m
+[1;32m==> amazon-ebs.worker: Get:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports InRelease [126 kB][0m
+[1;32m==> amazon-ebs.worker: Get:4 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe amd64 Packages [15.0 MB][0m
+[1;32m==> amazon-ebs.worker: Get:5 http://security.ubuntu.com/ubuntu noble-security InRelease [126 kB][0m
+[1;32m==> amazon-ebs.worker: Get:6 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe Translation-en [5982 kB][0m
+[1;32m==> amazon-ebs.worker: Get:7 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe amd64 Components [3871 kB][0m
+[1;32m==> amazon-ebs.worker: Get:8 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/universe amd64 c-n-f Metadata [301 kB][0m
+[1;32m==> amazon-ebs.worker: Get:9 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse amd64 Packages [269 kB][0m
+[1;32m==> amazon-ebs.worker: Get:10 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse Translation-en [118 kB][0m
+[1;32m==> amazon-ebs.worker: Get:11 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse amd64 Components [35.0 kB][0m
+[1;32m==> amazon-ebs.worker: Get:12 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble/multiverse amd64 c-n-f Metadata [8328 B][0m
+[1;32m==> amazon-ebs.worker: Get:13 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 Packages [1619 kB][0m
+[1;32m==> amazon-ebs.worker: Get:14 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main Translation-en [303 kB][0m
+[1;32m==> amazon-ebs.worker: Get:15 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 Components [175 kB][0m
+[1;32m==> amazon-ebs.worker: Get:16 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 c-n-f Metadata [15.7 kB][0m
+[1;32m==> amazon-ebs.worker: Get:17 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Packages [1500 kB][0m
+[1;32m==> amazon-ebs.worker: Get:18 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe Translation-en [304 kB][0m
+[1;32m==> amazon-ebs.worker: Get:19 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 Components [378 kB][0m
+[1;32m==> amazon-ebs.worker: Get:20 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 c-n-f Metadata [31.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:21 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Packages [2307 kB][0m
+[1;32m==> amazon-ebs.worker: Get:22 http://security.ubuntu.com/ubuntu noble-security/main amd64 Packages [1317 kB][0m
+[1;32m==> amazon-ebs.worker: Get:23 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/restricted Translation-en [526 kB][0m
+[1;32m==> amazon-ebs.worker: Get:24 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/restricted amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:25 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Packages [30.3 kB][0m
+[1;32m==> amazon-ebs.worker: Get:26 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse Translation-en [5808 B][0m
+[1;32m==> amazon-ebs.worker: Get:27 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 Components [940 B][0m
+[1;32m==> amazon-ebs.worker: Get:28 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/multiverse amd64 c-n-f Metadata [484 B][0m
+[1;32m==> amazon-ebs.worker: Get:29 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main amd64 Packages [40.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:30 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main Translation-en [9208 B][0m
+[1;32m==> amazon-ebs.worker: Get:31 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main amd64 Components [7132 B][0m
+[1;32m==> amazon-ebs.worker: Get:32 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/main amd64 c-n-f Metadata [368 B][0m
+[1;32m==> amazon-ebs.worker: Get:33 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Packages [28.9 kB][0m
+[1;32m==> amazon-ebs.worker: Get:34 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe Translation-en [17.5 kB][0m
+[1;32m==> amazon-ebs.worker: Get:35 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe amd64 Components [10.9 kB][0m
+[1;32m==> amazon-ebs.worker: Get:36 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/universe amd64 c-n-f Metadata [1444 B][0m
+[1;32m==> amazon-ebs.worker: Get:37 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:38 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/restricted amd64 c-n-f Metadata [116 B][0m
+[1;32m==> amazon-ebs.worker: Get:39 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:40 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports/multiverse amd64 c-n-f Metadata [116 B][0m
+[1;32m==> amazon-ebs.worker: Get:41 http://security.ubuntu.com/ubuntu noble-security/main Translation-en [216 kB][0m
+[1;32m==> amazon-ebs.worker: Get:42 http://security.ubuntu.com/ubuntu noble-security/main amd64 Components [21.6 kB][0m
+[1;32m==> amazon-ebs.worker: Get:43 http://security.ubuntu.com/ubuntu noble-security/main amd64 c-n-f Metadata [9452 B][0m
+[1;32m==> amazon-ebs.worker: Get:44 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Packages [909 kB][0m
+[1;32m==> amazon-ebs.worker: Get:45 http://security.ubuntu.com/ubuntu noble-security/universe Translation-en [205 kB][0m
+[1;32m==> amazon-ebs.worker: Get:46 http://security.ubuntu.com/ubuntu noble-security/universe amd64 Components [52.2 kB][0m
+[1;32m==> amazon-ebs.worker: Get:47 http://security.ubuntu.com/ubuntu noble-security/universe amd64 c-n-f Metadata [19.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:48 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Packages [2153 kB][0m
+[1;32m==> amazon-ebs.worker: Get:49 http://security.ubuntu.com/ubuntu noble-security/restricted Translation-en [490 kB][0m
+[1;32m==> amazon-ebs.worker: Get:50 http://security.ubuntu.com/ubuntu noble-security/restricted amd64 Components [212 B][0m
+[1;32m==> amazon-ebs.worker: Get:51 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Packages [27.4 kB][0m
+[1;32m==> amazon-ebs.worker: Get:52 http://security.ubuntu.com/ubuntu noble-security/multiverse Translation-en [5956 B][0m
+[1;32m==> amazon-ebs.worker: Get:53 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 Components [208 B][0m
+[1;32m==> amazon-ebs.worker: Get:54 http://security.ubuntu.com/ubuntu noble-security/multiverse amd64 c-n-f Metadata [384 B][0m
+[1;32m==> amazon-ebs.worker: Fetched 38.7 MB in 6s (6503 kB/s)[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: Calculating upgrade...[0m
+[1;32m==> amazon-ebs.worker: The following packages have been kept back:[0m
+[1;32m==> amazon-ebs.worker:   linux-aws linux-headers-aws linux-image-aws[0m
+[1;32m==> amazon-ebs.worker: The following packages will be upgraded:[0m
+[1;32m==> amazon-ebs.worker:   gir1.2-packagekitglib-1.0 libdrm-common libdrm2 libpackagekit-glib2-18[0m
+[1;32m==> amazon-ebs.worker:   linux-tools-common packagekit packagekit-tools[0m
+[1;32m==> amazon-ebs.worker: 7 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: Need to get 1430 kB of archives.[0m
+[1;32m==> amazon-ebs.worker: After this operation, 1024 B of additional disk space will be used.[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 libdrm-common all 2.4.122-1~ubuntu0.24.04.2 [8464 B][0m
+[1;32m==> amazon-ebs.worker: Get:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 libdrm2 amd64 2.4.122-1~ubuntu0.24.04.2 [40.6 kB][0m
+[1;32m==> amazon-ebs.worker: Get:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 libpackagekit-glib2-18 amd64 1.2.8-2ubuntu1.4 [120 kB][0m
+[1;32m==> amazon-ebs.worker: Get:4 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 gir1.2-packagekitglib-1.0 amd64 1.2.8-2ubuntu1.4 [25.6 kB][0m
+[1;32m==> amazon-ebs.worker: Get:5 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 linux-tools-common all 6.8.0-88.89 [773 kB][0m
+[1;32m==> amazon-ebs.worker: Get:6 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 packagekit-tools amd64 1.2.8-2ubuntu1.4 [28.3 kB][0m
+[1;32m==> amazon-ebs.worker: Get:7 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 packagekit amd64 1.2.8-2ubuntu1.4 [434 kB][0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker: dpkg-preconfigure: unable to re-open stdin:[0m
+[1;32m==> amazon-ebs.worker: Fetched 1430 kB in 0s (33.8 MB/s)[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 71737 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../0-libdrm-common_2.4.122-1~ubuntu0.24.04.2_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libdrm-common (2.4.122-1~ubuntu0.24.04.2) over (2.4.122-1~ubuntu0.24.04.1) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../1-libdrm2_2.4.122-1~ubuntu0.24.04.2_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libdrm2:amd64 (2.4.122-1~ubuntu0.24.04.2) over (2.4.122-1~ubuntu0.24.04.1) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../2-libpackagekit-glib2-18_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libpackagekit-glib2-18:amd64 (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../3-gir1.2-packagekitglib-1.0_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking gir1.2-packagekitglib-1.0 (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../4-linux-tools-common_6.8.0-88.89_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking linux-tools-common (6.8.0-88.89) over (6.8.0-87.88) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../5-packagekit-tools_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking packagekit-tools (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../6-packagekit_1.2.8-2ubuntu1.4_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking packagekit (1.2.8-2ubuntu1.4) over (1.2.8-2ubuntu1.2) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libpackagekit-glib2-18:amd64 (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up gir1.2-packagekitglib-1.0 (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up packagekit (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libdrm-common (2.4.122-1~ubuntu0.24.04.2) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up linux-tools-common (6.8.0-88.89) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up packagekit-tools (1.2.8-2ubuntu1.4) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libdrm2:amd64 (2.4.122-1~ubuntu0.24.04.2) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for man-db (2.12.0-4build2) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for dbus (1.14.10-4ubuntu4.1) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for libc-bin (2.39-0ubuntu8.6) ...[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: Running kernel seems to be up-to-date.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No services need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No containers need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No user sessions are running outdated binaries.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No VM guests are running outdated hypervisor (qemu) binaries on this host.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:31Z] Adding PostgreSQL 17 repository...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: wget is already the newest version (1.21.4-1ubuntu4.1).[0m
+[1;32m==> amazon-ebs.worker: wget set to manually installed.[0m
+[1;32m==> amazon-ebs.worker: lsb-release is already the newest version (12.0-2).[0m
+[1;32m==> amazon-ebs.worker: lsb-release set to manually installed.[0m
+[1;32m==> amazon-ebs.worker: Suggested packages:[0m
+[1;32m==> amazon-ebs.worker:   zip[0m
+[1;32m==> amazon-ebs.worker: The following NEW packages will be installed:[0m
+[1;32m==> amazon-ebs.worker:   gnupg2 unzip[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 2 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: Need to get 179 kB of archives.[0m
+[1;32m==> amazon-ebs.worker: After this operation, 417 kB of additional disk space will be used.[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/main amd64 unzip amd64 6.0-28ubuntu4.1 [174 kB][0m
+[1;32m==> amazon-ebs.worker: Get:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates/universe amd64 gnupg2 all 2.4.4-2ubuntu17.3 [4748 B][0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker: dpkg-preconfigure: unable to re-open stdin:[0m
+[1;32m==> amazon-ebs.worker: Fetched 179 kB in 0s (10.3 MB/s)[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package unzip.[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 71737 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../unzip_6.0-28ubuntu4.1_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking unzip (6.0-28ubuntu4.1) ...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package gnupg2.[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../gnupg2_2.4.4-2ubuntu17.3_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking gnupg2 (2.4.4-2ubuntu17.3) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up gnupg2 (2.4.4-2ubuntu17.3) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up unzip (6.0-28ubuntu4.1) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for man-db (2.12.0-4build2) ...[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: Running kernel seems to be up-to-date.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No services need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No containers need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No user sessions are running outdated binaries.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No VM guests are running outdated hypervisor (qemu) binaries on this host.[0m
+[1;32m==> amazon-ebs.worker: deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] http://apt.postgresql.org/pub/repos/apt noble-pgdg main[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg InRelease [107 kB][0m
+[1;32m==> amazon-ebs.worker: Hit:2 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble InRelease[0m
+[1;32m==> amazon-ebs.worker: Hit:3 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-updates InRelease[0m
+[1;32m==> amazon-ebs.worker: Hit:4 http://us-east-1.ec2.archive.ubuntu.com/ubuntu noble-backports InRelease[0m
+[1;32m==> amazon-ebs.worker: Hit:5 http://security.ubuntu.com/ubuntu noble-security InRelease[0m
+[1;32m==> amazon-ebs.worker: Get:6 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 Packages [351 kB][0m
+[1;32m==> amazon-ebs.worker: Fetched 458 kB in 1s (773 kB/s)[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:38Z] Installing PostgreSQL 17 client tools...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: The following additional packages will be installed:[0m
+[1;32m==> amazon-ebs.worker:   libpq5 postgresql-client-common[0m
+[1;32m==> amazon-ebs.worker: Suggested packages:[0m
+[1;32m==> amazon-ebs.worker:   libpq-oauth postgresql-17 postgresql-doc-17[0m
+[1;32m==> amazon-ebs.worker: The following NEW packages will be installed:[0m
+[1;32m==> amazon-ebs.worker:   libpq5 postgresql-client-17 postgresql-client-common[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 3 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: Need to get 2323 kB of archives.[0m
+[1;32m==> amazon-ebs.worker: After this operation, 11.4 MB of additional disk space will be used.[0m
+[1;32m==> amazon-ebs.worker: Get:1 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 libpq5 amd64 18.1-1.pgdg24.04+2 [245 kB][0m
+[1;32m==> amazon-ebs.worker: Get:2 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-common all 287.pgdg24.04+1 [47.9 kB][0m
+[1;32m==> amazon-ebs.worker: Get:3 http://apt.postgresql.org/pub/repos/apt noble-pgdg/main amd64 postgresql-client-17 amd64 17.7-3.pgdg24.04+1 [2030 kB][0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker: dpkg-preconfigure: unable to re-open stdin:[0m
+[1;32m==> amazon-ebs.worker: Fetched 2323 kB in 0s (61.9 MB/s)[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package libpq5:amd64.[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 71761 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../libpq5_18.1-1.pgdg24.04+2_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking libpq5:amd64 (18.1-1.pgdg24.04+2) ...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package postgresql-client-common.[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../postgresql-client-common_287.pgdg24.04+1_all.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking postgresql-client-common (287.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package postgresql-client-17.[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack .../postgresql-client-17_17.7-3.pgdg24.04+1_amd64.deb ...[0m
+[1;32m==> amazon-ebs.worker: Unpacking postgresql-client-17 (17.7-3.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up postgresql-client-common (287.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up libpq5:amd64 (18.1-1.pgdg24.04+2) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up postgresql-client-17 (17.7-3.pgdg24.04+1) ...[0m
+[1;32m==> amazon-ebs.worker: update-alternatives: using /usr/share/postgresql/17/man/man1/psql.1.gz to provide /usr/share/man/man1/psql.1.gz (psql.1.gz) in auto mode[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for man-db (2.12.0-4build2) ...[0m
+[1;32m==> amazon-ebs.worker: Processing triggers for libc-bin (2.39-0ubuntu8.6) ...[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Dialog[0m
+[1;31m==> amazon-ebs.worker: debconf: (Dialog frontend will not work on a dumb terminal, an emacs shell buffer, or without a controlling terminal.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: unable to initialize frontend: Readline[0m
+[1;31m==> amazon-ebs.worker: debconf: (This frontend requires a controlling tty.)[0m
+[1;31m==> amazon-ebs.worker: debconf: falling back to frontend: Teletype[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: Running kernel seems to be up-to-date.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No services need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No containers need to be restarted.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No user sessions are running outdated binaries.[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: No VM guests are running outdated hypervisor (qemu) binaries on this host.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:43Z] Verifying PostgreSQL tools installation...[0m
+[1;32m==> amazon-ebs.worker: psql (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: pg_dump (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: pg_dumpall (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: pg_restore (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:43Z] Installing AWS CLI v2...[0m
+[1;31m==> amazon-ebs.worker:   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current[0m
+[1;31m==> amazon-ebs.worker:                                  Dload  Upload   Total   Spent    Left  Speed[0m
+[1;31m==> amazon-ebs.worker: 100 59.8M  100 59.8M    0     0   339M      0 --:--:-- --:--:-- --:--:--  339M[0m
+[1;32m==> amazon-ebs.worker: You can now run: /usr/local/bin/aws --version[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:47Z] Verifying AWS CLI installation...[0m
+[1;32m==> amazon-ebs.worker: aws-cli/2.32.3 Python/3.13.9 Linux/6.14.0-1016-aws exe/x86_64.ubuntu.24[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:50Z] Installing jq...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: jq is already the newest version (1.7.1-3ubuntu0.24.04.1).[0m
+[1;32m==> amazon-ebs.worker: jq set to manually installed.[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:52Z] Verifying jq installation...[0m
+[1;32m==> amazon-ebs.worker: jq-1.7[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:52Z] Installing ec2-metadata...[0m
+[1;31m==> amazon-ebs.worker: --2025-11-21 21:51:52--  http://s3.amazonaws.com/ec2metadata/ec2-metadata[0m
+[1;31m==> amazon-ebs.worker: Resolving s3.amazonaws.com (s3.amazonaws.com)... 54.231.224.224, 16.182.99.112, 16.182.102.56, ...[0m
+[1;31m==> amazon-ebs.worker: Connecting to s3.amazonaws.com (s3.amazonaws.com)|54.231.224.224|:80... connected.[0m
+[1;31m==> amazon-ebs.worker: HTTP request sent, awaiting response... 200 OK[0m
+[1;31m==> amazon-ebs.worker: Length: 7868 (7.7K) [binary/octet-stream][0m
+[1;31m==> amazon-ebs.worker: Saving to: ‘/usr/local/bin/ec2-metadata’[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker:      0K .......                                               100%  394M=0s[0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;31m==> amazon-ebs.worker: 2025-11-21 21:51:52 (394 MB/s) - ‘/usr/local/bin/ec2-metadata’ saved [7868/7868][0m
+[1;31m==> amazon-ebs.worker:[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:52Z] Verifying ec2-metadata installation...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:52Z] Creating /opt/seren-replicator directory...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:52Z] Installing CloudWatch agent...[0m
+[1;32m==> amazon-ebs.worker: Selecting previously unselected package amazon-cloudwatch-agent.[0m
+[1;32m==> amazon-ebs.worker: (Reading database ... 72214 files and directories currently installed.)[0m
+[1;32m==> amazon-ebs.worker: Preparing to unpack ./amazon-cloudwatch-agent.deb ...[0m
+[1;32m==> amazon-ebs.worker: create group cwagent, result: 0[0m
+[1;32m==> amazon-ebs.worker: create user cwagent, result: 0[0m
+[1;32m==> amazon-ebs.worker: Unpacking amazon-cloudwatch-agent (1.300062.0b1304-1) ...[0m
+[1;32m==> amazon-ebs.worker: Setting up amazon-cloudwatch-agent (1.300062.0b1304-1) ...[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:51:59Z] Cleaning up...[0m
+[1;32m==> amazon-ebs.worker: Reading package lists...[0m
+[1;32m==> amazon-ebs.worker: Building dependency tree...[0m
+[1;32m==> amazon-ebs.worker: Reading state information...[0m
+[1;32m==> amazon-ebs.worker: 0 upgraded, 0 newly installed, 0 to remove and 3 not upgraded.[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z] Worker AMI setup complete![0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z] Summary:[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   - PostgreSQL 17 client tools installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   - AWS CLI v2 installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   - jq installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   - ec2-metadata installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   - CloudWatch agent installed[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   - /opt/seren-replicator directory created[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z][0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z] Next steps:[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   1. Copy postgres-seren-replicator binary to /opt/seren-replicator/[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   2. Copy worker.sh script to /opt/seren-replicator/[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   3. Set executable permissions: chmod +x /opt/seren-replicator/*[0m
+[1;32m==> amazon-ebs.worker: [2025-11-21T21:52:02Z]   4. Create AMI snapshot[0m
+[1;32m==> amazon-ebs.worker: Uploading /Users/taariqlewis/Projects/Seren_Projects/neon-seren-replicator/target/release/postgres-seren-replicator => /tmp/postgres-seren-replicator[0m
+[1;32m==> amazon-ebs.worker: Uploading ./worker.sh => /tmp/worker.sh[0m
+[1;32m==> amazon-ebs.worker: Provisioning with shell script: /var/folders/gj/t_y4lqfx4jv0n7x4kd5793m00000gp/T/packer-shell3572756095[0m
+[1;32m==> amazon-ebs.worker: total 9368[0m
+[1;32m==> amazon-ebs.worker: drwxr-xr-x 2 root   root      4096 Nov 21 21:52 .[0m
+[1;32m==> amazon-ebs.worker: drwxr-xr-x 4 root   root      4096 Nov 21 21:51 ..[0m
+[1;32m==> amazon-ebs.worker: -rwxr-xr-x 1 ubuntu ubuntu 9575952 Nov 21 21:52 postgres-seren-replicator[0m
+[1;32m==> amazon-ebs.worker: -rwx--x--x 1 ubuntu ubuntu    5128 Nov 21 21:52 worker.sh[0m
+[1;32m==> amazon-ebs.worker: Provisioning with shell script: /var/folders/gj/t_y4lqfx4jv0n7x4kd5793m00000gp/T/packer-shell1547426773[0m
+[1;32m==> amazon-ebs.worker: Verifying installation...[0m
+[1;32m==> amazon-ebs.worker: Binary check skipped (cross-platform binary)[0m
+[1;32m==> amazon-ebs.worker: psql (PostgreSQL) 17.7 (Ubuntu 17.7-3.pgdg24.04+1)[0m
+[1;32m==> amazon-ebs.worker: aws-cli/2.32.3 Python/3.13.9 Linux/6.14.0-1016-aws exe/x86_64.ubuntu.24[0m
+[1;32m==> amazon-ebs.worker: jq-1.7[0m
+[1;32m==> amazon-ebs.worker: ec2-metadata OK[0m
+[1;32m==> amazon-ebs.worker: Stopping the source instance...[0m
+[1;32m==> amazon-ebs.worker: Stopping instance[0m
+[1;32m==> amazon-ebs.worker: Waiting for the instance to stop...[0m
+[1;32m==> amazon-ebs.worker: Creating AMI postgres-seren-replicator-worker-20251121-135010 from instance i-0bff15855d9db64a9[0m
+[1;32m==> amazon-ebs.worker: Attaching run tags to AMI...[0m
+[1;32m==> amazon-ebs.worker: AMI: ami-0cc44a5e2e3519faa[0m
+[1;32m==> amazon-ebs.worker: Waiting for AMI to become ready...[0m
+[1;32m==> amazon-ebs.worker: Skipping Enable AMI deprecation...[0m
+[1;32m==> amazon-ebs.worker: Skipping Enable AMI deregistration protection...[0m
+[1;32m==> amazon-ebs.worker: Adding tags to AMI (ami-0cc44a5e2e3519faa)...[0m
+[1;32m==> amazon-ebs.worker: Tagging snapshot: snap-0e51901879724879b[0m
+[1;32m==> amazon-ebs.worker: Creating AMI tags[0m
+[1;32m==> amazon-ebs.worker: Adding tag: "BuiltBy": "packer"[0m
+[1;32m==> amazon-ebs.worker: Adding tag: "Environment": "production"[0m
+[1;32m==> amazon-ebs.worker: Adding tag: "Name": "postgres-seren-replicator-worker-20251121-135010"[0m
+[1;32m==> amazon-ebs.worker: Adding tag: "Purpose": "postgres-seren-replicator-worker"[0m
+[1;32m==> amazon-ebs.worker: Adding tag: "BuildDate": "2025-11-21T21:50:13Z"[0m
+[1;32m==> amazon-ebs.worker: Creating snapshot tags[0m
+[1;32m==> amazon-ebs.worker: Terminating the source AWS instance...[0m
+[1;32m==> amazon-ebs.worker: Cleaning up any extra volumes...[0m
+[1;32m==> amazon-ebs.worker: No volumes to clean up, skipping[0m
+[1;32m==> amazon-ebs.worker: Deleting temporary security group...[0m
+[1;32m==> amazon-ebs.worker: Deleting temporary keypair...[0m
+[1;32mBuild 'amazon-ebs.worker' finished after 6 minutes 52 seconds.[0m
+
+==> Wait completed after 6 minutes 52 seconds
+
+==> Builds finished. The artifacts of successful builds are:
+--> amazon-ebs.worker: AMIs were created:
+us-east-1: ami-0cc44a5e2e3519faa
+
+[2025-11-21T21:57:09Z] 
+[2025-11-21T21:57:09Z] Build complete! Retrieving AMI ID...
+[2025-11-21T21:57:16Z] ✅ AMI created successfully!
+[2025-11-21T21:57:16Z] 
+[2025-11-21T21:57:16Z] AMI ID: ami-0cc44a5e2e3519faa
+[2025-11-21T21:57:16Z] AMI Name: postgres-seren-replicator-worker-20251121-135010
+[2025-11-21T21:57:16Z] Region: us-east-1
+[2025-11-21T21:57:16Z] 
+[2025-11-21T21:57:16Z] Next steps:
+[2025-11-21T21:57:16Z]   1. Update Terraform variable: worker_ami_id = "ami-0cc44a5e2e3519faa"
+[2025-11-21T21:57:16Z]   2. Run: terraform apply
+[2025-11-21T21:57:16Z]   3. Test with: ./test-remote-replication.sh
+[2025-11-21T21:57:16Z] 
+[2025-11-21T21:57:16Z] Cleaning up Packer template...
+[2025-11-21T21:57:16Z] Done!
+[2025-11-21T21:57:17Z] ✓ AMI created: ami-0cc44a5e2e3519faa
+[2025-11-21T21:57:17Z] 
+[2025-11-21T21:57:17Z] Packaging Lambda function...
+[2025-11-21T21:57:17Z] ✓ Lambda packaged: 4.0K
+[2025-11-21T21:57:17Z] 
+[2025-11-21T21:57:17Z] Deploying infrastructure with Terraform...
+[2025-11-21T21:57:17Z] Creating terraform.tfvars...
+[2025-11-21T21:57:17Z] Running terraform plan...
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  [32m+[0m create[0m
+
+Terraform will perform the following actions:
+
+[1m  # aws_apigatewayv2_api.api[0m will be created
+[0m  [32m+[0m[0m resource "aws_apigatewayv2_api" "api" {
+      [32m+[0m[0m api_endpoint                 = (known after apply)
+      [32m+[0m[0m api_key_selection_expression = "$request.header.x-api-key"
+      [32m+[0m[0m arn                          = (known after apply)
+      [32m+[0m[0m execution_arn                = (known after apply)
+      [32m+[0m[0m id                           = (known after apply)
+      [32m+[0m[0m ip_address_type              = (known after apply)
+      [32m+[0m[0m name                         = "seren-replication-api"
+      [32m+[0m[0m protocol_type                = "HTTP"
+      [32m+[0m[0m route_selection_expression   = "$request.method $request.path"
+      [32m+[0m[0m tags                         = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-api"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all                     = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-api"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+
+      [32m+[0m[0m cors_configuration {
+          [32m+[0m[0m allow_headers = [
+              [32m+[0m[0m "content-type",
+            ]
+          [32m+[0m[0m allow_methods = [
+              [32m+[0m[0m "GET",
+              [32m+[0m[0m "OPTIONS",
+              [32m+[0m[0m "POST",
+            ]
+          [32m+[0m[0m allow_origins = [
+              [32m+[0m[0m "*",
+            ]
+        }
+    }
+
+[1m  # aws_apigatewayv2_integration.lambda_integration[0m will be created
+[0m  [32m+[0m[0m resource "aws_apigatewayv2_integration" "lambda_integration" {
+      [32m+[0m[0m api_id                                    = (known after apply)
+      [32m+[0m[0m connection_type                           = "INTERNET"
+      [32m+[0m[0m id                                        = (known after apply)
+      [32m+[0m[0m integration_response_selection_expression = (known after apply)
+      [32m+[0m[0m integration_type                          = "AWS_PROXY"
+      [32m+[0m[0m integration_uri                           = (known after apply)
+      [32m+[0m[0m payload_format_version                    = "1.0"
+      [32m+[0m[0m timeout_milliseconds                      = (known after apply)
+    }
+
+[1m  # aws_apigatewayv2_route.get_job[0m will be created
+[0m  [32m+[0m[0m resource "aws_apigatewayv2_route" "get_job" {
+      [32m+[0m[0m api_id             = (known after apply)
+      [32m+[0m[0m api_key_required   = false
+      [32m+[0m[0m authorization_type = "NONE"
+      [32m+[0m[0m id                 = (known after apply)
+      [32m+[0m[0m route_key          = "GET /jobs/{id}"
+      [32m+[0m[0m target             = (known after apply)
+    }
+
+[1m  # aws_apigatewayv2_route.post_jobs[0m will be created
+[0m  [32m+[0m[0m resource "aws_apigatewayv2_route" "post_jobs" {
+      [32m+[0m[0m api_id             = (known after apply)
+      [32m+[0m[0m api_key_required   = false
+      [32m+[0m[0m authorization_type = "NONE"
+      [32m+[0m[0m id                 = (known after apply)
+      [32m+[0m[0m route_key          = "POST /jobs"
+      [32m+[0m[0m target             = (known after apply)
+    }
+
+[1m  # aws_apigatewayv2_stage.default[0m will be created
+[0m  [32m+[0m[0m resource "aws_apigatewayv2_stage" "default" {
+      [32m+[0m[0m api_id        = (known after apply)
+      [32m+[0m[0m arn           = (known after apply)
+      [32m+[0m[0m auto_deploy   = true
+      [32m+[0m[0m deployment_id = (known after apply)
+      [32m+[0m[0m execution_arn = (known after apply)
+      [32m+[0m[0m id            = (known after apply)
+      [32m+[0m[0m invoke_url    = (known after apply)
+      [32m+[0m[0m name          = "$default"
+      [32m+[0m[0m tags          = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-api-stage"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all      = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-api-stage"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+    }
+
+[1m  # aws_cloudwatch_log_group.lambda_logs[0m will be created
+[0m  [32m+[0m[0m resource "aws_cloudwatch_log_group" "lambda_logs" {
+      [32m+[0m[0m arn               = (known after apply)
+      [32m+[0m[0m id                = (known after apply)
+      [32m+[0m[0m log_group_class   = (known after apply)
+      [32m+[0m[0m name              = "/aws/lambda/seren-replication-coordinator"
+      [32m+[0m[0m name_prefix       = (known after apply)
+      [32m+[0m[0m retention_in_days = 7
+      [32m+[0m[0m skip_destroy      = false
+      [32m+[0m[0m tags              = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-lambda-logs"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all          = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-lambda-logs"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+    }
+
+[1m  # aws_dynamodb_table.replication_jobs[0m will be created
+[0m  [32m+[0m[0m resource "aws_dynamodb_table" "replication_jobs" {
+      [32m+[0m[0m arn              = (known after apply)
+      [32m+[0m[0m billing_mode     = "PAY_PER_REQUEST"
+      [32m+[0m[0m hash_key         = "job_id"
+      [32m+[0m[0m id               = (known after apply)
+      [32m+[0m[0m name             = "replication-jobs"
+      [32m+[0m[0m read_capacity    = (known after apply)
+      [32m+[0m[0m stream_arn       = (known after apply)
+      [32m+[0m[0m stream_label     = (known after apply)
+      [32m+[0m[0m stream_view_type = (known after apply)
+      [32m+[0m[0m tags             = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-jobs"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all         = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-jobs"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m write_capacity   = (known after apply)
+
+      [32m+[0m[0m attribute {
+          [32m+[0m[0m name = "created_at"
+          [32m+[0m[0m type = "S"
+        }
+      [32m+[0m[0m attribute {
+          [32m+[0m[0m name = "job_id"
+          [32m+[0m[0m type = "S"
+        }
+      [32m+[0m[0m attribute {
+          [32m+[0m[0m name = "status"
+          [32m+[0m[0m type = "S"
+        }
+
+      [32m+[0m[0m global_secondary_index {
+          [32m+[0m[0m hash_key           = "status"
+          [32m+[0m[0m name               = "status-created-index"
+          [32m+[0m[0m non_key_attributes = []
+          [32m+[0m[0m projection_type    = "ALL"
+          [32m+[0m[0m range_key          = "created_at"
+          [32m+[0m[0m read_capacity      = (known after apply)
+          [32m+[0m[0m write_capacity     = (known after apply)
+        }
+
+      [32m+[0m[0m ttl {
+          [32m+[0m[0m attribute_name = "ttl"
+          [32m+[0m[0m enabled        = true
+        }
+    }
+
+[1m  # aws_iam_instance_profile.worker_profile[0m will be created
+[0m  [32m+[0m[0m resource "aws_iam_instance_profile" "worker_profile" {
+      [32m+[0m[0m arn         = (known after apply)
+      [32m+[0m[0m create_date = (known after apply)
+      [32m+[0m[0m id          = (known after apply)
+      [32m+[0m[0m name        = "seren-replication-worker-profile"
+      [32m+[0m[0m name_prefix = (known after apply)
+      [32m+[0m[0m path        = "/"
+      [32m+[0m[0m role        = "seren-replication-worker"
+      [32m+[0m[0m tags        = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-worker-profile"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all    = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-worker-profile"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m unique_id   = (known after apply)
+    }
+
+[1m  # aws_iam_role.lambda_execution[0m will be created
+[0m  [32m+[0m[0m resource "aws_iam_role" "lambda_execution" {
+      [32m+[0m[0m arn                   = (known after apply)
+      [32m+[0m[0m assume_role_policy    = jsonencode(
+            {
+              [32m+[0m[0m Statement = [
+                  [32m+[0m[0m {
+                      [32m+[0m[0m Action    = "sts:AssumeRole"
+                      [32m+[0m[0m Effect    = "Allow"
+                      [32m+[0m[0m Principal = {
+                          [32m+[0m[0m Service = "lambda.amazonaws.com"
+                        }
+                    },
+                ]
+              [32m+[0m[0m Version   = "2012-10-17"
+            }
+        )
+      [32m+[0m[0m create_date           = (known after apply)
+      [32m+[0m[0m force_detach_policies = false
+      [32m+[0m[0m id                    = (known after apply)
+      [32m+[0m[0m managed_policy_arns   = (known after apply)
+      [32m+[0m[0m max_session_duration  = 3600
+      [32m+[0m[0m name                  = "seren-replication-lambda-execution"
+      [32m+[0m[0m name_prefix           = (known after apply)
+      [32m+[0m[0m path                  = "/"
+      [32m+[0m[0m tags                  = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-lambda-execution"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all              = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-lambda-execution"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m unique_id             = (known after apply)
+    }
+
+[1m  # aws_iam_role.worker_role[0m will be created
+[0m  [32m+[0m[0m resource "aws_iam_role" "worker_role" {
+      [32m+[0m[0m arn                   = (known after apply)
+      [32m+[0m[0m assume_role_policy    = jsonencode(
+            {
+              [32m+[0m[0m Statement = [
+                  [32m+[0m[0m {
+                      [32m+[0m[0m Action    = "sts:AssumeRole"
+                      [32m+[0m[0m Effect    = "Allow"
+                      [32m+[0m[0m Principal = {
+                          [32m+[0m[0m Service = "ec2.amazonaws.com"
+                        }
+                    },
+                ]
+              [32m+[0m[0m Version   = "2012-10-17"
+            }
+        )
+      [32m+[0m[0m create_date           = (known after apply)
+      [32m+[0m[0m force_detach_policies = false
+      [32m+[0m[0m id                    = (known after apply)
+      [32m+[0m[0m managed_policy_arns   = (known after apply)
+      [32m+[0m[0m max_session_duration  = 3600
+      [32m+[0m[0m name                  = "seren-replication-worker"
+      [32m+[0m[0m name_prefix           = (known after apply)
+      [32m+[0m[0m path                  = "/"
+      [32m+[0m[0m tags                  = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-worker"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all              = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-worker"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m unique_id             = (known after apply)
+    }
+
+[1m  # aws_iam_role_policy.lambda_policy[0m will be created
+[0m  [32m+[0m[0m resource "aws_iam_role_policy" "lambda_policy" {
+      [32m+[0m[0m id          = (known after apply)
+      [32m+[0m[0m name        = "seren-replication-lambda-policy"
+      [32m+[0m[0m name_prefix = (known after apply)
+      [32m+[0m[0m policy      = (known after apply)
+      [32m+[0m[0m role        = (known after apply)
+    }
+
+[1m  # aws_iam_role_policy.worker_policy[0m will be created
+[0m  [32m+[0m[0m resource "aws_iam_role_policy" "worker_policy" {
+      [32m+[0m[0m id          = (known after apply)
+      [32m+[0m[0m name        = "seren-replication-worker-policy"
+      [32m+[0m[0m name_prefix = (known after apply)
+      [32m+[0m[0m policy      = (known after apply)
+      [32m+[0m[0m role        = (known after apply)
+    }
+
+[1m  # aws_lambda_function.coordinator[0m will be created
+[0m  [32m+[0m[0m resource "aws_lambda_function" "coordinator" {
+      [32m+[0m[0m architectures                  = (known after apply)
+      [32m+[0m[0m arn                            = (known after apply)
+      [32m+[0m[0m code_sha256                    = (known after apply)
+      [32m+[0m[0m filename                       = "./../lambda/lambda.zip"
+      [32m+[0m[0m function_name                  = "seren-replication-coordinator"
+      [32m+[0m[0m handler                        = "handler.lambda_handler"
+      [32m+[0m[0m id                             = (known after apply)
+      [32m+[0m[0m invoke_arn                     = (known after apply)
+      [32m+[0m[0m last_modified                  = (known after apply)
+      [32m+[0m[0m memory_size                    = 256
+      [32m+[0m[0m package_type                   = "Zip"
+      [32m+[0m[0m publish                        = false
+      [32m+[0m[0m qualified_arn                  = (known after apply)
+      [32m+[0m[0m qualified_invoke_arn           = (known after apply)
+      [32m+[0m[0m reserved_concurrent_executions = -1
+      [32m+[0m[0m role                           = (known after apply)
+      [32m+[0m[0m runtime                        = "python3.11"
+      [32m+[0m[0m signing_job_arn                = (known after apply)
+      [32m+[0m[0m signing_profile_version_arn    = (known after apply)
+      [32m+[0m[0m skip_destroy                   = false
+      [32m+[0m[0m source_code_hash               = (known after apply)
+      [32m+[0m[0m source_code_size               = (known after apply)
+      [32m+[0m[0m tags                           = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-coordinator"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m tags_all                       = {
+          [32m+[0m[0m "ManagedBy" = "terraform"
+          [32m+[0m[0m "Name"      = "seren-replication-coordinator"
+          [32m+[0m[0m "Project"   = "seren-replication"
+        }
+      [32m+[0m[0m timeout                        = 30
+      [32m+[0m[0m version                        = (known after apply)
+
+      [32m+[0m[0m environment {
+          [32m+[0m[0m variables = {
+              [32m+[0m[0m "DYNAMODB_TABLE"       = "replication-jobs"
+              [32m+[0m[0m "WORKER_AMI_ID"        = "ami-0cc44a5e2e3519faa"
+              [32m+[0m[0m "WORKER_IAM_ROLE"      = "seren-replication-worker-profile"
+              [32m+[0m[0m "WORKER_INSTANCE_TYPE" = "c5.2xlarge"
+            }
+        }
+    }
+
+[1m  # aws_lambda_permission.api_gateway[0m will be created
+[0m  [32m+[0m[0m resource "aws_lambda_permission" "api_gateway" {
+      [32m+[0m[0m action              = "lambda:InvokeFunction"
+      [32m+[0m[0m function_name       = "seren-replication-coordinator"
+      [32m+[0m[0m id                  = (known after apply)
+      [32m+[0m[0m principal           = "apigateway.amazonaws.com"
+      [32m+[0m[0m source_arn          = (known after apply)
+      [32m+[0m[0m statement_id        = "AllowAPIGatewayInvoke"
+      [32m+[0m[0m statement_id_prefix = (known after apply)
+    }
+
+[1mPlan:[0m 14 to add, 0 to change, 0 to destroy.
+[0m
+Changes to Outputs:
+  [32m+[0m[0m api_endpoint                 = (known after apply)
+  [32m+[0m[0m dynamodb_table_name          = "replication-jobs"
+  [32m+[0m[0m lambda_function_name         = "seren-replication-coordinator"
+  [32m+[0m[0m worker_iam_role_name         = "seren-replication-worker"
+  [32m+[0m[0m worker_instance_profile_name = "seren-replication-worker-profile"
+[90m
+─────────────────────────────────────────────────────────────────────────────[0m
+
+Saved the plan to: tfplan
+
+To perform exactly these actions, run the following command to apply:
+    terraform apply "tfplan"
+[2025-11-21T21:57:31Z] Applying Terraform configuration...
+[0m[1maws_iam_role.lambda_execution: Creating...[0m[0m
+[0m[1maws_apigatewayv2_api.api: Creating...[0m[0m
+[0m[1maws_iam_role.worker_role: Creating...[0m[0m
+[0m[1maws_dynamodb_table.replication_jobs: Creating...[0m[0m
+[0m[1maws_iam_role.worker_role: Creation complete after 0s [id=seren-replication-worker][0m
+[0m[1maws_iam_role.lambda_execution: Creation complete after 0s [id=seren-replication-lambda-execution][0m
+[0m[1maws_iam_instance_profile.worker_profile: Creating...[0m[0m
+[0m[1maws_apigatewayv2_api.api: Creation complete after 1s [id=79cfok1msj][0m
+[0m[1maws_apigatewayv2_stage.default: Creating...[0m[0m
+[0m[1maws_apigatewayv2_stage.default: Creation complete after 0s [id=$default][0m
+[0m[1maws_iam_instance_profile.worker_profile: Creation complete after 7s [id=seren-replication-worker-profile][0m
+[0m[1maws_dynamodb_table.replication_jobs: Still creating... [10s elapsed][0m[0m
+[0m[1maws_dynamodb_table.replication_jobs: Still creating... [20s elapsed][0m[0m
+[0m[1maws_dynamodb_table.replication_jobs: Still creating... [30s elapsed][0m[0m
+[0m[1maws_dynamodb_table.replication_jobs: Creation complete after 34s [id=replication-jobs][0m
+[0m[1maws_iam_role_policy.worker_policy: Creating...[0m[0m
+[0m[1maws_iam_role_policy.lambda_policy: Creating...[0m[0m
+[0m[1maws_lambda_function.coordinator: Creating...[0m[0m
+[0m[1maws_iam_role_policy.lambda_policy: Creation complete after 1s [id=seren-replication-lambda-execution:seren-replication-lambda-policy][0m
+[0m[1maws_iam_role_policy.worker_policy: Creation complete after 1s [id=seren-replication-worker:seren-replication-worker-policy][0m
+[0m[1maws_lambda_function.coordinator: Creation complete after 8s [id=seren-replication-coordinator][0m
+[0m[1maws_lambda_permission.api_gateway: Creating...[0m[0m
+[0m[1maws_apigatewayv2_integration.lambda_integration: Creating...[0m[0m
+[0m[1maws_cloudwatch_log_group.lambda_logs: Creating...[0m[0m
+[0m[1maws_lambda_permission.api_gateway: Creation complete after 0s [id=AllowAPIGatewayInvoke][0m
+[0m[1maws_apigatewayv2_integration.lambda_integration: Creation complete after 0s [id=mvfdasi][0m
+[0m[1maws_apigatewayv2_route.get_job: Creating...[0m[0m
+[0m[1maws_apigatewayv2_route.post_jobs: Creating...[0m[0m
+[0m[1maws_cloudwatch_log_group.lambda_logs: Creation complete after 0s [id=/aws/lambda/seren-replication-coordinator][0m
+[0m[1maws_apigatewayv2_route.post_jobs: Creation complete after 0s [id=ubr63b1][0m
+[0m[1maws_apigatewayv2_route.get_job: Creation complete after 0s [id=hf19ojv][0m
+[0m[1m[32m
+Apply complete! Resources: 14 added, 0 changed, 0 destroyed.
+[0m[0m[1m[32m
+Outputs:
+
+[0mapi_endpoint = "https://79cfok1msj.execute-api.us-east-1.amazonaws.com"
+dynamodb_table_name = "replication-jobs"
+lambda_function_name = "seren-replication-coordinator"
+worker_iam_role_name = "seren-replication-worker"
+worker_instance_profile_name = "seren-replication-worker-profile"
+[2025-11-21T21:58:29Z] ✓ Infrastructure deployed successfully
+[2025-11-21T21:58:29Z] 
+[2025-11-21T21:58:29Z] Outputs:
+[2025-11-21T21:58:29Z]   API Endpoint: https://79cfok1msj.execute-api.us-east-1.amazonaws.com
+[2025-11-21T21:58:29Z]   DynamoDB Table: replication-jobs
+[2025-11-21T21:58:29Z]   Lambda Function: seren-replication-coordinator
+[2025-11-21T21:58:29Z] 
+[2025-11-21T21:58:29Z] Testing API endpoint...
+[2025-11-21T21:58:29Z] Endpoint: https://79cfok1msj.execute-api.us-east-1.amazonaws.com
+head: illegal line count -- -1
