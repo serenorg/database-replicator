@@ -13,6 +13,7 @@ from botocore.exceptions import ClientError
 dynamodb = boto3.client('dynamodb')
 ec2 = boto3.client('ec2')
 kms = boto3.client('kms')
+cloudwatch = boto3.client('cloudwatch')
 
 # Configuration from environment variables
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE', 'replication-jobs')
@@ -21,6 +22,8 @@ WORKER_INSTANCE_TYPE = os.environ.get('WORKER_INSTANCE_TYPE', 'c5.2xlarge')
 WORKER_IAM_ROLE = os.environ.get('WORKER_IAM_ROLE', 'seren-replication-worker')
 KMS_KEY_ID = os.environ.get('KMS_KEY_ID')
 MAX_CONCURRENT_JOBS = int(os.environ.get('MAX_CONCURRENT_JOBS', '10'))
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
+WORKER_LOG_GROUP = '/aws/ec2/seren-replication-worker'
 
 
 def choose_instance_type(estimated_size_bytes):
@@ -48,6 +51,37 @@ def choose_instance_type(estimated_size_bytes):
         return 'c5.2xlarge'
     else:
         return 'c5.4xlarge'
+
+
+def put_metric(metric_name, value=1.0, unit='Count', dimensions=None):
+    """
+    Put custom CloudWatch metric for job tracking and monitoring
+
+    Args:
+        metric_name: Name of the metric (e.g., 'JobProvisioned', 'ProvisioningFailed')
+        value: Metric value (default: 1.0)
+        unit: Metric unit (default: 'Count')
+        dimensions: Optional list of dimension dicts [{'Name': 'InstanceType', 'Value': 't3.medium'}]
+    """
+    try:
+        from datetime import datetime
+        metric_data = {
+            'MetricName': metric_name,
+            'Value': value,
+            'Unit': unit,
+            'Timestamp': datetime.utcnow()
+        }
+
+        if dimensions:
+            metric_data['Dimensions'] = dimensions
+
+        cloudwatch.put_metric_data(
+            Namespace='SerenReplication',
+            MetricData=[metric_data]
+        )
+    except Exception as e:
+        # Don't fail the request if metrics fail
+        print(f"Failed to put metric {metric_name}: {e}")
 
 
 def count_active_jobs():
@@ -179,36 +213,60 @@ def lambda_handler(event, context):
 
     # Process each SQS message
     for record in event['Records']:
+        trace_id = None
+        start_time = time.time()
+
         try:
             # Parse SQS message body
             message_body = json.loads(record['body'])
             job_id = message_body['job_id']
+            trace_id = message_body.get('trace_id')
             options = message_body.get('options', {})
 
-            print(f"Processing job {job_id} from queue")
+            print(f"[TRACE:{trace_id}] Processing job {job_id} from queue")
 
             # Check concurrent job limit before provisioning
             active_jobs = count_active_jobs()
             if active_jobs >= MAX_CONCURRENT_JOBS:
-                print(f"Job {job_id} deferred: {active_jobs} active jobs (limit: {MAX_CONCURRENT_JOBS})")
+                print(f"[TRACE:{trace_id}] Job {job_id} deferred: {active_jobs} active jobs (limit: {MAX_CONCURRENT_JOBS})")
                 # Raise exception to return message to queue for retry
                 raise Exception(f"Max concurrent jobs limit reached ({MAX_CONCURRENT_JOBS})")
 
             # Provision EC2 instance
             instance_id = provision_worker(job_id, options)
 
-            # Update job with instance ID
+            # Calculate provisioning duration
+            provisioning_duration = time.time() - start_time
+
+            # Update job with instance ID and log information
+            log_stream = instance_id  # EC2 instance ID becomes the log stream name
             dynamodb.update_item(
                 TableName=DYNAMODB_TABLE,
                 Key={'job_id': {'S': job_id}},
-                UpdateExpression='SET instance_id = :iid',
-                ExpressionAttributeValues={':iid': {'S': instance_id}}
+                UpdateExpression='SET instance_id = :iid, log_group = :lg, log_stream = :ls',
+                ExpressionAttributeValues={
+                    ':iid': {'S': instance_id},
+                    ':lg': {'S': WORKER_LOG_GROUP},
+                    ':ls': {'S': log_stream}
+                }
             )
 
-            print(f"Job {job_id} provisioned successfully, instance {instance_id}")
+            print(f"[TRACE:{trace_id}] Job {job_id} provisioned successfully, instance {instance_id}")
+
+            # Emit success metrics
+            put_metric('JobProvisioned', dimensions=[
+                {'Name': 'InstanceType', 'Value': options.get('instance_type', 'unknown')}
+            ])
+            put_metric('ProvisioningDuration', value=provisioning_duration, unit='Seconds')
 
         except Exception as e:
-            print(f"Failed to process job: {e}")
+            print(f"[TRACE:{trace_id}] Failed to process job: {e}")
+
+            # Emit failure metric
+            put_metric('ProvisioningFailed', dimensions=[
+                {'Name': 'ErrorType', 'Value': type(e).__name__}
+            ])
+
             # Update job status to failed
             try:
                 dynamodb.update_item(
@@ -222,7 +280,7 @@ def lambda_handler(event, context):
                     }
                 )
             except Exception as update_error:
-                print(f"Failed to update job status: {update_error}")
+                print(f"[TRACE:{trace_id}] Failed to update job status: {update_error}")
 
             # Re-raise to trigger SQS retry mechanism
             raise

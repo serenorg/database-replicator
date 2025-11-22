@@ -19,6 +19,7 @@ ec2 = boto3.client('ec2')
 ssm = boto3.client('ssm')
 kms = boto3.client('kms')
 sqs = boto3.client('sqs')
+cloudwatch = boto3.client('cloudwatch')
 
 # Configuration from environment variables
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE', 'replication-jobs')
@@ -29,6 +30,7 @@ KMS_KEY_ID = os.environ.get('KMS_KEY_ID')
 API_KEY_PARAMETER_NAME = os.environ.get('API_KEY_PARAMETER_NAME')
 MAX_CONCURRENT_JOBS = int(os.environ.get('MAX_CONCURRENT_JOBS', '10'))
 PROVISIONING_QUEUE_URL = os.environ.get('PROVISIONING_QUEUE_URL')
+AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
 # Cache for API key (loaded once per Lambda container lifecycle)
 _api_key_cache = None
@@ -74,6 +76,60 @@ def validate_api_key(event):
         return False, "Invalid API key"
 
     return True, None
+
+
+def put_metric(metric_name, value=1.0, unit='Count', dimensions=None):
+    """
+    Put custom CloudWatch metric for job tracking and monitoring
+
+    Args:
+        metric_name: Name of the metric (e.g., 'JobSubmitted', 'JobCompleted')
+        value: Metric value (default: 1.0)
+        unit: Metric unit (default: 'Count')
+        dimensions: Optional list of dimension dicts [{'Name': 'Status', 'Value': 'success'}]
+    """
+    try:
+        metric_data = {
+            'MetricName': metric_name,
+            'Value': value,
+            'Unit': unit,
+            'Timestamp': datetime.utcnow()
+        }
+
+        if dimensions:
+            metric_data['Dimensions'] = dimensions
+
+        cloudwatch.put_metric_data(
+            Namespace='SerenReplication',
+            MetricData=[metric_data]
+        )
+    except Exception as e:
+        # Don't fail the request if metrics fail
+        print(f"Failed to put metric {metric_name}: {e}")
+
+
+def build_log_url(log_group, log_stream):
+    """
+    Build CloudWatch Logs console URL for a specific log stream
+
+    Args:
+        log_group: CloudWatch log group name
+        log_stream: CloudWatch log stream name
+
+    Returns:
+        HTTPS URL to CloudWatch Logs console
+    """
+    if not log_group or not log_stream:
+        return None
+
+    # URL encode the log group and stream names
+    from urllib.parse import quote
+    log_group_encoded = quote(log_group, safe='')
+    log_stream_encoded = quote(log_stream, safe='')
+
+    return (f"https://console.aws.amazon.com/cloudwatch/home?"
+            f"region={AWS_REGION}#logsV2:log-groups/log-group/"
+            f"{log_group_encoded}/log-events/{log_stream_encoded}")
 
 
 def encrypt_data(plaintext):
@@ -298,8 +354,11 @@ def handle_submit_job(event):
                 'body': json.dumps({'error': f'Missing required field: {field}'})
             }
 
-    # Generate job ID
+    # Generate job ID and trace ID for end-to-end tracing
     job_id = str(uuid.uuid4())
+    trace_id = str(uuid.uuid4())
+
+    print(f"[TRACE:{trace_id}] Job {job_id} submitted")
 
     # Encrypt sensitive credentials
     try:
@@ -313,7 +372,7 @@ def handle_submit_job(event):
         }
 
     # Log with redacted URLs
-    print(f"Job {job_id}: {body['command']} from {redact_url(body['source_url'])} to {redact_url(body['target_url'])}")
+    print(f"[TRACE:{trace_id}] Job {job_id}: {body['command']} from {redact_url(body['source_url'])} to {redact_url(body['target_url'])}")
 
     # Create job record in DynamoDB with encrypted credentials
     now = datetime.utcnow().isoformat() + 'Z'
@@ -324,6 +383,7 @@ def handle_submit_job(event):
             TableName=DYNAMODB_TABLE,
             Item={
                 'job_id': {'S': job_id},
+                'trace_id': {'S': trace_id},
                 'status': {'S': 'provisioning'},
                 'command': {'S': body['command']},
                 'source_url_encrypted': {'S': encrypted_source},
@@ -345,6 +405,7 @@ def handle_submit_job(event):
     try:
         message_body = {
             'job_id': job_id,
+            'trace_id': trace_id,
             'options': body.get('options', {})
         }
 
@@ -353,7 +414,10 @@ def handle_submit_job(event):
             MessageBody=json.dumps(message_body)
         )
 
-        print(f"Job {job_id} enqueued for provisioning")
+        print(f"[TRACE:{trace_id}] Job {job_id} enqueued for provisioning")
+
+        # Emit metric for job submission
+        put_metric('JobSubmitted', dimensions=[{'Name': 'Command', 'Value': body['command']}])
 
     except Exception as e:
         print(f"Failed to enqueue job: {e}")
@@ -377,6 +441,7 @@ def handle_submit_job(event):
         'statusCode': 201,
         'body': json.dumps({
             'job_id': job_id,
+            'trace_id': trace_id,
             'status': 'provisioning'
         })
     }
@@ -464,6 +529,7 @@ def handle_get_job(job_id):
     # Convert DynamoDB item to JSON (exclude encrypted credentials from response)
     job_status = {
         'job_id': item['job_id']['S'],
+        'trace_id': item.get('trace_id', {}).get('S'),
         'status': item['status']['S'],
         'created_at': item.get('created_at', {}).get('S'),
         'started_at': item.get('started_at', {}).get('S'),
@@ -477,6 +543,12 @@ def handle_get_job(job_id):
             job_status['progress'] = json.loads(item['progress']['S'])
         except:
             pass
+
+    # Build CloudWatch log URL if log stream is available
+    log_group = item.get('log_group', {}).get('S')
+    log_stream = item.get('log_stream', {}).get('S')
+    if log_group and log_stream:
+        job_status['log_url'] = build_log_url(log_group, log_stream)
 
     return {
         'statusCode': 200,

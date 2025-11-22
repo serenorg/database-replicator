@@ -16,10 +16,11 @@ if [ "$#" -ne 1 ]; then
 fi
 
 JOB_ID="$1"
+TRACE_ID="unknown"  # Will be set after fetching job from DynamoDB
 
 # Log function
 log() {
-    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] $*"
+    echo "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")] [JOB:$JOB_ID] [TRACE:$TRACE_ID] $*"
 }
 
 # Redact credentials from URL for logging
@@ -116,6 +117,14 @@ trap 'update_job_status "failed" "Script error at line $LINENO"; terminate_self'
 main() {
     log "Starting replication job: $JOB_ID"
 
+    # Start CloudWatch agent for log shipping
+    log "Starting CloudWatch agent..."
+    sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
+        -a fetch-config \
+        -m ec2 \
+        -s \
+        -c file:/opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json || log "WARNING: CloudWatch agent failed to start"
+
     # Fetch job details from DynamoDB
     log "Fetching job details from DynamoDB..."
     JOB_ITEM=$(aws dynamodb get-item \
@@ -133,6 +142,7 @@ main() {
     # Parse job specification
     log "Parsing job specification..."
     COMMAND=$(echo "$JOB_ITEM" | jq -r '.Item.command.S')
+    TRACE_ID=$(echo "$JOB_ITEM" | jq -r '.Item.trace_id.S // "unknown"')
     ENCRYPTED_SOURCE=$(echo "$JOB_ITEM" | jq -r '.Item.source_url_encrypted.S')
     ENCRYPTED_TARGET=$(echo "$JOB_ITEM" | jq -r '.Item.target_url_encrypted.S')
     FILTER_JSON=$(echo "$JOB_ITEM" | jq -r '.Item.filter.S // "{}"')

@@ -68,12 +68,17 @@ log "Creating /opt/seren-replicator directory..."
 sudo mkdir -p /opt/seren-replicator
 sudo chmod 755 /opt/seren-replicator
 
-# Install CloudWatch agent (optional, for enhanced monitoring)
+# Install and configure CloudWatch agent for log streaming
 log "Installing CloudWatch agent..."
 cd /tmp
 wget -q https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
 sudo dpkg -i -E ./amazon-cloudwatch-agent.deb
 rm amazon-cloudwatch-agent.deb
+
+# Configure CloudWatch agent to ship logs
+log "Configuring CloudWatch agent..."
+sudo mkdir -p /opt/aws/amazon-cloudwatch-agent/etc
+# Configuration will be deployed via Packer/user-data
 
 # Clean up
 log "Cleaning up..."

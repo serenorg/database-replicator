@@ -8,6 +8,7 @@ set -euo pipefail
 BINARY_PATH="${BINARY_PATH:-../../target/release/postgres-seren-replicator}"
 WORKER_SCRIPT="./worker.sh"
 SETUP_SCRIPT="./setup-worker.sh"
+CLOUDWATCH_CONFIG="./cloudwatch-agent-config.json"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.medium}"
 AMI_NAME="postgres-seren-replicator-worker-$(date +%Y%m%d-%H%M%S)"
@@ -43,6 +44,11 @@ fi
 
 if [ ! -f "$SETUP_SCRIPT" ]; then
     log "ERROR: Setup script not found at: $SETUP_SCRIPT"
+    exit 1
+fi
+
+if [ ! -f "$CLOUDWATCH_CONFIG" ]; then
+    log "ERROR: CloudWatch agent config not found at: $CLOUDWATCH_CONFIG"
     exit 1
 fi
 
@@ -155,13 +161,21 @@ build {
     destination = "/tmp/worker.sh"
   }
 
-  # Install replicator and worker script
+  # Upload CloudWatch agent configuration
+  provisioner "file" {
+    source      = "$CLOUDWATCH_CONFIG"
+    destination = "/tmp/cloudwatch-agent-config.json"
+  }
+
+  # Install replicator, worker script, and CloudWatch config
   provisioner "shell" {
     inline = [
       "sudo mv /tmp/postgres-seren-replicator /opt/seren-replicator/",
       "sudo mv /tmp/worker.sh /opt/seren-replicator/",
       "sudo chmod +x /opt/seren-replicator/postgres-seren-replicator",
       "sudo chmod +x /opt/seren-replicator/worker.sh",
+      "sudo mv /tmp/cloudwatch-agent-config.json /opt/aws/amazon-cloudwatch-agent/etc/",
+      "sudo chmod 644 /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json",
       "ls -la /opt/seren-replicator/"
     ]
   }
