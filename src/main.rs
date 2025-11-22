@@ -433,7 +433,7 @@ async fn init_remote(
     );
 
     let job_spec = JobSpec {
-        version: "1".to_string(),
+        version: "1.0".to_string(),
         command: "init".to_string(),
         source_url: source,
         target_url: target,

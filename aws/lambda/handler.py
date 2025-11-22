@@ -9,6 +9,7 @@ import time
 import boto3
 import os
 import base64
+import re
 from datetime import datetime
 from urllib.parse import urlparse, urlunparse
 from botocore.exceptions import ClientError
@@ -34,6 +35,162 @@ AWS_REGION = os.environ.get('AWS_REGION', 'us-east-1')
 
 # Cache for API key (loaded once per Lambda container lifecycle)
 _api_key_cache = None
+
+# Schema version for job specs
+CURRENT_SCHEMA_VERSION = "1.0"
+SUPPORTED_SCHEMA_VERSIONS = ["1.0"]
+
+# Validation constants
+MAX_JOB_SPEC_SIZE_BYTES = 15 * 1024  # 15KB (leave 1KB buffer for EC2 user-data limit of 16KB)
+MAX_URL_LENGTH = 2048
+MAX_COMMAND_LENGTH = 50
+ALLOWED_COMMANDS = ["init", "validate", "sync", "status", "verify"]
+
+
+def validate_job_spec(body):
+    """
+    Comprehensive validation of job specification
+
+    Returns:
+        tuple: (is_valid, error_message)
+            - is_valid: True if spec is valid, False otherwise
+            - error_message: None if valid, error string if invalid
+    """
+
+    # 1. Check total size
+    body_json = json.dumps(body)
+    body_size = len(body_json.encode('utf-8'))
+    if body_size > MAX_JOB_SPEC_SIZE_BYTES:
+        return False, f"Job spec too large: {body_size} bytes (max: {MAX_JOB_SPEC_SIZE_BYTES})"
+
+    # 2. Validate schema version
+    schema_version = body.get('schema_version')
+    if not schema_version:
+        return False, "Missing required field: schema_version"
+
+    if schema_version not in SUPPORTED_SCHEMA_VERSIONS:
+        return False, f"Unsupported schema version: {schema_version} (supported: {', '.join(SUPPORTED_SCHEMA_VERSIONS)})"
+
+    # 3. Validate required fields
+    required_fields = ['command', 'source_url', 'target_url']
+    for field in required_fields:
+        if field not in body:
+            return False, f"Missing required field: {field}"
+        if not isinstance(body[field], str):
+            return False, f"Field '{field}' must be a string"
+        if not body[field].strip():
+            return False, f"Field '{field}' cannot be empty"
+
+    # 4. Validate command
+    command = body['command'].strip().lower()
+    if len(command) > MAX_COMMAND_LENGTH:
+        return False, f"Command too long: {len(command)} chars (max: {MAX_COMMAND_LENGTH})"
+
+    if command not in ALLOWED_COMMANDS:
+        return False, f"Invalid command: {command} (allowed: {', '.join(ALLOWED_COMMANDS)})"
+
+    # 5. Validate PostgreSQL connection URLs
+    for url_field in ['source_url', 'target_url']:
+        url = body[url_field]
+
+        if len(url) > MAX_URL_LENGTH:
+            return False, f"{url_field} too long: {len(url)} chars (max: {MAX_URL_LENGTH})"
+
+        is_valid, error = validate_postgresql_url(url)
+        if not is_valid:
+            return False, f"Invalid {url_field}: {error}"
+
+    # 6. Validate options (if present)
+    if 'options' in body:
+        if not isinstance(body['options'], dict):
+            return False, "Field 'options' must be an object"
+
+        # Validate option types
+        allowed_option_keys = ['drop_existing', 'enable_sync', 'estimated_size_bytes']
+        for key in body['options']:
+            if key not in allowed_option_keys:
+                return False, f"Unknown option: {key}"
+
+            if key in ['drop_existing', 'enable_sync']:
+                if not isinstance(body['options'][key], bool):
+                    return False, f"Option '{key}' must be a boolean"
+
+            if key == 'estimated_size_bytes':
+                if not isinstance(body['options'][key], (int, float)):
+                    return False, f"Option '{key}' must be a number"
+                if body['options'][key] < 0:
+                    return False, f"Option '{key}' must be non-negative"
+
+    # 7. Validate filter (if present)
+    if 'filter' in body:
+        if not isinstance(body['filter'], dict):
+            return False, "Field 'filter' must be an object"
+
+    return True, None
+
+
+def validate_postgresql_url(url):
+    """
+    Validate PostgreSQL connection URL format
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+
+    # Check for obvious injection attempts
+    dangerous_patterns = [
+        r';\s*\w+',  # Command chaining with semicolon
+        r'\$\(',     # Command substitution
+        r'`',        # Backtick command substitution
+        r'\|\|',     # OR operator (potential SQL injection)
+        r'&&',       # AND operator (potential command injection)
+    ]
+
+    for pattern in dangerous_patterns:
+        if re.search(pattern, url):
+            return False, "URL contains potentially dangerous characters"
+
+    # Parse URL
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        return False, f"Failed to parse URL: {str(e)}"
+
+    # Validate scheme
+    if parsed.scheme not in ['postgresql', 'postgres']:
+        return False, f"Invalid scheme: {parsed.scheme} (must be 'postgresql' or 'postgres')"
+
+    # Validate hostname is present
+    if not parsed.hostname:
+        return False, "URL must include a hostname"
+
+    # Check for malformed URLs with multiple @ signs
+    if parsed.netloc.count('@') > 1:
+        return False, "Invalid URL format: multiple @ signs"
+
+    # Validate hostname format (basic check)
+    hostname = parsed.hostname
+    if not re.match(r'^[a-zA-Z0-9]([a-zA-Z0-9\-\.]*[a-zA-Z0-9])?$', hostname):
+        return False, "Invalid hostname format"
+
+    # Validate port (if present)
+    try:
+        port = parsed.port
+        if port is not None:
+            if not (1 <= port <= 65535):
+                return False, f"Invalid port: {port} (must be 1-65535)"
+    except ValueError:
+        return False, "Invalid port format"
+
+    # Validate path (database name)
+    if parsed.path:
+        db_name = parsed.path.lstrip('/')
+        if db_name:
+            # Database names should be alphanumeric, underscore, hyphen
+            if not re.match(r'^[a-zA-Z0-9_\-]+$', db_name):
+                return False, "Invalid database name format"
+
+    return True, None
 
 
 def get_api_key():
@@ -339,20 +496,20 @@ def handle_submit_job(event):
     # Parse request body
     try:
         body = json.loads(event['body'])
-    except:
+    except Exception as e:
         return {
             'statusCode': 400,
-            'body': json.dumps({'error': 'Invalid JSON'})
+            'body': json.dumps({'error': f'Invalid JSON: {str(e)}'})
         }
 
-    # Validate required fields
-    required_fields = ['command', 'source_url', 'target_url']
-    for field in required_fields:
-        if field not in body:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'error': f'Missing required field: {field}'})
-            }
+    # Comprehensive validation of job spec
+    is_valid, error_msg = validate_job_spec(body)
+    if not is_valid:
+        print(f"Job validation failed: {error_msg}")
+        return {
+            'statusCode': 400,
+            'body': json.dumps({'error': error_msg})
+        }
 
     # Generate job ID and trace ID for end-to-end tracing
     job_id = str(uuid.uuid4())
@@ -384,6 +541,7 @@ def handle_submit_job(event):
             Item={
                 'job_id': {'S': job_id},
                 'trace_id': {'S': trace_id},
+                'schema_version': {'S': body['schema_version']},
                 'status': {'S': 'provisioning'},
                 'command': {'S': body['command']},
                 'source_url_encrypted': {'S': encrypted_source},

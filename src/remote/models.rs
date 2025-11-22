@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JobSpec {
+    #[serde(rename = "schema_version")]
     pub version: String,
     pub command: String, // "init" or "sync"
     pub source_url: String,
