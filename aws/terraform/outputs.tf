@@ -33,3 +33,13 @@ output "kms_key_id" {
   description = "KMS key ID for encrypting sensitive data"
   value       = aws_kms_key.replication_data.key_id
 }
+
+output "provisioning_queue_url" {
+  description = "SQS queue URL for job provisioning"
+  value       = aws_sqs_queue.provisioning_queue.url
+}
+
+output "provisioning_dlq_url" {
+  description = "SQS dead letter queue URL for failed provisions"
+  value       = aws_sqs_queue.provisioning_dlq.url
+}

@@ -88,6 +88,38 @@ resource "aws_dynamodb_table" "replication_jobs" {
   }
 }
 
+# SQS Dead Letter Queue for failed provisioning attempts
+resource "aws_sqs_queue" "provisioning_dlq" {
+  name                      = "${var.project_name}-provisioning-dlq"
+  message_retention_seconds = 1209600 # 14 days
+
+  tags = {
+    Name      = "${var.project_name}-provisioning-dlq"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# SQS Queue for job provisioning
+resource "aws_sqs_queue" "provisioning_queue" {
+  name                      = "${var.project_name}-provisioning-queue"
+  visibility_timeout_seconds = 300  # 5 minutes (Lambda execution time)
+  message_retention_seconds = 86400 # 24 hours
+  receive_wait_time_seconds = 20    # Long polling
+
+  # Dead letter queue configuration
+  redrive_policy = jsonencode({
+    deadLetterTargetArn = aws_sqs_queue.provisioning_dlq.arn
+    maxReceiveCount     = 3 # Retry up to 3 times before DLQ
+  })
+
+  tags = {
+    Name      = "${var.project_name}-provisioning-queue"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
 # IAM role for Lambda execution
 resource "aws_iam_role" "lambda_execution" {
   name = "${var.project_name}-lambda-execution"
@@ -166,6 +198,19 @@ resource "aws_iam_role_policy" "lambda_policy" {
           "ssm:GetParameter"
         ]
         Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/${var.project_name}/*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "sqs:SendMessage",
+          "sqs:ReceiveMessage",
+          "sqs:DeleteMessage",
+          "sqs:GetQueueAttributes"
+        ]
+        Resource = [
+          aws_sqs_queue.provisioning_queue.arn,
+          aws_sqs_queue.provisioning_dlq.arn
+        ]
       },
       {
         Effect = "Allow"
@@ -271,6 +316,7 @@ resource "aws_lambda_function" "coordinator" {
       KMS_KEY_ID             = aws_kms_key.replication_data.key_id
       API_KEY_PARAMETER_NAME = aws_ssm_parameter.api_key.name
       MAX_CONCURRENT_JOBS    = var.max_concurrent_jobs
+      PROVISIONING_QUEUE_URL = aws_sqs_queue.provisioning_queue.url
     }
   }
 
@@ -281,7 +327,7 @@ resource "aws_lambda_function" "coordinator" {
   }
 }
 
-# CloudWatch Log Group for Lambda
+# CloudWatch Log Group for coordinator Lambda
 resource "aws_cloudwatch_log_group" "lambda_logs" {
   name              = "/aws/lambda/${aws_lambda_function.coordinator.function_name}"
   retention_in_days = 7
@@ -291,6 +337,54 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
     ManagedBy = "terraform"
     Project   = var.project_name
   }
+}
+
+# Lambda function for EC2 provisioning (processes SQS queue)
+resource "aws_lambda_function" "provisioner" {
+  filename      = "${path.module}/../lambda/lambda.zip"
+  function_name = "${var.project_name}-provisioner"
+  role          = aws_iam_role.lambda_execution.arn
+  handler       = "provisioner.lambda_handler"
+  runtime       = "python3.11"
+  timeout       = 300 # 5 minutes for EC2 provisioning
+  memory_size   = 256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE       = aws_dynamodb_table.replication_jobs.name
+      WORKER_AMI_ID        = var.worker_ami_id
+      WORKER_INSTANCE_TYPE = var.worker_instance_type
+      WORKER_IAM_ROLE      = aws_iam_instance_profile.worker_profile.name
+      KMS_KEY_ID           = aws_kms_key.replication_data.key_id
+      MAX_CONCURRENT_JOBS  = var.max_concurrent_jobs
+    }
+  }
+
+  tags = {
+    Name      = "${var.project_name}-provisioner"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# CloudWatch Log Group for provisioner Lambda
+resource "aws_cloudwatch_log_group" "provisioner_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.provisioner.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Name      = "${var.project_name}-provisioner-logs"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# SQS Event Source Mapping for provisioner Lambda
+resource "aws_lambda_event_source_mapping" "sqs_trigger" {
+  event_source_arn = aws_sqs_queue.provisioning_queue.arn
+  function_name    = aws_lambda_function.provisioner.arn
+  batch_size       = 1 # Process one job at a time
+  enabled          = true
 }
 
 # API Gateway (HTTP API)

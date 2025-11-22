@@ -18,6 +18,7 @@ dynamodb = boto3.client('dynamodb')
 ec2 = boto3.client('ec2')
 ssm = boto3.client('ssm')
 kms = boto3.client('kms')
+sqs = boto3.client('sqs')
 
 # Configuration from environment variables
 DYNAMODB_TABLE = os.environ.get('DYNAMODB_TABLE', 'replication-jobs')
@@ -27,6 +28,7 @@ WORKER_IAM_ROLE = os.environ.get('WORKER_IAM_ROLE', 'seren-replication-worker')
 KMS_KEY_ID = os.environ.get('KMS_KEY_ID')
 API_KEY_PARAMETER_NAME = os.environ.get('API_KEY_PARAMETER_NAME')
 MAX_CONCURRENT_JOBS = int(os.environ.get('MAX_CONCURRENT_JOBS', '10'))
+PROVISIONING_QUEUE_URL = os.environ.get('PROVISIONING_QUEUE_URL')
 
 # Cache for API key (loaded once per Lambda container lifecycle)
 _api_key_cache = None
@@ -339,22 +341,22 @@ def handle_submit_job(event):
             'body': json.dumps({'error': 'Failed to create job record'})
         }
 
-    # Provision EC2 instance (passes only job_id, not credentials)
+    # Enqueue job for asynchronous provisioning
     try:
-        instance_id = provision_worker(job_id, body.get('options', {}))
+        message_body = {
+            'job_id': job_id,
+            'options': body.get('options', {})
+        }
 
-        # Update job with instance ID
-        dynamodb.update_item(
-            TableName=DYNAMODB_TABLE,
-            Key={'job_id': {'S': job_id}},
-            UpdateExpression='SET instance_id = :iid',
-            ExpressionAttributeValues={':iid': {'S': instance_id}}
+        sqs.send_message(
+            QueueUrl=PROVISIONING_QUEUE_URL,
+            MessageBody=json.dumps(message_body)
         )
 
-        print(f"Job {job_id} submitted, instance {instance_id} provisioning")
+        print(f"Job {job_id} enqueued for provisioning")
 
     except Exception as e:
-        print(f"Failed to provision instance: {e}")
+        print(f"Failed to enqueue job: {e}")
         # Update job status to failed
         dynamodb.update_item(
             TableName=DYNAMODB_TABLE,
@@ -363,12 +365,12 @@ def handle_submit_job(event):
             ExpressionAttributeNames={'#status': 'status'},
             ExpressionAttributeValues={
                 ':status': {'S': 'failed'},
-                ':error': {'S': 'Provisioning failed'}
+                ':error': {'S': 'Failed to enqueue job'}
             }
         )
         return {
             'statusCode': 500,
-            'body': json.dumps({'error': 'Provisioning failed'})
+            'body': json.dumps({'error': 'Failed to enqueue job'})
         }
 
     return {
