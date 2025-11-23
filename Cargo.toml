@@ -1,9 +1,9 @@
 [package]
 name = "postgres-seren-replicator"
-version = "2.5.0"
+version = "3.0.0"
 edition = "2021"
 license = "Apache-2.0"
-description = "Zero-downtime PostgreSQL replication tool to Seren with continuous sync and monitoring"
+description = "Universal database-to-PostgreSQL replication for AI agents (SQLite, MongoDB, MySQL, PostgreSQL)"
 repository = "https://github.com/serenorg/postgres-seren-replicator"
 readme = "README.md"
 keywords = ["postgresql", "replication", "database", "migration", "cdc"]
@@ -31,3 +31,6 @@ sha2 = "0.10"
 toml = "0.8"
 rusqlite = "0.30"
 base64 = "0.21"
+mongodb = "2.8"
+bson = "2.9"
+mysql_async = "0.34"

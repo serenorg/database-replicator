@@ -5,43 +5,133 @@
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
 [![Latest Release](https://img.shields.io/github/v/release/serenorg/postgres-seren-replicator)](https://github.com/serenorg/postgres-seren-replicator/releases)
 
-Zero-downtime PostgreSQL replication tool from PostgreSQL to Seren with continuous sync and real-time monitoring.
+## Universal database-to-PostgreSQL replication for AI agents
+
+Migrate any database to PostgreSQL with zero downtime. Supports PostgreSQL, SQLite, MongoDB, and MySQL/MariaDB.
+
+---
 
 ## Overview
 
-This tool enables safe, zero-downtime replication of PostgreSQL databases from any PostgreSQL provider (Neon, AWS RDS, Hetzner, self-hosted, etc.) to Seren Cloud. It uses PostgreSQL's logical replication for continuous data synchronization with real-time monitoring and supports selective replication for fine-grained control over what gets replicated.
+`postgres-seren-replicator` is a command-line tool that replicates databases from multiple sources to PostgreSQL (including Seren Cloud). It automatically detects your source database type and handles the migration accordingly:
+
+- **PostgreSQL**: Zero-downtime replication with continuous sync via logical replication
+- **SQLite**: One-time migration using JSONB storage
+- **MongoDB**: One-time migration with JSONB storage and periodic refresh support
+- **MySQL/MariaDB**: One-time migration with JSONB storage and periodic refresh support
+
+### Why This Tool?
+
+- **Multi-database support**: Single tool for all your database migrations
+- **AI-friendly storage**: Non-PostgreSQL sources use JSONB for flexible querying
+- **Zero downtime**: PostgreSQL-to-PostgreSQL replication with continuous sync
+- **Remote execution**: Run migrations on SerenAI cloud infrastructure
+- **Production-ready**: Data integrity verification, checkpointing, and error handling
+
+---
+
+## Supported Databases
+
+| Source Database | Migration Type | Continuous Sync | Periodic Refresh | Remote Execution |
+|----------------|----------------|-----------------|------------------|------------------|
+| **PostgreSQL** | Native replication | ✅ Logical replication | N/A | ✅ Yes |
+| **SQLite** | JSONB storage | ❌ One-time | ❌ No | ❌ Local only |
+| **MongoDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
+| **MySQL/MariaDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
+
+---
+
+## Quick Start
+
+Choose your source database to get started:
+
+### PostgreSQL → PostgreSQL
+
+Zero-downtime replication with continuous sync:
+
+```bash
+postgres-seren-replicator init \
+  --source "postgresql://user:pass@source-host:5432/db" \
+  --target "postgresql://user:pass@target-host:5432/db"
+```
+
+**[📖 Full PostgreSQL Guide →](README-PostgreSQL.md)**
+
+---
+
+### SQLite → PostgreSQL
+
+One-time migration to JSONB storage:
+
+```bash
+postgres-seren-replicator init \
+  --source /path/to/database.db \
+  --target "postgresql://user:pass@host:5432/db"
+```
+
+**[📖 Full SQLite Guide →](README-SQLite.md)**
+
+---
+
+### MongoDB → PostgreSQL
+
+One-time migration with periodic refresh support:
+
+```bash
+postgres-seren-replicator init \
+  --source "mongodb://user:pass@host:27017/db" \
+  --target "postgresql://user:pass@host:5432/db"
+```
+
+**[📖 Full MongoDB Guide →](README-MongoDB.md)**
+
+---
+
+### MySQL/MariaDB → PostgreSQL
+
+One-time migration with periodic refresh support:
+
+```bash
+postgres-seren-replicator init \
+  --source "mysql://user:pass@host:3306/db" \
+  --target "postgresql://user:pass@host:5432/db"
+```
+
+**[📖 Full MySQL Guide →](README-MySQL.md)**
+
+---
 
 ## Features
 
-- **Zero Downtime**: Uses logical replication to keep databases continuously in sync
-- **Selective Replication**: Choose specific databases and tables to replicate
-- **Interactive Mode**: User-friendly terminal UI for selecting what to replicate
-- **Multi-Provider Support**: Works with any PostgreSQL provider (Neon, AWS RDS, Hetzner, self-hosted, etc.)
-- **Size Estimation**: Analyze database sizes and view estimated replication times before starting
-- **High Performance**: Parallel dump/restore with automatic CPU core detection
-- **Optimized Compression**: Maximum compression (level 9) for faster transfers
-- **Large Object Support**: Handles BLOBs and large binary objects efficiently
-- **Complete Replication**: Replicates schema, data, roles, and permissions
-- **Data Validation**: Checksum-based verification of data integrity
-- **Real-time Monitoring**: Track replication lag and status continuously
-- **Safe & Fail-fast**: Validates prerequisites before starting replication
+### PostgreSQL-to-PostgreSQL
 
-## Replication Workflow
+- **Zero-downtime replication** using PostgreSQL logical replication
+- **Continuous sync** keeps databases in sync in real-time
+- **Selective replication** with database and table-level filtering
+- **Interactive mode** for selecting databases and tables
+- **Remote execution** on SerenAI cloud infrastructure
+- **Data integrity verification** with checksums
 
-The replication process follows 5 phases:
+### Non-PostgreSQL Sources (SQLite, MongoDB, MySQL)
 
-1. **Validate** - Check source and target databases meet replication requirements
-2. **Init** - Perform initial snapshot replication (schema + data) using pg_dump/restore
-3. **Sync** - Set up continuous logical replication between databases
-4. **Status** - Monitor replication lag and health in real-time
-5. **Verify** - Validate data integrity with checksums
+- **JSONB storage** preserves data fidelity for querying in PostgreSQL
+- **Type preservation** with special encoding for complex types
+- **One-time migration** for initial data transfer
+- **Periodic refresh** (MongoDB, MySQL) for keeping data up to date
+- **Schema-aware filtering** for precise table targeting
+- **Remote execution** (MongoDB, MySQL) on cloud infrastructure
+
+### Universal Features
+
+- **Multi-provider support**: Works with any PostgreSQL provider (Neon, AWS RDS, Hetzner, self-hosted)
+- **Size estimation**: Analyze database sizes before migration
+- **High performance**: Parallel operations with automatic CPU detection
+- **Checkpointing**: Resume interrupted migrations automatically
+- **Security**: Credentials passed via `.pgpass` files, never in command output
+
+---
 
 ## Installation
-
-### Prerequisites
-
-- PostgreSQL client tools (pg_dump, pg_dumpall, psql)
-- Access to both source and target databases with appropriate permissions
 
 ### Download Pre-built Binaries
 
@@ -70,107 +160,78 @@ cargo build --release
 
 The binary will be available at `target/release/postgres-seren-replicator`.
 
-### Target Database Setup (Optional)
+### Prerequisites
 
-**SerenDB Account**: If you want to replicate to SerenDB, you can create a free account at <https://console.serendb.com/signup>. This will provide you with a managed PostgreSQL database optimized for your workload.
+- **PostgreSQL client tools** (pg_dump, pg_dumpall, psql) - Required for all database types
+- **Source database access**: Connection credentials and appropriate permissions
+- **Target database access**: PostgreSQL connection with write permissions
 
-**Note**: SerenDB is completely optional. This tool works with any PostgreSQL-compatible database as your target, including:
+---
 
-- SerenDB (managed PostgreSQL)
-- AWS RDS PostgreSQL
-- Self-hosted PostgreSQL
-- Neon, Supabase, or any other PostgreSQL provider
+## Documentation
 
-You only need a SerenDB account if you specifically want to use SerenDB as your replication target.
+### Database-Specific Guides
 
-## Usage
+- **[PostgreSQL to PostgreSQL](README-PostgreSQL.md)** - Zero-downtime replication with logical replication
+- **[SQLite to PostgreSQL](README-SQLite.md)** - One-time migration using JSONB storage
+- **[MongoDB to PostgreSQL](README-MongoDB.md)** - One-time migration with periodic refresh support
+- **[MySQL/MariaDB to PostgreSQL](README-MySQL.md)** - One-time migration with periodic refresh support
 
-### 1. Validate Databases
+### Additional Documentation
 
-Check that both databases meet replication requirements:
+- **[Replication Configuration Guide](docs/replication-config.md)** - Advanced filtering with TOML config files
+- **[AWS Setup Guide](docs/aws-setup.md)** - Remote execution infrastructure details
+- **[CI/CD Guide](docs/cicd.md)** - Automated testing and deployment
 
-```bash
-./postgres-seren-replicator validate \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db"
-```
+---
 
-### 2. Initialize Replication
+## PostgreSQL-to-PostgreSQL Replication
 
-Perform initial snapshot replication. The tool will first analyze database sizes and show estimated replication times:
+For comprehensive PostgreSQL replication documentation, see **[README-PostgreSQL.md](README-PostgreSQL.md)**.
 
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db"
-```
+### Quick Overview
 
-Example output:
-```
-Analyzing database sizes...
+PostgreSQL-to-PostgreSQL replication uses logical replication for zero-downtime migration:
 
-Database             Size         Est. Time
-──────────────────────────────────────────────────
-myapp               15.0 GB      ~45.0 minutes
-analytics           250.0 GB     ~12.5 hours
-staging             2.0 GB       ~6.0 minutes
-──────────────────────────────────────────────────
-Total: 267.0 GB (estimated ~13.3 hours)
+1. **Validate** - Check prerequisites and permissions
+2. **Init** - Perform initial snapshot (schema + data)
+3. **Sync** - Set up continuous logical replication
+4. **Status** - Monitor replication lag and health
+5. **Verify** - Validate data integrity with checksums
 
-Proceed with replication? [y/N]:
-```
-
-For automated scripts, skip the confirmation prompt with `--yes` or `-y`:
+**Example:**
 
 ```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db" \
-  --yes
+# Validate prerequisites
+postgres-seren-replicator validate \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@target:5432/db"
+
+# Initial snapshot
+postgres-seren-replicator init \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@target:5432/db"
+
+# Continuous sync
+postgres-seren-replicator sync \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@target:5432/db"
 ```
 
-If the target database already exists, you can drop and recreate it with `--drop-existing`:
+**See [README-PostgreSQL.md](README-PostgreSQL.md) for:**
 
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db" \
-  --drop-existing
-```
+- Prerequisites and permission setup
+- Detailed command documentation
+- Selective replication (filtering databases/tables)
+- Interactive mode
+- Remote execution on cloud infrastructure
+- Multi-provider support (Neon, AWS RDS, Hetzner, etc.)
+- Schema-aware filtering
+- Performance optimizations
+- Troubleshooting guide
+- Complete examples and FAQ
 
-The init command automatically checkpoints after each database finishes so you can rerun it if a later step fails. The next run will skip completed databases and continue with the remaining ones. Pass `--no-resume` if you want to discard any previous checkpoint and start from scratch (a new checkpoint is created for the fresh run).
-
-### 3. Set Up Continuous Replication
-
-Enable logical replication for ongoing change synchronization:
-
-```bash
-./postgres-seren-replicator sync \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db"
-```
-
-> **Note:** Table-level predicates (`--table-filter`, `--time-filter`, or config file rules) require PostgreSQL 15+ on the source so publications can use `WHERE` clauses. Schema-only tables work on all supported versions.
-
-### 4. Monitor Replication Status
-
-Check replication health and lag in real-time:
-
-```bash
-./postgres-seren-replicator status \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db"
-```
-
-### 5. Verify Data Integrity
-
-Validate that all tables match:
-
-```bash
-./postgres-seren-replicator verify \
-  --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db"
-```
+---
 
 ## Remote Execution (AWS)
 
@@ -217,7 +278,7 @@ The tool will:
 
 Example output:
 
-```
+```text
 Submitting replication job...
 ✓ Job submitted
 Job ID: 550e8400-e29b-41d4-a716-446655440000
@@ -271,7 +332,7 @@ export SEREN_REMOTE_API="https://dev.api.seren.cloud/replication"
   --job-timeout 43200
 ```
 
-### Troubleshooting
+### Remote Execution Troubleshooting
 
 #### "Failed to submit job to remote service"
 
@@ -294,445 +355,20 @@ export SEREN_REMOTE_API="https://dev.api.seren.cloud/replication"
 
 For more details on the AWS infrastructure and architecture, see the [AWS Setup Guide](docs/aws-setup.md).
 
-## Selective Replication
-
-Selective replication allows you to choose exactly which databases and tables to replicate, giving you fine-grained control over your migration.
-
-### Database-Level Filtering
-
-Replicate only specific databases:
-
-```bash
-# Include only specific databases
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-databases "myapp,analytics"
-
-# Exclude specific databases
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --exclude-databases "test,staging"
-```
-
-### Table-Level Filtering
-
-Replicate only specific tables or exclude certain tables:
-
-```bash
-# Include only specific tables (format: database.table)
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-tables "myapp.users,myapp.orders,analytics.events"
-
-# Exclude specific tables
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --exclude-tables "myapp.logs,myapp.cache,analytics.temp_data"
-```
-
-### Schema-Only Tables (Structure Only)
-
-Skip data for heavy archives while keeping the schema in sync:
-
-```bash
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --schema-only-tables "myapp.audit_logs,analytics.evmlog_strides"
-```
-
-Schema-only tables are recreated with full DDL but no rows, which dramatically reduces dump/restore time for historical partitions or archived hypertables.
-
-### Partial Data with WHERE Clauses
-
-Filter tables down to the rows you actually need:
-
-```bash
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --table-filter "output:series_time >= NOW() - INTERVAL '6 months'" \
-  --table-filter "transactions:status IN ('active','pending')"
-```
-
-Each `--table-filter` takes `[db.]table:SQL predicate`. During `init`, data is streamed with `COPY (SELECT ... WHERE predicate)`; during `sync`, we create PostgreSQL publications that emit only rows matching those predicates (requires PostgreSQL 15+ on the source).
-
-### Time-Based Filters (Shorthand)
-
-For time-series tables (e.g., TimescaleDB hypertables) use the shorthand `table:column:window`:
-
-```bash
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --time-filter "metrics:created_at:6 months" \
-  --time-filter "billing_events:event_time:1 year"
-```
-
-Supported window units: seconds, minutes, hours, days, weeks, months, and years. The shorthand expands to `column >= NOW() - INTERVAL 'window'`.
-
-### Combined Filtering
-
-Combine database, table, and predicate filtering for precise control:
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-databases "myapp,analytics" \
-  --exclude-tables "myapp.logs" \
-  --schema-only-tables "analytics.evmlog_strides" \
-  --time-filter "analytics.metrics:created_at:6 months"
-```
-
-### Configuration File (Complex Rules)
-
-Large migrations often need different rules per database. Describe them in TOML and pass `--config` to both `init` and `sync`:
-
-```bash
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --config replication-config.toml
-```
-
-See [docs/replication-config.md](docs/replication-config.md) for the full schema (schema-only lists, table filters, time filters, and TimescaleDB tips). CLI flags merge on top of the file so you can override a single table without editing the config.
-
-### Schema-Aware Filtering
-
-PostgreSQL databases can have multiple schemas (namespaces) with identically-named tables. For example, both `public.orders` and `analytics.orders` can exist in the same database. Schema-aware filtering lets you target specific schema.table combinations to avoid ambiguity.
-
-#### Using Schema Notation
-
-**CLI with dot notation:**
-
-```bash
-# Include tables from specific schemas
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --schema-only-tables "analytics.large_table,public.temp"
-
-# Filter tables in non-public schemas
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --table-filter "analytics.events:created_at > NOW() - INTERVAL '90 days'" \
-  --table-filter "reporting.metrics:status = 'active'"
-
-# Time filters with schema qualification
-./postgres-seren-replicator init \
-  --source "$SRC" \
-  --target "$TGT" \
-  --time-filter "analytics.metrics:timestamp:6 months"
-```
-
-**TOML config with explicit schema field:**
-
-```toml
-[databases.mydb]
-
-# Schema-only tables (structure but no data)
-schema_only = [
-  "analytics.evmlog_strides",  # Dot notation
-  "reporting.archive"
-]
-
-# Table filters with explicit schema field
-[[databases.mydb.table_filters]]
-table = "events"
-schema = "analytics"
-where = "created_at > NOW() - INTERVAL '90 days'"
-
-# Alternatively, use dot notation in table name
-[[databases.mydb.table_filters]]
-table = "reporting.metrics"
-where = "status = 'active'"
-
-# Time filters with schema
-[[databases.mydb.time_filters]]
-table = "metrics"
-schema = "analytics"
-column = "timestamp"
-last = "6 months"
-```
-
-#### Backward Compatibility
-
-For convenience, table names without a schema qualifier default to the `public` schema:
-
-```bash
-# These are equivalent:
---schema-only-tables "users"
---schema-only-tables "public.users"
-
-# TOML equivalent:
-schema_only = ["users"]              # Defaults to public schema
-schema_only = ["public.users"]       # Explicit public schema
-```
-
-This means existing configurations continue to work without modification.
-
-#### Why Schema Awareness Matters
-
-Without schema qualification, filtering `"orders"` is ambiguous if you have both `public.orders` and `analytics.orders`. Schema-aware filtering ensures:
-
-- **Precise targeting**: Replicate `analytics.orders` while excluding `public.orders`
-- **No collisions**: Different schemas can have identically-named tables
-- **FK safety**: Cascading truncates handle schema-qualified FK relationships correctly
-- **Resume correctness**: Checkpoints detect schema scope changes and invalidate when the replication scope shifts
-
-### Filtering with Other Commands
-
-Filtering works with all commands that support it:
-
-```bash
-# Validate with filtering
-./postgres-seren-replicator validate \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-databases "myapp"
-
-# Sync with filtering
-./postgres-seren-replicator sync \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-databases "myapp,analytics" \
-  --exclude-tables "myapp.logs"
-
-# Status with filtering
-./postgres-seren-replicator status \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-databases "myapp"
-
-# Verify with filtering
-./postgres-seren-replicator verify \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --include-databases "myapp" \
-  --exclude-tables "myapp.logs"
-```
-
-## Interactive Mode
-
-Interactive mode provides a user-friendly terminal UI for selecting databases and tables to replicate. This is ideal for exploratory migrations or when you're not sure exactly what you want to replicate.
-
-**Interactive mode is the default** for `init`, `validate`, and `sync` commands. Simply run the command without any filter flags:
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres"
-```
-
-### Disabling Interactive Mode
-
-To use CLI filter flags instead of interactive mode, add the `--no-interactive` flag:
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@source-host:5432/postgres" \
-  --target "postgresql://user:pass@seren-host:5432/postgres" \
-  --no-interactive \
-  --include-databases "myapp,analytics"
-```
-
-**Note**: The `--yes` flag (for `init` command) automatically disables interactive mode since it's meant for automation.
-
-### Interactive Workflow
-
-1. **Select Databases**: A multi-select checklist shows all available databases. Use arrow keys to navigate, space to select, and enter to confirm.
-
-2. **Select Tables to Exclude** (optional): For each selected database, you can optionally exclude specific tables. If you don't want to exclude any tables, just press enter.
-
-3. **Review Configuration**: The tool shows a summary of what will be replicated, including:
-   - Databases to replicate
-   - Tables to exclude (if any)
-
-4. **Confirm**: You'll be asked to confirm before proceeding.
-
-### Example Interactive Session
-
-```
-Connecting to source database...
-✓ Connected to source
-
-Discovering databases on source...
-✓ Found 4 database(s)
-
-Select databases to replicate:
-(Use arrow keys to navigate, Space to select, Enter to confirm)
-
-> [x] myapp
-  [x] analytics
-  [ ] staging
-  [ ] test
-
-✓ Selected 2 database(s):
-  - myapp
-  - analytics
-
-Discovering tables in database 'myapp'...
-✓ Found 15 table(s) in 'myapp'
-
-Select tables to EXCLUDE from 'myapp' (or press Enter to include all):
-(Use arrow keys to navigate, Space to select, Enter to confirm)
-
-  [ ] users
-  [ ] orders
-  [x] logs
-  [x] cache
-  [ ] products
-
-✓ Excluding 2 table(s) from 'myapp':
-  - myapp.logs
-  - myapp.cache
-
-========================================
-Replication Configuration Summary
-========================================
-
-Databases to replicate: 2
-  ✓ myapp
-  ✓ analytics
-
-Tables to exclude: 2
-  ✗ myapp.logs
-  ✗ myapp.cache
-
-========================================
-
-Proceed with this configuration? [Y/n]:
-```
-
-## Multi-Provider Support
-
-The tool works seamlessly with any PostgreSQL-compatible database provider. Here are examples for common providers:
-
-### Neon
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@ep-cool-name-123456.us-east-2.aws.neon.tech/mydb" \
-  --target "postgresql://user:pass@seren-host:5432/mydb"
-```
-
-### AWS RDS
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@mydb.abc123.us-east-1.rds.amazonaws.com:5432/mydb" \
-  --target "postgresql://user:pass@seren-host:5432/mydb"
-```
-
-### Hetzner Cloud
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@postgres-server.hetzner-cloud.de:5432/mydb" \
-  --target "postgresql://user:pass@seren-host:5432/mydb"
-```
-
-### Self-Hosted PostgreSQL
-
-```bash
-./postgres-seren-replicator init \
-  --source "postgresql://user:pass@192.168.1.100:5432/mydb" \
-  --target "postgresql://user:pass@seren-host:5432/mydb"
-```
-
-### Provider-Specific Considerations
-
-#### Connection Parameters
-
-All providers support standard PostgreSQL connection strings. Add SSL/TLS parameters as needed:
-
-```bash
-# With SSL mode
---source "postgresql://user:pass@host:5432/db?sslmode=require"
-
-# With SSL and certificate verification
---source "postgresql://user:pass@host:5432/db?sslmode=verify-full&sslrootcert=/path/to/ca.crt"
-```
-
-#### Privileges
-
-Ensure your source database user has the required privileges:
-
-```sql
--- On source (works for all providers)
-ALTER USER myuser WITH REPLICATION;
-GRANT USAGE ON SCHEMA public TO myuser;
-GRANT SELECT ON ALL TABLES IN SCHEMA public TO myuser;
-```
-
-#### Provider Limitations
-
-- **AWS RDS**: Requires `rds_replication` role for logical replication
-- **Neon**: Full support for logical replication out of the box
-- **Hetzner**: Standard PostgreSQL, full support
-- **Self-hosted**: Full control, ensure `wal_level = logical` in postgresql.conf
-
-## Security
-
-### Secure Credential Handling
-
-The tool implements secure credential handling to prevent command injection vulnerabilities and credential exposure:
-
-- **`.pgpass` Authentication**: Database credentials are passed to PostgreSQL tools (pg_dump, pg_dumpall, psql, pg_restore) via temporary `.pgpass` files instead of command-line arguments. This prevents credentials from appearing in process listings (`ps` output) or shell history.
-
-- **Automatic Cleanup**: Temporary `.pgpass` files are automatically removed when operations complete, even if the process crashes or is interrupted. This is implemented using Rust's RAII pattern (Drop trait) to ensure cleanup happens reliably.
-
-- **Secure Permissions**: On Unix systems, `.pgpass` files are created with `0600` permissions (owner read/write only) as required by PostgreSQL. This prevents other users on the system from reading credentials.
-
-- **No Command Injection**: By using separate connection parameters (`--host`, `--port`, `--dbname`, `--username`) instead of embedding credentials in connection URLs passed to external commands, the tool eliminates command injection attack vectors.
-
-**Connection String Format**: While you provide connection URLs to the tool (e.g., `postgresql://user:pass@host:5432/db`), these URLs are parsed internally and credentials are extracted securely. They are never passed as-is to external PostgreSQL commands.
-
-### Subscription Connection Strings
-
-**Important Security Consideration**: PostgreSQL logical replication subscriptions store connection strings in the `pg_subscription` system catalog table. This is a PostgreSQL design limitation - subscription connection strings (including passwords if provided) are visible to users who can query system catalogs.
-
-**Security Implications**:
-
-- Connection strings with passwords are stored in `pg_subscription.subconninfo`
-- Users with `pg_read_all_settings` role or `SELECT` on `pg_subscription` can view these passwords
-- This information persists until the subscription is dropped
-
-**Recommended Mitigation** - Configure `.pgpass` on Target Server:
-
-To avoid storing passwords in the subscription catalog, configure a `.pgpass` file on your target PostgreSQL server:
-
-1. **Create `.pgpass` file** in the PostgreSQL server user's home directory (typically `/var/lib/postgresql/.pgpass`):
-
-   ```text
-   source-host:5432:dbname:username:password
-   ```
-
-2. **Set secure permissions**:
-
-   ```bash
-   chmod 0600 /var/lib/postgresql/.pgpass
-   chown postgres:postgres /var/lib/postgresql/.pgpass
-   ```
-
-3. **Use password-less connection string** when running `sync`:
-
-   ```bash
-   # Omit password from source URL
-   postgres-seren-replicator sync \
-     --source "postgresql://user@source-host:5432/db" \
-     --target "postgresql://user:pass@target-host:5432/db"
-   ```
-
-With this configuration, subscriptions will authenticate using the `.pgpass` file on the target server, and no password will be stored in `pg_subscription`.
-
-**Note**: The tool displays a warning when creating subscriptions to remind you of this security consideration.
+---
+
+## PostgreSQL-Specific Features
+
+The following features are available for PostgreSQL-to-PostgreSQL replication. For complete documentation, see **[README-PostgreSQL.md](README-PostgreSQL.md)**:
+
+- **Selective Replication**: Filter databases and tables with include/exclude lists
+- **Interactive Mode**: Terminal UI for selecting what to replicate
+- **Schema-Aware Filtering**: Target specific schema.table combinations
+- **Partial Data Replication**: Use WHERE clauses and time filters
+- **Configuration Files**: Complex filtering rules in TOML format
+- **Multi-Provider Support**: Works with Neon, AWS RDS, Hetzner, self-hosted PostgreSQL
+- **Secure Credentials**: `.pgpass` files for safe credential handling
+- **Subscription Security**: Guidelines for protecting connection strings in pg_subscription
 
 ## Testing
 
@@ -794,16 +430,18 @@ export TEST_TARGET_URL="postgresql://postgres:postgres@localhost:5433/postgres"
 
 ### Source Database
 
-- PostgreSQL 12 or later
-- Replication privilege (`REPLICATION` role attribute)
-- Ability to create publications
+- PostgreSQL 12 or later (for PostgreSQL sources)
+- SQLite 3.x (for SQLite sources)
+- MongoDB 4.0+ (for MongoDB sources)
+- MySQL 5.7+ or MariaDB 10.2+ (for MySQL/MariaDB sources)
+- Appropriate privileges for source database type
 
-### Target Database (Seren)
+### Target Database
 
 - PostgreSQL 12 or later
-- Superuser or database owner privileges
-- Ability to create subscriptions
-- Network connectivity to source database
+- Database owner or superuser privileges
+- Ability to create tables and schemas
+- Network connectivity to source database (for continuous replication)
 
 ## Performance Optimizations
 
@@ -835,6 +473,9 @@ These optimizations can significantly reduce replication time, especially for la
 - **src/postgres/** - PostgreSQL connection and utilities
 - **src/migration/** - Schema introspection, dump/restore, checksums
 - **src/replication/** - Logical replication management
+- **src/sqlite/** - SQLite reader and JSONB conversion
+- **src/mongodb/** - MongoDB reader and BSON to JSONB conversion
+- **src/mysql/** - MySQL reader and JSONB conversion
 - **tests/** - Integration tests
 
 ## Troubleshooting
@@ -844,10 +485,10 @@ These optimizations can significantly reduce replication time, especially for la
 Ensure your user has the required privileges:
 
 ```sql
--- On source (Neon)
+-- On source (PostgreSQL)
 ALTER USER myuser WITH REPLICATION;
 
--- On target (Seren)
+-- On target (PostgreSQL)
 ALTER USER myuser WITH SUPERUSER;
 ```
 
@@ -889,6 +530,7 @@ postgres-seren-replicator init \
 ```
 
 Example config with FK-related tables:
+
 ```toml
 [databases.mydb]
 
@@ -903,6 +545,18 @@ where = "id IN (SELECT user_id FROM orders WHERE created_at > NOW() - INTERVAL '
 ```
 
 **Alternative:** If you don't want to replicate the related tables, remove the foreign key constraint before replication.
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+### Development
+
+See [CLAUDE.md](CLAUDE.md) for development guidelines and practices.
+
+### Reporting Issues
+
+Please report bugs and feature requests on the [GitHub Issues](https://github.com/serenorg/postgres-seren-replicator/issues) page.
 
 ## License
 
