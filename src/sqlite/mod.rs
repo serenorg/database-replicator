@@ -32,9 +32,9 @@ use std::path::PathBuf;
 ///
 /// # Examples
 ///
-/// ```
+/// ```no_run
 /// # use postgres_seren_replicator::sqlite::validate_sqlite_path;
-/// // Valid paths
+/// // Valid paths (when files exist)
 /// assert!(validate_sqlite_path("database.db").is_ok());
 /// assert!(validate_sqlite_path("/tmp/test.sqlite").is_ok());
 ///

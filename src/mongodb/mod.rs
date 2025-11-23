@@ -135,14 +135,17 @@ pub async fn connect_mongodb(connection_string: &str) -> Result<Client> {
 ///
 /// ```no_run
 /// # use postgres_seren_replicator::mongodb::extract_database_name;
+/// # async fn example() -> anyhow::Result<()> {
 /// assert_eq!(
-///     extract_database_name("mongodb://localhost:27017/mydb").unwrap(),
+///     extract_database_name("mongodb://localhost:27017/mydb").await?,
 ///     Some("mydb".to_string())
 /// );
 /// assert_eq!(
-///     extract_database_name("mongodb://localhost:27017").unwrap(),
+///     extract_database_name("mongodb://localhost:27017").await?,
 ///     None
 /// );
+/// # Ok(())
+/// # }
 /// ```
 pub async fn extract_database_name(connection_string: &str) -> Result<Option<String>> {
     let options = ClientOptions::parse(connection_string)

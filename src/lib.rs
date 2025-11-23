@@ -59,9 +59,8 @@ pub enum SourceType {
 pub fn detect_source_type(source: &str) -> Result<SourceType> {
     if source.starts_with("postgresql://") || source.starts_with("postgres://") {
         Ok(SourceType::PostgreSQL)
-    } else if source.starts_with("mongodb://") {
-        // Future support
-        bail!("MongoDB sources are not yet supported. Coming in Phase 2.")
+    } else if source.starts_with("mongodb://") || source.starts_with("mongodb+srv://") {
+        Ok(SourceType::MongoDB)
     } else if source.starts_with("mysql://") {
         // Future support
         bail!("MySQL sources are not yet supported. Coming in Phase 3.")
@@ -114,13 +113,15 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_mongodb_not_supported() {
-        let result = detect_source_type("mongodb://localhost/db");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("not yet supported"));
+    fn test_detect_mongodb() {
+        assert_eq!(
+            detect_source_type("mongodb://localhost/db").unwrap(),
+            SourceType::MongoDB
+        );
+        assert_eq!(
+            detect_source_type("mongodb+srv://cluster.mongodb.net/db").unwrap(),
+            SourceType::MongoDB
+        );
     }
 
     #[test]

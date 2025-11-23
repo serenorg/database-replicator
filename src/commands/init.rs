@@ -117,7 +117,25 @@ pub async fn init(
             return init_sqlite_to_postgres(source_url, target_url).await;
         }
         crate::SourceType::MongoDB => {
-            bail!("MongoDB sources are not yet supported. Coming in Phase 2.");
+            // MongoDB to PostgreSQL migration (simpler path)
+            tracing::info!("Source type: MongoDB");
+
+            // MongoDB migrations don't support PostgreSQL-specific features
+            if !filter.is_empty() {
+                tracing::warn!(
+                    "⚠ Filters are not supported for MongoDB sources (all collections will be migrated)"
+                );
+            }
+            if drop_existing {
+                tracing::warn!("⚠ --drop-existing flag is not applicable for MongoDB sources");
+            }
+            if !enable_sync {
+                tracing::warn!(
+                    "⚠ MongoDB sources don't support continuous replication (one-time migration only)"
+                );
+            }
+
+            return init_mongodb_to_postgres(source_url, target_url).await;
         }
         crate::SourceType::MySQL => {
             bail!("MySQL sources are not yet supported. Coming in Phase 3.");
@@ -759,6 +777,161 @@ pub async fn init_sqlite_to_postgres(sqlite_path: &str, target_url: &str) -> Res
         "   Migrated {} table(s) from '{}' to PostgreSQL",
         tables.len(),
         sqlite_path
+    );
+
+    Ok(())
+}
+
+/// Initial replication from MongoDB to PostgreSQL
+///
+/// Performs one-time migration of MongoDB database to PostgreSQL target using JSONB storage:
+/// 1. Validates MongoDB connection string
+/// 2. Connects to MongoDB and verifies connection
+/// 3. Extracts database name from connection string
+/// 4. Lists all collections from MongoDB database
+/// 5. For each collection:
+///    - Converts documents to JSONB format
+///    - Creates JSONB table in PostgreSQL
+///    - Batch inserts all data
+///
+/// All MongoDB data is stored as JSONB with metadata:
+/// - id: Original _id field (ObjectId → hex, String/Int → string)
+/// - data: Complete document as JSON object
+/// - _source_type: "mongodb"
+/// - _migrated_at: Timestamp of migration
+///
+/// # Arguments
+///
+/// * `mongo_url` - MongoDB connection string (mongodb:// or mongodb+srv://)
+/// * `target_url` - PostgreSQL connection string for target (Seren) database
+///
+/// # Returns
+///
+/// Returns `Ok(())` if migration completes successfully.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - MongoDB connection string is invalid
+/// - Cannot connect to MongoDB database
+/// - Database name is not specified in connection string
+/// - Cannot connect to target PostgreSQL database
+/// - Collection conversion fails
+/// - Database creation or insert operations fail
+///
+/// # Examples
+///
+/// ```no_run
+/// # use anyhow::Result;
+/// # use postgres_seren_replicator::commands::init::init_mongodb_to_postgres;
+/// # async fn example() -> Result<()> {
+/// init_mongodb_to_postgres(
+///     "mongodb://localhost:27017/mydb",
+///     "postgresql://user:pass@seren.example.com/targetdb"
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+pub async fn init_mongodb_to_postgres(mongo_url: &str, target_url: &str) -> Result<()> {
+    tracing::info!("Starting MongoDB to PostgreSQL migration...");
+
+    // Step 1: Validate and connect to MongoDB
+    tracing::info!("Step 1/5: Validating MongoDB connection...");
+    let client = crate::mongodb::connect_mongodb(mongo_url)
+        .await
+        .context("MongoDB connection failed")?;
+    tracing::info!("  ✓ MongoDB connection validated");
+
+    // Step 2: Extract database name
+    tracing::info!("Step 2/5: Extracting database name...");
+    let db_name = crate::mongodb::extract_database_name(mongo_url)
+        .await
+        .context("Failed to parse MongoDB connection string")?
+        .context("MongoDB URL must include database name (e.g., mongodb://host:27017/dbname)")?;
+    tracing::info!("  ✓ Database name: '{}'", db_name);
+
+    // Step 3: List all collections
+    tracing::info!("Step 3/5: Discovering collections...");
+    let db = client.database(&db_name);
+    let collections = crate::mongodb::reader::list_collections(&client, &db_name)
+        .await
+        .context("Failed to list collections from MongoDB database")?;
+
+    if collections.is_empty() {
+        tracing::warn!("⚠ No collections found in MongoDB database '{}'", db_name);
+        tracing::info!("✅ Migration complete (no collections to migrate)");
+        return Ok(());
+    }
+
+    tracing::info!("Found {} collection(s) to migrate", collections.len());
+
+    // Step 4: Connect to PostgreSQL target
+    tracing::info!("Step 4/5: Connecting to PostgreSQL target...");
+    let target_client = postgres::connect_with_retry(target_url).await?;
+    tracing::info!("  ✓ Connected to PostgreSQL target");
+
+    // Step 5: Migrate each collection
+    tracing::info!("Step 5/5: Migrating collections...");
+    for (idx, collection_name) in collections.iter().enumerate() {
+        tracing::info!(
+            "Migrating collection {}/{}: '{}'",
+            idx + 1,
+            collections.len(),
+            collection_name
+        );
+
+        // Convert MongoDB collection to JSONB
+        let rows =
+            crate::mongodb::converter::convert_collection_to_jsonb(&db, collection_name)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to convert collection '{}' to JSONB",
+                        collection_name
+                    )
+                })?;
+
+        tracing::info!(
+            "  ✓ Converted {} documents from '{}'",
+            rows.len(),
+            collection_name
+        );
+
+        // Create JSONB table in PostgreSQL
+        crate::jsonb::writer::create_jsonb_table(&target_client, collection_name, "mongodb")
+            .await
+            .with_context(|| format!("Failed to create JSONB table '{}'", collection_name))?;
+
+        tracing::info!(
+            "  ✓ Created JSONB table '{}' in PostgreSQL",
+            collection_name
+        );
+
+        if !rows.is_empty() {
+            // Batch insert all rows
+            crate::jsonb::writer::insert_jsonb_batch(
+                &target_client,
+                collection_name,
+                rows,
+                "mongodb",
+            )
+            .await
+            .with_context(|| format!("Failed to insert data into table '{}'", collection_name))?;
+
+            tracing::info!("  ✓ Inserted all documents into '{}'", collection_name);
+        } else {
+            tracing::info!(
+                "  ✓ Collection '{}' is empty (no documents to insert)",
+                collection_name
+            );
+        }
+    }
+
+    tracing::info!("✅ MongoDB to PostgreSQL migration complete!");
+    tracing::info!(
+        "   Migrated {} collection(s) from database '{}' to PostgreSQL",
+        collections.len(),
+        db_name
     );
 
     Ok(())
