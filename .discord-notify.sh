@@ -50,7 +50,7 @@ fi
 curl -X POST "$DISCORD_WEBHOOK" \
   -H "Content-Type: application/json" \
   -d "{
-    \"content\": \"${TASK_STATUS} **Claude Task Update**\",
+    \"content\": \"${TASK_STATUS} **AI Engineer Task Update**\",
     \"embeds\": [{
       \"title\": \"${TASK_TITLE}\",
       \"description\": \"${EMBED_DESC}\",

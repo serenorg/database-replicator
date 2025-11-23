@@ -9,6 +9,7 @@ pub mod interactive;
 pub mod jsonb;
 pub mod migration;
 pub mod mongodb;
+pub mod mysql;
 pub mod postgres;
 pub mod remote;
 pub mod replication;
@@ -25,9 +26,9 @@ pub enum SourceType {
     PostgreSQL,
     /// SQLite database file (.db, .sqlite, .sqlite3)
     SQLite,
-    /// MongoDB database (mongodb:// URL) - Future support
+    /// MongoDB database (mongodb:// or mongodb+srv:// URL)
     MongoDB,
-    /// MySQL database (mysql:// URL) - Future support
+    /// MySQL database (mysql:// URL)
     MySQL,
 }
 
@@ -36,8 +37,8 @@ pub enum SourceType {
 /// Detection rules:
 /// - PostgreSQL: Starts with `postgresql://` or `postgres://`
 /// - SQLite: Ends with `.db`, `.sqlite`, or `.sqlite3`
-/// - MongoDB: Starts with `mongodb://` (future support)
-/// - MySQL: Starts with `mysql://` (future support)
+/// - MongoDB: Starts with `mongodb://` or `mongodb+srv://`
+/// - MySQL: Starts with `mysql://`
 ///
 /// # Arguments
 ///
@@ -62,8 +63,7 @@ pub fn detect_source_type(source: &str) -> Result<SourceType> {
     } else if source.starts_with("mongodb://") || source.starts_with("mongodb+srv://") {
         Ok(SourceType::MongoDB)
     } else if source.starts_with("mysql://") {
-        // Future support
-        bail!("MySQL sources are not yet supported. Coming in Phase 3.")
+        Ok(SourceType::MySQL)
     } else if source.ends_with(".db") || source.ends_with(".sqlite") || source.ends_with(".sqlite3")
     {
         Ok(SourceType::SQLite)
@@ -73,8 +73,8 @@ pub fn detect_source_type(source: &str) -> Result<SourceType> {
              Supported sources:\n\
              - PostgreSQL: postgresql://... or postgres://...\n\
              - SQLite: path ending with .db, .sqlite, or .sqlite3\n\
-             - MongoDB: (coming soon)\n\
-             - MySQL: (coming soon)",
+             - MongoDB: mongodb://... or mongodb+srv://...\n\
+             - MySQL: mysql://...",
             source
         )
     }
@@ -125,13 +125,15 @@ mod tests {
     }
 
     #[test]
-    fn test_detect_mysql_not_supported() {
-        let result = detect_source_type("mysql://localhost/db");
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("not yet supported"));
+    fn test_detect_mysql() {
+        assert_eq!(
+            detect_source_type("mysql://localhost/db").unwrap(),
+            SourceType::MySQL
+        );
+        assert_eq!(
+            detect_source_type("mysql://user:pass@host:3306/db").unwrap(),
+            SourceType::MySQL
+        );
     }
 
     #[test]
