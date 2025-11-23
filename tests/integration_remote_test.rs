@@ -238,7 +238,7 @@ async fn test_remote_job_poll_until_complete() {
 async fn test_remote_client_creation() {
     println!("Testing remote client creation...");
 
-    let api_url = "https://api.seren.cloud/replication".to_string();
+    let api_url = "https://79cfok1msj.execute-api.us-east-1.amazonaws.com".to_string();
     let result = RemoteClient::new(api_url);
 
     assert!(result.is_ok(), "Client creation should succeed");
