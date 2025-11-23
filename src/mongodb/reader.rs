@@ -40,7 +40,7 @@ pub async fn list_collections(client: &Client, db_name: &str) -> Result<Vec<Stri
     let database = client.database(db_name);
 
     let collection_names = database
-        .list_collection_names(None)
+        .list_collection_names()
         .await
         .with_context(|| format!("Failed to list collections in database '{}'", db_name))?;
 
@@ -104,7 +104,7 @@ pub async fn get_collection_count(database: &Database, collection_name: &str) ->
     let collection = database.collection::<Document>(collection_name);
 
     let count = collection
-        .estimated_document_count(None)
+        .estimated_document_count()
         .await
         .with_context(|| {
             format!(
@@ -166,7 +166,7 @@ pub async fn read_collection_data(
     let collection = database.collection::<Document>(collection_name);
 
     let mut cursor = collection
-        .find(None, None)
+        .find(bson::Document::new())
         .await
         .with_context(|| format!("Failed to query collection '{}'", collection_name))?;
 

@@ -107,7 +107,7 @@ pub async fn connect_mongodb(connection_string: &str) -> Result<Client> {
     // Verify connection by pinging
     client
         .database("admin")
-        .run_command(bson::doc! {"ping": 1}, None)
+        .run_command(bson::doc! {"ping": 1})
         .await
         .context(
             "Failed to ping MongoDB server (connection may be invalid or server unreachable)",
