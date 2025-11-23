@@ -2,6 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
+## [3.0.1] - 2025-11-23
+
+### Fixed
+
+#### Security
+
+- **Upgraded mongodb crate from 2.8.2 to 3.4.1** to resolve security vulnerabilities
+  - Fixed RUSTSEC-2024-0421: `idna 0.2.3` vulnerability (Punycode domain label handling)
+  - Removed unmaintained `derivative 2.2.0` dependency (RUSTSEC-2024-0388)
+  - Updated MongoDB API calls for 3.x compatibility
+  - All security tests passing (43/43)
+  - `cargo audit` clean with no vulnerabilities
+
+#### Critical Bug Fixes
+
+- **Fixed broken remote API endpoint** that prevented remote execution from working
+  - Changed from non-existent `https://api.seren.cloud/replication` to actual deployed endpoint
+  - Remote execution now uses real AWS API Gateway infrastructure
+  - Updated all documentation and integration tests with correct endpoint
+  - Infrastructure redeployed via Terraform
+
+### Changed
+
+- MongoDB connection API updated to remove deprecated parameters:
+  - `run_command()` now takes 1 argument instead of 2
+  - `find()` now takes `Document::new()` instead of `(None, None)`
+  - `list_collection_names()` now takes 0 arguments
+  - `estimated_document_count()` now takes 0 arguments
+
 ## [3.0.0] - 2025-11-22
 
 ### Added - Major Features
