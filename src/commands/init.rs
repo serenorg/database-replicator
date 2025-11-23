@@ -138,7 +138,25 @@ pub async fn init(
             return init_mongodb_to_postgres(source_url, target_url).await;
         }
         crate::SourceType::MySQL => {
-            bail!("MySQL sources are not yet supported. Coming in Phase 3.");
+            // MySQL to PostgreSQL replication (simpler path)
+            tracing::info!("Source type: MySQL");
+
+            // MySQL replications don't support PostgreSQL-specific features
+            if !filter.is_empty() {
+                tracing::warn!(
+                    "⚠ Filters are not supported for MySQL sources (all tables will be replicated)"
+                );
+            }
+            if drop_existing {
+                tracing::warn!("⚠ --drop-existing flag is not applicable for MySQL sources");
+            }
+            if !enable_sync {
+                tracing::warn!(
+                    "⚠ MySQL sources don't support continuous replication (one-time replication only)"
+                );
+            }
+
+            return init_mysql_to_postgres(source_url, target_url).await;
         }
     }
 
@@ -930,6 +948,138 @@ pub async fn init_mongodb_to_postgres(mongo_url: &str, target_url: &str) -> Resu
     tracing::info!(
         "   Migrated {} collection(s) from database '{}' to PostgreSQL",
         collections.len(),
+        db_name
+    );
+
+    Ok(())
+}
+
+/// Initial replication from MySQL to PostgreSQL
+///
+/// Performs one-time replication of MySQL database to PostgreSQL target using JSONB storage:
+/// 1. Validates MySQL connection string
+/// 2. Connects to MySQL and verifies connection
+/// 3. Extracts database name from connection string
+/// 4. Lists all tables from MySQL database
+/// 5. For each table:
+///    - Converts rows to JSONB format
+///    - Creates JSONB table in PostgreSQL
+///    - Batch inserts all data
+///
+/// All MySQL data is stored as JSONB with metadata:
+/// - id: Primary key or auto-generated ID
+/// - data: Complete row as JSON object
+/// - _source_type: "mysql"
+/// - _migrated_at: Timestamp of replication
+///
+/// # Arguments
+///
+/// * `mysql_url` - MySQL connection string (mysql://...)
+/// * `target_url` - PostgreSQL connection string for target (Seren) database
+///
+/// # Returns
+///
+/// Returns `Ok(())` if replication completes successfully.
+///
+/// # Errors
+///
+/// This function will return an error if:
+/// - MySQL connection string is invalid
+/// - Cannot connect to MySQL database
+/// - Database name is not specified in connection string
+/// - Cannot connect to target PostgreSQL database
+/// - Table conversion fails
+/// - Database creation or insert operations fail
+///
+/// # Examples
+///
+/// ```no_run
+/// # use anyhow::Result;
+/// # use postgres_seren_replicator::commands::init::init_mysql_to_postgres;
+/// # async fn example() -> Result<()> {
+/// init_mysql_to_postgres(
+///     "mysql://user:pass@localhost:3306/mydb",
+///     "postgresql://user:pass@seren.example.com/targetdb"
+/// ).await?;
+/// # Ok(())
+/// # }
+/// ```
+pub async fn init_mysql_to_postgres(mysql_url: &str, target_url: &str) -> Result<()> {
+    tracing::info!("Starting MySQL to PostgreSQL replication...");
+
+    // Step 1: Validate and connect to MySQL
+    tracing::info!("Step 1/5: Validating MySQL connection...");
+    let mut mysql_conn = crate::mysql::connect_mysql(mysql_url)
+        .await
+        .context("MySQL connection failed")?;
+    tracing::info!("  ✓ MySQL connection validated");
+
+    // Step 2: Extract database name
+    tracing::info!("Step 2/5: Extracting database name...");
+    let db_name = crate::mysql::extract_database_name(mysql_url)
+        .context("MySQL URL must include database name (e.g., mysql://host:3306/dbname)")?;
+    tracing::info!("  ✓ Database name: '{}'", db_name);
+
+    // Step 3: List all tables
+    tracing::info!("Step 3/5: Discovering tables...");
+    let tables = crate::mysql::reader::list_tables(&mut mysql_conn, &db_name)
+        .await
+        .context("Failed to list tables from MySQL database")?;
+
+    if tables.is_empty() {
+        tracing::warn!("⚠ No tables found in MySQL database '{}'", db_name);
+        tracing::info!("✅ Replication complete (no tables to replicate)");
+        return Ok(());
+    }
+
+    tracing::info!("Found {} table(s) to replicate", tables.len());
+
+    // Step 4: Connect to PostgreSQL target
+    tracing::info!("Step 4/5: Connecting to PostgreSQL target...");
+    let target_client = postgres::connect_with_retry(target_url).await?;
+    tracing::info!("  ✓ Connected to PostgreSQL target");
+
+    // Step 5: Replicate each table
+    tracing::info!("Step 5/5: Replicating tables...");
+    for (idx, table_name) in tables.iter().enumerate() {
+        tracing::info!(
+            "Replicating table {}/{}: '{}'",
+            idx + 1,
+            tables.len(),
+            table_name
+        );
+
+        // Convert MySQL table to JSONB
+        let rows =
+            crate::mysql::converter::convert_table_to_jsonb(&mut mysql_conn, &db_name, table_name)
+                .await
+                .with_context(|| format!("Failed to convert table '{}' to JSONB", table_name))?;
+
+        tracing::info!("  ✓ Converted {} rows from '{}'", rows.len(), table_name);
+
+        // Create JSONB table in PostgreSQL
+        crate::jsonb::writer::create_jsonb_table(&target_client, table_name, "mysql")
+            .await
+            .with_context(|| format!("Failed to create JSONB table '{}'", table_name))?;
+
+        tracing::info!("  ✓ Created JSONB table '{}' in PostgreSQL", table_name);
+
+        if !rows.is_empty() {
+            // Batch insert all rows
+            crate::jsonb::writer::insert_jsonb_batch(&target_client, table_name, rows, "mysql")
+                .await
+                .with_context(|| format!("Failed to insert data into table '{}'", table_name))?;
+
+            tracing::info!("  ✓ Inserted all rows into '{}'", table_name);
+        } else {
+            tracing::info!("  ✓ Table '{}' is empty (no rows to insert)", table_name);
+        }
+    }
+
+    tracing::info!("✅ MySQL to PostgreSQL replication complete!");
+    tracing::info!(
+        "   Replicated {} table(s) from database '{}' to PostgreSQL",
+        tables.len(),
         db_name
     );
 
