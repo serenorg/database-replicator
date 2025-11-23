@@ -7,33 +7,33 @@
 
 ## Universal database-to-PostgreSQL replication for AI agents
 
-Migrate any database to PostgreSQL with zero downtime. Supports PostgreSQL, SQLite, MongoDB, and MySQL/MariaDB.
+Replicate any database to PostgreSQL with zero downtime. Supports PostgreSQL, SQLite, MongoDB, and MySQL/MariaDB.
 
 ---
 
 ## Overview
 
-`seren-replicator` is a command-line tool that replicates databases from multiple sources to PostgreSQL (including Seren Cloud). It automatically detects your source database type and handles the migration accordingly:
+`seren-replicator` is a command-line tool that replicates databases from multiple sources to PostgreSQL (including Seren Cloud). It automatically detects your source database type and handles the replication accordingly:
 
 - **PostgreSQL**: Zero-downtime replication with continuous sync via logical replication
-- **SQLite**: One-time migration using JSONB storage
-- **MongoDB**: One-time migration with JSONB storage and periodic refresh support
-- **MySQL/MariaDB**: One-time migration with JSONB storage and periodic refresh support
+- **SQLite**: One-time replication using JSONB storage
+- **MongoDB**: One-time replication with JSONB storage and periodic refresh support
+- **MySQL/MariaDB**: One-time replication with JSONB storage and periodic refresh support
 
 ### Why This Tool?
 
-- **Multi-database support**: Single tool for all your database migrations
+- **Multi-database support**: Single tool for all your database replications
 - **AI-friendly storage**: Non-PostgreSQL sources use JSONB for flexible querying
 - **Zero downtime**: PostgreSQL-to-PostgreSQL replication with continuous sync
-- **Remote execution**: Run migrations on SerenAI cloud infrastructure
+- **Remote execution**: Run replications on SerenAI cloud infrastructure
 - **Production-ready**: Data integrity verification, checkpointing, and error handling
 
 ---
 
 ## Supported Databases
 
-| Source Database | Migration Type | Continuous Sync | Periodic Refresh | Remote Execution |
-|----------------|----------------|-----------------|------------------|------------------|
+| Source Database | Replication Type | Continuous Sync | Periodic Refresh | Remote Execution |
+|----------------|------------------|-----------------|------------------|------------------|
 | **PostgreSQL** | Native replication | ✅ Logical replication | N/A | ✅ Yes |
 | **SQLite** | JSONB storage | ❌ One-time | ❌ No | ❌ Local only |
 | **MongoDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
@@ -61,7 +61,7 @@ seren-replicator init \
 
 ### SQLite → PostgreSQL
 
-One-time migration to JSONB storage:
+One-time replication to JSONB storage:
 
 ```bash
 seren-replicator init \
@@ -75,7 +75,7 @@ seren-replicator init \
 
 ### MongoDB → PostgreSQL
 
-One-time migration with periodic refresh support:
+One-time replication with periodic refresh support:
 
 ```bash
 seren-replicator init \
@@ -89,7 +89,7 @@ seren-replicator init \
 
 ### MySQL/MariaDB → PostgreSQL
 
-One-time migration with periodic refresh support:
+One-time replication with periodic refresh support:
 
 ```bash
 seren-replicator init \
@@ -116,7 +116,7 @@ seren-replicator init \
 
 - **JSONB storage** preserves data fidelity for querying in PostgreSQL
 - **Type preservation** with special encoding for complex types
-- **One-time migration** for initial data transfer
+- **One-time replication** for initial data transfer
 - **Periodic refresh** (MongoDB, MySQL) for keeping data up to date
 - **Schema-aware filtering** for precise table targeting
 - **Remote execution** (MongoDB, MySQL) on cloud infrastructure
@@ -124,9 +124,9 @@ seren-replicator init \
 ### Universal Features
 
 - **Multi-provider support**: Works with any PostgreSQL provider (Neon, AWS RDS, Hetzner, self-hosted)
-- **Size estimation**: Analyze database sizes before migration
+- **Size estimation**: Analyze database sizes before replication
 - **High performance**: Parallel operations with automatic CPU detection
-- **Checkpointing**: Resume interrupted migrations automatically
+- **Checkpointing**: Resume interrupted replications automatically
 - **Security**: Credentials passed via `.pgpass` files, never in command output
 
 ---
@@ -173,9 +173,9 @@ The binary will be available at `target/release/seren-replicator`.
 ### Database-Specific Guides
 
 - **[PostgreSQL to PostgreSQL](README-PostgreSQL.md)** - Zero-downtime replication with logical replication
-- **[SQLite to PostgreSQL](README-SQLite.md)** - One-time migration using JSONB storage
-- **[MongoDB to PostgreSQL](README-MongoDB.md)** - One-time migration with periodic refresh support
-- **[MySQL/MariaDB to PostgreSQL](README-MySQL.md)** - One-time migration with periodic refresh support
+- **[SQLite to PostgreSQL](README-SQLite.md)** - One-time replication using JSONB storage
+- **[MongoDB to PostgreSQL](README-MongoDB.md)** - One-time replication with periodic refresh support
+- **[MySQL/MariaDB to PostgreSQL](README-MySQL.md)** - One-time replication with periodic refresh support
 
 ---
 
@@ -185,7 +185,7 @@ For comprehensive PostgreSQL replication documentation, see **[README-PostgreSQL
 
 ### Quick Overview
 
-PostgreSQL-to-PostgreSQL replication uses logical replication for zero-downtime migration:
+PostgreSQL-to-PostgreSQL replication uses logical replication for zero-downtime replication:
 
 1. **Validate** - Check prerequisites and permissions
 2. **Init** - Perform initial snapshot (schema + data)
