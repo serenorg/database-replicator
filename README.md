@@ -231,6 +231,8 @@ seren-replicator sync \
 
 By default, the `init` command uses **SerenAI's managed cloud service** to execute replication jobs. This means your replication runs on AWS infrastructure managed by SerenAI, with no AWS account or setup required on your part.
 
+**Important**: Remote execution is restricted to **SerenDB targets only**. To replicate to other PostgreSQL databases (AWS RDS, Neon, Hetzner, self-hosted), use the `--local` flag to run on your own hardware.
+
 ### Benefits of Remote Execution
 
 - **No network interruptions**: Your replication continues even if your laptop loses connectivity
@@ -286,24 +288,24 @@ Status: running (2/2): analytics
 ✓ Replication completed successfully
 ```
 
-### Local Execution (Fallback)
+### Local Execution
 
-If you prefer to run replication on your local machine, use the `--local` flag:
+To run replication on your local machine instead of SerenAI's cloud infrastructure, use the `--local` flag:
 
 ```bash
 # Runs on your local machine
 ./seren-replicator init \
   --source "postgresql://user:pass@source-host:5432/db" \
-  --target "postgresql://user:pass@seren-host:5432/db" \
+  --target "postgresql://user:pass@target-host:5432/db" \
   --local
 ```
 
-Local execution is useful when:
+Local execution is **required** when:
 
-- You're testing or developing
+- **Replicating to non-SerenDB targets** (AWS RDS, Neon, Hetzner, self-hosted PostgreSQL)
 - Your databases are not accessible from the internet
+- You're testing or developing
 - You need full control over the execution environment
-- You're okay with keeping your machine running during the entire operation
 
 ### Advanced Configuration
 

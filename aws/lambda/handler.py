@@ -100,6 +100,11 @@ def validate_job_spec(body):
         if not is_valid:
             return False, f"Invalid {url_field}: {error}"
 
+    # 5b. Validate target is a SerenDB instance (remote execution restriction)
+    is_valid, error = validate_serendb_target(body['target_url'])
+    if not is_valid:
+        return False, f"Invalid target_url: {error}"
+
     # 6. Validate options (if present)
     if 'options' in body:
         if not isinstance(body['options'], dict):
@@ -189,6 +194,44 @@ def validate_postgresql_url(url):
             # Database names should be alphanumeric, underscore, hyphen
             if not re.match(r'^[a-zA-Z0-9_\-]+$', db_name):
                 return False, "Invalid database name format"
+
+    return True, None
+
+
+def validate_serendb_target(url):
+    """
+    Verify target database is a valid SerenDB instance
+
+    Remote execution on SerenAI-managed infrastructure is restricted to SerenDB targets only.
+    Users can use the --local flag to replicate to any PostgreSQL database on their own hardware.
+
+    Returns:
+        tuple: (is_valid, error_message)
+    """
+
+    try:
+        parsed = urlparse(url)
+    except Exception as e:
+        return False, f"Failed to parse URL: {str(e)}"
+
+    if not parsed.hostname:
+        return False, "URL must include a hostname"
+
+    # SerenDB domain allowlist
+    allowed_domains = ['serendb.com', 'console.serendb.com']
+
+    # Check if hostname ends with any allowed domain
+    is_valid_domain = any(
+        parsed.hostname == domain or parsed.hostname.endswith('.' + domain)
+        for domain in allowed_domains
+    )
+
+    if not is_valid_domain:
+        return False, (
+            "Remote execution only supports SerenDB targets. "
+            "To replicate to other PostgreSQL databases, use the --local flag to run on your own hardware. "
+            f"SerenDB signup: https://console.serendb.com/signup"
+        )
 
     return True, None
 
