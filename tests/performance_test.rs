@@ -115,7 +115,10 @@ fn create_medium_sqlite_db() -> anyhow::Result<String> {
                 i,
                 i % 10000, // user_id
                 format!("Post {}", i),
-                format!("Content for post {} with some longer text to simulate real posts", i),
+                format!(
+                    "Content for post {} with some longer text to simulate real posts",
+                    i
+                ),
                 i % 2,
             ],
         )?;
@@ -153,7 +156,10 @@ fn create_large_sqlite_db() -> anyhow::Result<String> {
                 i % 10000,
                 format!("event_type_{}", i % 10),
                 1700000000 + i,
-                format!("Data for event {} with longer text content to increase size", i),
+                format!(
+                    "Data for event {} with longer text content to increase size",
+                    i
+                ),
                 format!("Metadata JSON-like content for event {}", i),
             ],
         )?;
@@ -198,7 +204,10 @@ async fn benchmark_sqlite_small_migration() {
 
     assert!(result.is_ok(), "Migration should succeed");
     println!("✓ Migrated small SQLite database in {:?}", elapsed);
-    println!("  Performance: {:.2} rows/sec", 1000.0 / elapsed.as_secs_f64());
+    println!(
+        "  Performance: {:.2} rows/sec",
+        1000.0 / elapsed.as_secs_f64()
+    );
 
     // Performance target: < 10 seconds
     assert!(
@@ -235,7 +244,10 @@ async fn benchmark_sqlite_medium_migration() {
 
     assert!(result.is_ok(), "Migration should succeed");
     println!("✓ Migrated medium SQLite database in {:?}", elapsed);
-    println!("  Performance: {:.2} rows/sec", 30000.0 / elapsed.as_secs_f64());
+    println!(
+        "  Performance: {:.2} rows/sec",
+        30000.0 / elapsed.as_secs_f64()
+    );
 
     // Performance target: < 60 seconds
     assert!(
@@ -272,7 +284,10 @@ async fn benchmark_sqlite_large_migration() {
 
     assert!(result.is_ok(), "Migration should succeed");
     println!("✓ Migrated large SQLite database in {:?}", elapsed);
-    println!("  Performance: {:.2} rows/sec", 100000.0 / elapsed.as_secs_f64());
+    println!(
+        "  Performance: {:.2} rows/sec",
+        100000.0 / elapsed.as_secs_f64()
+    );
 
     // Performance target: < 10 minutes
     assert!(
@@ -453,7 +468,10 @@ async fn benchmark_jsonb_batch_insert() {
 
     assert!(result.is_ok(), "Migration should succeed");
     println!("✓ Inserted JSONB batch in {:?}", elapsed);
-    println!("  Performance: {:.2} rows/sec", 1000.0 / elapsed.as_secs_f64());
+    println!(
+        "  Performance: {:.2} rows/sec",
+        1000.0 / elapsed.as_secs_f64()
+    );
 
     // Performance target: < 5 seconds
     assert!(
@@ -483,7 +501,10 @@ async fn benchmark_connection_overhead() {
     let elapsed = start.elapsed();
 
     // Query to ensure connection is fully established
-    let _ = client.query("SELECT version()", &[]).await.expect("Query should succeed");
+    let _ = client
+        .query("SELECT version()", &[])
+        .await
+        .expect("Query should succeed");
 
     println!("✓ Connection established in {:?}", elapsed);
 
