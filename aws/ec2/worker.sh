@@ -50,8 +50,8 @@ update_job_status() {
             --region "$AWS_REGION" \
             --table-name "$DYNAMODB_TABLE" \
             --key "{\"job_id\": {\"S\": \"$JOB_ID\"}}" \
-            --update-expression "SET #status = :status, error = :error" \
-            --expression-attribute-names '{"#status": "status"}' \
+            --update-expression "SET #status = :status, #error = :error" \
+            --expression-attribute-names '{"#status": "status", "#error": "error"}' \
             --expression-attribute-values "{\":status\": {\"S\": \"$status\"}, \":error\": {\"S\": \"$error_msg\"}}"
     else
         aws dynamodb update-item \
