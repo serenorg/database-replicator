@@ -225,16 +225,46 @@ async fn main() -> anyhow::Result<()> {
             remote_api,
             job_timeout,
         } => {
+            // Interactive mode is default unless --no-interactive or --yes is specified
+            // (--yes implies automation, so it disables interactive mode)
+            // Run this BEFORE remote execution check so interactive mode works for both local and remote
+            let (
+                final_include_databases,
+                final_exclude_databases,
+                final_include_tables,
+                final_exclude_tables,
+            ) = if !no_interactive && !yes {
+                // Interactive mode (default) - prompt user to select databases and tables
+                let (filter, _rules) =
+                    seren_replicator::interactive::select_databases_and_tables(&source).await?;
+
+                // Extract filter values to pass to init_remote or local init
+                (
+                    filter.include_databases().map(|v| v.to_vec()),
+                    filter.exclude_databases().map(|v| v.to_vec()),
+                    filter.include_tables().map(|v| v.to_vec()),
+                    filter.exclude_tables().map(|v| v.to_vec()),
+                )
+            } else {
+                // CLI mode - use provided filter arguments
+                (
+                    include_databases,
+                    exclude_databases,
+                    include_tables,
+                    exclude_tables,
+                )
+            };
+
             // Remote execution path (default)
             if !local {
                 return init_remote(
                     source,
                     target,
                     yes,
-                    include_databases,
-                    exclude_databases,
-                    include_tables,
-                    exclude_tables,
+                    final_include_databases,
+                    final_exclude_databases,
+                    final_include_tables,
+                    final_exclude_tables,
                     drop_existing,
                     no_sync,
                     remote_api,
@@ -244,24 +274,15 @@ async fn main() -> anyhow::Result<()> {
             }
 
             // Local execution path (existing code continues below)
-            // Interactive mode is default unless --no-interactive or --yes is specified
-            // (--yes implies automation, so it disables interactive mode)
-            let filter = if !no_interactive && !yes {
-                // Interactive mode (default) - prompt user to select databases and tables
-                let (filter, rules) =
-                    seren_replicator::interactive::select_databases_and_tables(&source).await?;
-                filter.with_table_rules(rules)
-            } else {
-                // CLI mode - use provided filter arguments
-                let filter = seren_replicator::filters::ReplicationFilter::new(
-                    include_databases,
-                    exclude_databases,
-                    include_tables,
-                    exclude_tables,
-                )?;
-                let table_rule_data = build_table_rules(&table_rules)?;
-                filter.with_table_rules(table_rule_data)
-            };
+            let filter = seren_replicator::filters::ReplicationFilter::new(
+                final_include_databases,
+                final_exclude_databases,
+                final_include_tables,
+                final_exclude_tables,
+            )?;
+            let table_rule_data = build_table_rules(&table_rules)?;
+            let filter = filter.with_table_rules(table_rule_data);
+
             let enable_sync = !no_sync; // Invert the flag: by default sync is enabled
             commands::init(
                 &source,

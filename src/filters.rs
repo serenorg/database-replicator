@@ -124,14 +124,24 @@ impl ReplicationFilter {
         self.table_rules.predicate_tables(database)
     }
 
-    /// Gets the list of tables to exclude
-    pub fn exclude_tables(&self) -> Option<&Vec<String>> {
-        self.exclude_tables.as_ref()
+    /// Gets the list of databases to include
+    pub fn include_databases(&self) -> Option<&Vec<String>> {
+        self.include_databases.as_ref()
+    }
+
+    /// Gets the list of databases to exclude
+    pub fn exclude_databases(&self) -> Option<&Vec<String>> {
+        self.exclude_databases.as_ref()
     }
 
     /// Gets the list of tables to include
     pub fn include_tables(&self) -> Option<&Vec<String>> {
         self.include_tables.as_ref()
+    }
+
+    /// Gets the list of tables to exclude
+    pub fn exclude_tables(&self) -> Option<&Vec<String>> {
+        self.exclude_tables.as_ref()
     }
 
     /// Determines if a database should be replicated
