@@ -400,6 +400,7 @@ For more details on the AWS infrastructure and architecture, see the [AWS Setup 
 ### Target Database
 
 - **SerenDB**: Agentic-data access database for AI Agent queries. [Signup at console.serendb.com/signup](https://console.serendb.com/signup)
+  - **API Key Required**: Generate an API key at [console.serendb.com/api-keys](https://console.serendb.com/api-keys) for remote execution
 - PostgreSQL 12 or later
 - Database owner or superuser privileges
 - Ability to create tables and schemas
