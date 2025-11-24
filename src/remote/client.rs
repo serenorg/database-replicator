@@ -10,10 +10,11 @@ use super::models::{JobResponse, JobSpec, JobStatus};
 pub struct RemoteClient {
     client: Client,
     api_base_url: String,
+    api_key: Option<String>,
 }
 
 impl RemoteClient {
-    pub fn new(api_base_url: String) -> Result<Self> {
+    pub fn new(api_base_url: String, api_key: Option<String>) -> Result<Self> {
         let client = Client::builder()
             .timeout(Duration::from_secs(30))
             .build()
@@ -22,16 +23,21 @@ impl RemoteClient {
         Ok(Self {
             client,
             api_base_url,
+            api_key,
         })
     }
 
     pub async fn submit_job(&self, spec: &JobSpec) -> Result<JobResponse> {
         let url = format!("{}/jobs", self.api_base_url);
 
-        let response = self
-            .client
-            .post(&url)
-            .json(spec)
+        let mut request = self.client.post(&url).json(spec);
+
+        // Add API key header if provided
+        if let Some(ref key) = self.api_key {
+            request = request.header("x-api-key", key);
+        }
+
+        let response = request
             .send()
             .await
             .context("Failed to submit job to remote service. If the service is unavailable, you can use --local to run replication on your machine instead")?;
@@ -39,6 +45,16 @@ impl RemoteClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+
+            // Special handling for authentication errors
+            if status == 401 {
+                anyhow::bail!(
+                    "Authentication failed. Your API key may be invalid or expired.\n\
+                    Generate a new key at: https://console.serendb.com/api-keys\n\
+                    Or use --local to run replication on your machine instead"
+                );
+            }
+
             anyhow::bail!("Job submission failed with status {}: {}. If the remote service is unavailable, you can use --local to run replication on your machine instead", status, body);
         }
 
@@ -53,13 +69,29 @@ impl RemoteClient {
     pub async fn get_job_status(&self, job_id: &str) -> Result<JobStatus> {
         let url = format!("{}/jobs/{}", self.api_base_url, job_id);
 
-        let response = self.client.get(&url).send().await.context(
+        let mut request = self.client.get(&url);
+
+        // Add API key header if provided
+        if let Some(ref key) = self.api_key {
+            request = request.header("x-api-key", key);
+        }
+
+        let response = request.send().await.context(
             "Failed to get job status from remote service. The remote service may be unavailable",
         )?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
+
+            // Special handling for authentication errors
+            if status == 401 {
+                anyhow::bail!(
+                    "Authentication failed. Your API key may be invalid or expired.\n\
+                    Generate a new key at: https://console.serendb.com/api-keys"
+                );
+            }
+
             anyhow::bail!(
                 "Failed to get job status {}: {}. The remote service may be experiencing issues",
                 status,
@@ -100,7 +132,16 @@ mod tests {
 
     #[test]
     fn test_client_creation() {
-        let client = RemoteClient::new("https://api.example.com".to_string());
+        let client = RemoteClient::new("https://api.example.com".to_string(), None);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_client_creation_with_api_key() {
+        let client = RemoteClient::new(
+            "https://api.example.com".to_string(),
+            Some("test-key".to_string()),
+        );
         assert!(client.is_ok());
     }
 }

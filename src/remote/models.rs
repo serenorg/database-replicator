@@ -11,6 +11,7 @@ pub struct JobSpec {
     pub command: String, // "init" or "sync"
     pub source_url: String,
     pub target_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub filter: Option<FilterSpec>,
     pub options: HashMap<String, serde_json::Value>,
 }

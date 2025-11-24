@@ -337,10 +337,43 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[allow(clippy::too_many_arguments)]
+fn get_api_key() -> anyhow::Result<String> {
+    use dialoguer::{theme::ColorfulTheme, Input};
+
+    // Try environment variable first
+    if let Ok(key) = std::env::var("SEREN_API_KEY") {
+        if !key.trim().is_empty() {
+            return Ok(key.trim().to_string());
+        }
+    }
+
+    // Prompt user interactively
+    println!("\nRemote execution requires a SerenDB API key for authentication.");
+    println!("\nYou can generate an API key at:");
+    println!("  https://console.serendb.com/api-keys\n");
+
+    let key: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Enter your SerenDB API key")
+        .allow_empty(false)
+        .interact_text()?;
+
+    if key.trim().is_empty() {
+        anyhow::bail!(
+            "API key is required for remote execution.\n\
+            Set the SEREN_API_KEY environment variable or run interactively.\n\
+            Get your API key at: https://console.serendb.com/api-keys\n\
+            Or use --local to run replication on your machine instead"
+        );
+    }
+
+    Ok(key.trim().to_string())
+}
+
+#[allow(clippy::too_many_arguments)]
 async fn init_remote(
     source: String,
     target: String,
-    yes: bool,
+    _yes: bool,
     include_databases: Option<Vec<String>>,
     exclude_databases: Option<Vec<String>>,
     include_tables: Option<Vec<String>>,
@@ -348,7 +381,7 @@ async fn init_remote(
     drop_existing: bool,
     no_sync: bool,
     remote_api: String,
-    job_timeout: u64,
+    _job_timeout: u64,
 ) -> anyhow::Result<()> {
     use seren_replicator::migration;
     use seren_replicator::postgres;
@@ -357,6 +390,9 @@ async fn init_remote(
 
     println!("🌐 Remote execution mode enabled");
     println!("API endpoint: {}", remote_api);
+
+    // Get API key (from env or prompt user)
+    let api_key = get_api_key()?;
 
     // Estimate database size for automatic instance selection
     println!("Analyzing database size...");
@@ -413,21 +449,18 @@ async fn init_remote(
         })
     };
 
+    // Build options for remote execution (only include server-supported options)
     let mut options = HashMap::new();
     options.insert(
         "drop_existing".to_string(),
         serde_json::Value::Bool(drop_existing),
     );
-    options.insert("yes".to_string(), serde_json::Value::Bool(yes));
     options.insert("enable_sync".to_string(), serde_json::Value::Bool(!no_sync));
     options.insert(
         "estimated_size_bytes".to_string(),
         serde_json::Value::Number(serde_json::Number::from(estimated_size_bytes)),
     );
-    options.insert(
-        "job_timeout".to_string(),
-        serde_json::Value::Number(serde_json::Number::from(job_timeout)),
-    );
+    // Note: "yes" and "job_timeout" are client-side only options, not sent to server
 
     let job_spec = JobSpec {
         version: "1.0".to_string(),
@@ -439,7 +472,7 @@ async fn init_remote(
     };
 
     // Submit job
-    let client = RemoteClient::new(remote_api)?;
+    let client = RemoteClient::new(remote_api, Some(api_key))?;
     println!("Submitting replication job...");
 
     let response = client.submit_job(&job_spec).await?;

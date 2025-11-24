@@ -30,7 +30,8 @@ async fn test_remote_job_submission() {
     println!("API URL: {}", api_url);
 
     // Create remote client
-    let client = RemoteClient::new(api_url).expect("Failed to create remote client");
+    let api_key = std::env::var("SEREN_API_KEY").ok();
+    let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
     // Create a job spec for validation (safe, read-only)
     let job_spec = JobSpec {
@@ -80,7 +81,8 @@ async fn test_remote_job_polling() {
     println!("API URL: {}", api_url);
 
     // Create remote client
-    let client = RemoteClient::new(api_url).expect("Failed to create remote client");
+    let api_key = std::env::var("SEREN_API_KEY").ok();
+    let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
     // Create and submit a job spec for validation (safe, read-only)
     let job_spec = JobSpec {
@@ -175,7 +177,8 @@ async fn test_remote_job_poll_until_complete() {
     println!("API URL: {}", api_url);
 
     // Create remote client
-    let client = RemoteClient::new(api_url).expect("Failed to create remote client");
+    let api_key = std::env::var("SEREN_API_KEY").ok();
+    let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
     // Create and submit a job spec for validation (safe, read-only)
     let job_spec = JobSpec {
@@ -239,7 +242,8 @@ async fn test_remote_client_creation() {
     println!("Testing remote client creation...");
 
     let api_url = "https://79cfok1msj.execute-api.us-east-1.amazonaws.com".to_string();
-    let result = RemoteClient::new(api_url);
+    let api_key = std::env::var("SEREN_API_KEY").ok();
+    let result = RemoteClient::new(api_url, api_key);
 
     assert!(result.is_ok(), "Client creation should succeed");
     println!("✓ Remote client created successfully");
@@ -256,7 +260,8 @@ async fn test_remote_job_submission_with_filters() {
     println!("Testing remote job submission with filters...");
 
     // Create remote client
-    let client = RemoteClient::new(api_url).expect("Failed to create remote client");
+    let api_key = std::env::var("SEREN_API_KEY").ok();
+    let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
     // Create a job spec with database filters
     let filter = seren_replicator::remote::FilterSpec {
@@ -300,7 +305,8 @@ async fn test_remote_job_submission_with_options() {
     println!("Testing remote job submission with options...");
 
     // Create remote client
-    let client = RemoteClient::new(api_url).expect("Failed to create remote client");
+    let api_key = std::env::var("SEREN_API_KEY").ok();
+    let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
     // Create a job spec with options
     let mut options = HashMap::new();
