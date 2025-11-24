@@ -418,15 +418,76 @@ def choose_instance_type(estimated_size_bytes):
         return 'c5.4xlarge'
 
 
+def handle_sqs_provisioning(event):
+    """Handle SQS events - provision EC2 instances for queued jobs"""
+
+    for record in event.get('Records', []):
+        try:
+            # Parse SQS message body
+            message = json.loads(record['body'])
+            job_id = message['job_id']
+            trace_id = message.get('trace_id')
+            options = message.get('options', {})
+
+            print(f"[TRACE:{trace_id}] Processing provisioning request for job {job_id}")
+
+            # Provision EC2 worker instance
+            instance_id = provision_worker(job_id, options)
+
+            print(f"[TRACE:{trace_id}] Job {job_id} provisioned on instance {instance_id}")
+
+            # Update job status to reflect successful provisioning
+            dynamodb.update_item(
+                TableName=DYNAMODB_TABLE,
+                Key={'job_id': {'S': job_id}},
+                UpdateExpression='SET instance_id = :instance_id',
+                ExpressionAttributeValues={
+                    ':instance_id': {'S': instance_id}
+                }
+            )
+
+            # Emit metric for successful provisioning
+            put_metric('JobProvisioned')
+
+        except Exception as e:
+            print(f"Failed to provision job: {str(e)}")
+
+            # Update job status to failed
+            job_id = message.get('job_id', 'unknown')
+            dynamodb.update_item(
+                TableName=DYNAMODB_TABLE,
+                Key={'job_id': {'S': job_id}},
+                UpdateExpression='SET #status = :status, error = :error',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues={
+                    ':status': {'S': 'failed'},
+                    ':error': {'S': f'Provisioning failed: {str(e)}'}
+                }
+            )
+
+            # Emit metric for provisioning failure
+            put_metric('JobProvisioningFailed')
+
+            # Don't raise - allow other messages in batch to be processed
+            continue
+
+    return {'statusCode': 200}
+
+
 def lambda_handler(event, context):
     """Main Lambda handler - routes requests to appropriate handler"""
 
+    # Check if this is an SQS event (provisioning trigger)
+    if 'Records' in event:
+        return handle_sqs_provisioning(event)
+
+    # Otherwise, this is an HTTP API Gateway request
     http_method = event.get('httpMethod', '')
     path = event.get('path', '')
 
     print(f"Request: {http_method} {path}")
 
-    # Validate API key for all requests
+    # Validate API key for HTTP requests only
     is_valid, error_msg = validate_api_key(event)
     if not is_valid:
         print(f"Authentication failed: {error_msg}")

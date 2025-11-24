@@ -299,13 +299,14 @@ resource "aws_iam_instance_profile" "worker_profile" {
 
 # Lambda function
 resource "aws_lambda_function" "coordinator" {
-  filename      = "${path.module}/../lambda/lambda.zip"
-  function_name = "${var.project_name}-coordinator"
-  role          = aws_iam_role.lambda_execution.arn
-  handler       = "handler.lambda_handler"
-  runtime       = "python3.11"
-  timeout       = 30
-  memory_size   = 256
+  filename         = "${path.module}/../lambda/lambda.zip"
+  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda.zip")
+  function_name    = "${var.project_name}-coordinator"
+  role             = aws_iam_role.lambda_execution.arn
+  handler          = "handler.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 30
+  memory_size      = 256
 
   environment {
     variables = {
@@ -341,13 +342,14 @@ resource "aws_cloudwatch_log_group" "lambda_logs" {
 
 # Lambda function for EC2 provisioning (processes SQS queue)
 resource "aws_lambda_function" "provisioner" {
-  filename      = "${path.module}/../lambda/lambda.zip"
-  function_name = "${var.project_name}-provisioner"
-  role          = aws_iam_role.lambda_execution.arn
-  handler       = "handler.lambda_handler"
-  runtime       = "python3.11"
-  timeout       = 300 # 5 minutes for EC2 provisioning
-  memory_size   = 256
+  filename         = "${path.module}/../lambda/lambda.zip"
+  source_code_hash = filebase64sha256("${path.module}/../lambda/lambda.zip")
+  function_name    = "${var.project_name}-provisioner"
+  role             = aws_iam_role.lambda_execution.arn
+  handler          = "handler.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 300 # 5 minutes for EC2 provisioning
+  memory_size      = 256
 
   environment {
     variables = {
