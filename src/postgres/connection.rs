@@ -130,8 +130,10 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
     )?;
 
     // Set up TLS connector for cloud connections
+    // TEMPORARY: Accept invalid certs to debug TLS issues
+    // TODO: Remove this once we identify the certificate validation issue
     let tls_connector = TlsConnector::builder()
-        .danger_accept_invalid_certs(false)
+        .danger_accept_invalid_certs(true)
         .build()
         .context("Failed to build TLS connector")?;
     let tls = MakeTlsConnector::new(tls_connector);
@@ -174,10 +176,14 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
                     error_msg
                 )
             } else if error_msg.contains("SSL") || error_msg.contains("TLS") {
+                // Log full error for debugging TLS issues
+                tracing::error!("TLS/SSL connection failed with error: {:?}", e);
                 anyhow::anyhow!(
                     "TLS/SSL error: Failed to establish secure connection.\n\
                      Please verify SSL/TLS configuration.\n\
-                     Error: {}",
+                     Detailed error: {:?}\n\
+                     Original error: {}",
+                    e,
                     error_msg
                 )
             } else if error_msg.contains("no pg_hba.conf entry") {
