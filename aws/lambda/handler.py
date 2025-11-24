@@ -457,8 +457,8 @@ def handle_sqs_provisioning(event):
             dynamodb.update_item(
                 TableName=DYNAMODB_TABLE,
                 Key={'job_id': {'S': job_id}},
-                UpdateExpression='SET #status = :status, error = :error',
-                ExpressionAttributeNames={'#status': 'status'},
+                UpdateExpression='SET #status = :status, #error = :error',
+                ExpressionAttributeNames={'#status': 'status', '#error': 'error'},
                 ExpressionAttributeValues={
                     ':status': {'S': 'failed'},
                     ':error': {'S': f'Provisioning failed: {str(e)}'}
