@@ -344,7 +344,7 @@ resource "aws_lambda_function" "provisioner" {
   filename      = "${path.module}/../lambda/lambda.zip"
   function_name = "${var.project_name}-provisioner"
   role          = aws_iam_role.lambda_execution.arn
-  handler       = "provisioner.lambda_handler"
+  handler       = "handler.lambda_handler"
   runtime       = "python3.11"
   timeout       = 300 # 5 minutes for EC2 provisioning
   memory_size   = 256
