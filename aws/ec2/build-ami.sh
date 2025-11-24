@@ -5,13 +5,13 @@
 set -euo pipefail
 
 # Configuration
-BINARY_PATH="${BINARY_PATH:-../../target/release/postgres-seren-replicator}"
+BINARY_PATH="${BINARY_PATH:-../../target/release/seren-replicator}"
 WORKER_SCRIPT="./worker.sh"
 SETUP_SCRIPT="./setup-worker.sh"
 CLOUDWATCH_CONFIG="./cloudwatch-agent-config.json"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 INSTANCE_TYPE="${INSTANCE_TYPE:-t3.medium}"
-AMI_NAME="postgres-seren-replicator-worker-$(date +%Y%m%d-%H%M%S)"
+AMI_NAME="seren-replicator-worker-$(date +%Y%m%d-%H%M%S)"
 
 # Log function
 log() {
@@ -124,7 +124,7 @@ source "amazon-ebs" "worker" {
 
   tags = {
     Name        = var.ami_name
-    Purpose     = "postgres-seren-replicator-worker"
+    Purpose     = "seren-replicator-worker"
     BuildDate   = "$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     BuiltBy     = "packer"
     Environment = "production"
@@ -152,7 +152,7 @@ build {
   # Upload replicator binary
   provisioner "file" {
     source      = "$BINARY_PATH"
-    destination = "/tmp/postgres-seren-replicator"
+    destination = "/tmp/seren-replicator"
   }
 
   # Upload worker script
@@ -170,9 +170,9 @@ build {
   # Install replicator, worker script, and CloudWatch config
   provisioner "shell" {
     inline = [
-      "sudo mv /tmp/postgres-seren-replicator /opt/seren-replicator/",
+      "sudo mv /tmp/seren-replicator /opt/seren-replicator/",
       "sudo mv /tmp/worker.sh /opt/seren-replicator/",
-      "sudo chmod +x /opt/seren-replicator/postgres-seren-replicator",
+      "sudo chmod +x /opt/seren-replicator/seren-replicator",
       "sudo chmod +x /opt/seren-replicator/worker.sh",
       "sudo mv /tmp/cloudwatch-agent-config.json /opt/aws/amazon-cloudwatch-agent/etc/",
       "sudo chmod 644 /opt/aws/amazon-cloudwatch-agent/etc/cloudwatch-agent-config.json",

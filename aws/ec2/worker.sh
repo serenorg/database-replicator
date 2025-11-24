@@ -5,7 +5,7 @@
 set -euo pipefail
 
 # Configuration
-REPLICATOR_BIN="/opt/seren-replicator/postgres-seren-replicator"
+REPLICATOR_BIN="/opt/seren-replicator/seren-replicator"
 DYNAMODB_TABLE="${DYNAMODB_TABLE:-replication-jobs}"
 AWS_REGION="${AWS_REGION:-us-east-1}"
 
@@ -160,7 +160,7 @@ main() {
         log "Job timeout exceeded ($JOB_TIMEOUT seconds)"
         update_job_status "timeout" "Job exceeded maximum duration of $JOB_TIMEOUT seconds"
         # Kill the replicator process and terminate instance
-        pkill -f postgres-seren-replicator || true
+        pkill -f seren-replicator || true
         terminate_self
     ) &
     WATCHDOG_PID=$!

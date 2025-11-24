@@ -55,7 +55,7 @@ build_binary() {
     cargo build --release || error "Failed to build binary"
 
     local version
-    version=$(./target/release/postgres-seren-replicator --version | awk '{print $2}')
+    version=$(./target/release/seren-replicator --version | awk '{print $2}')
     log "✓ Built binary version: $version"
 }
 
@@ -65,7 +65,7 @@ build_ami() {
     cd "$SCRIPT_DIR/ec2"
 
     # Export binary path for build script
-    export BINARY_PATH="$PROJECT_ROOT/target/release/postgres-seren-replicator"
+    export BINARY_PATH="$PROJECT_ROOT/target/release/seren-replicator"
 
     ./build-ami.sh || error "Failed to build AMI"
 
@@ -73,7 +73,7 @@ build_ami() {
     AMI_ID=$(aws ec2 describe-images \
         --region "$AWS_REGION" \
         --owners self \
-        --filters "Name=name,Values=postgres-seren-replicator-worker-*" \
+        --filters "Name=name,Values=seren-replicator-worker-*" \
         --query 'Images | sort_by(@, &CreationDate) | [-1].ImageId' \
         --output text)
 
