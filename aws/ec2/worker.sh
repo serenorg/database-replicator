@@ -116,16 +116,24 @@ update_progress() {
 terminate_self() {
     log "Self-terminating instance..."
 
-    # Get instance ID from metadata service
-    INSTANCE_ID=$(ec2-metadata --instance-id | cut -d " " -f 2)
+    # Get instance ID from metadata service (IMDSv2)
+    # First get a token
+    TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" \
+        2>/dev/null)
 
-    if [ -n "$INSTANCE_ID" ]; then
+    # Then get instance ID using the token
+    INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" \
+        http://169.254.169.254/latest/meta-data/instance-id \
+        2>/dev/null)
+
+    if [ -n "$INSTANCE_ID" ] && [ "$INSTANCE_ID" != "null" ]; then
         aws ec2 terminate-instances \
             --region "$AWS_REGION" \
             --instance-ids "$INSTANCE_ID"
         log "Termination initiated for instance $INSTANCE_ID"
     else
-        log "ERROR: Could not determine instance ID from metadata"
+        log "ERROR: Could not determine instance ID from metadata service"
     fi
 }
 
@@ -209,7 +217,8 @@ main() {
     update_job_status "running"
 
     # Build replicator command
-    CMD=("$REPLICATOR_BIN" "$COMMAND" "--source" "$SOURCE_URL" "--target" "$TARGET_URL" "--yes")
+    # Always use --local to prevent nested remote execution
+    CMD=("$REPLICATOR_BIN" "$COMMAND" "--source" "$SOURCE_URL" "--target" "$TARGET_URL" "--yes" "--local")
 
     # Add filter options
     INCLUDE_DATABASES=$(echo "$FILTER_JSON" | jq -r '.include_databases // empty | .[]')
