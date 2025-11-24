@@ -637,6 +637,39 @@ When you run `init` without the `--local` flag, the tool:
 
 Your database credentials are encrypted with AWS KMS and never logged or stored in plaintext.
 
+### Authentication
+
+Remote execution requires a SerenDB API key for authentication. The tool obtains the API key in one of two ways:
+
+#### Option 1: Environment Variable (Recommended for scripts)
+
+```bash
+export SEREN_API_KEY="your-api-key-here"
+seren-replicator init --source "..." --target "..."
+```
+
+#### Option 2: Interactive Prompt
+
+If `SEREN_API_KEY` is not set, the tool will prompt you to enter your API key:
+
+```text
+Remote execution requires a SerenDB API key for authentication.
+
+You can generate an API key at:
+  https://console.serendb.com/api-keys
+
+Enter your SerenDB API key: [input]
+```
+
+**Getting Your API Key:**
+
+1. Sign up for SerenDB at [console.serendb.com/signup](https://console.serendb.com/signup)
+2. Navigate to [console.serendb.com/api-keys](https://console.serendb.com/api-keys)
+3. Generate a new API key
+4. Copy and save it securely (you won't be able to see it again)
+
+**Security Note:** Never commit API keys to version control. Use environment variables or secure credential management.
+
 ### Usage Example
 
 Remote execution is the default - just run `init` as normal:

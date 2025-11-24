@@ -343,6 +343,57 @@ Collection names are validated to prevent NoSQL injection:
 - Passwords are not exposed in stack traces
 - Connection validation doesn't leak credentials
 
+## Remote Execution
+
+Run replication jobs on SerenAI-managed cloud infrastructure:
+
+```bash
+seren-replicator init \
+  --source "mongodb://SOURCE_CONNECTION" \
+  --target "postgresql://TARGET_CONNECTION"
+```
+
+**Benefits:**
+
+- No local resources consumed
+- Automatic retry and error handling
+- Logs stored in CloudWatch
+- Job monitoring via API
+- Managed security and credentials
+
+### Authentication
+
+Remote execution requires a SerenDB API key for authentication. The tool obtains the API key in one of two ways:
+
+#### Option 1: Environment Variable (Recommended for scripts)
+
+```bash
+export SEREN_API_KEY="your-api-key-here"
+seren-replicator init --source "..." --target "..."
+```
+
+#### Option 2: Interactive Prompt
+
+If `SEREN_API_KEY` is not set, the tool will prompt you to enter your API key:
+
+```text
+Remote execution requires a SerenDB API key for authentication.
+
+You can generate an API key at:
+  https://console.serendb.com/api-keys
+
+Enter your SerenDB API key: [input]
+```
+
+**Getting Your API Key:**
+
+1. Sign up for SerenDB at [console.serendb.com/signup](https://console.serendb.com/signup)
+2. Navigate to [console.serendb.com/api-keys](https://console.serendb.com/api-keys)
+3. Generate a new API key
+4. Copy and save it securely (you won't be able to see it again)
+
+**Security Note:** Never commit API keys to version control. Use environment variables or secure credential management.
+
 ## Performance Considerations
 
 ### Index Strategy
