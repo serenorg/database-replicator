@@ -38,30 +38,62 @@ redact_url() {
     fi
 }
 
-# Update DynamoDB job status
+# Update DynamoDB job status with retry logic
 update_job_status() {
     local status="$1"
     local error_msg="${2:-}"
+    local max_retries=3
+    local retry_count=0
 
     log "Updating job status to: $status"
 
-    if [ -n "$error_msg" ]; then
-        aws dynamodb update-item \
-            --region "$AWS_REGION" \
-            --table-name "$DYNAMODB_TABLE" \
-            --key "{\"job_id\": {\"S\": \"$JOB_ID\"}}" \
-            --update-expression "SET #status = :status, #error = :error" \
-            --expression-attribute-names '{"#status": "status", "#error": "error"}' \
-            --expression-attribute-values "{\":status\": {\"S\": \"$status\"}, \":error\": {\"S\": \"$error_msg\"}}"
-    else
-        aws dynamodb update-item \
-            --region "$AWS_REGION" \
-            --table-name "$DYNAMODB_TABLE" \
-            --key "{\"job_id\": {\"S\": \"$JOB_ID\"}}" \
-            --update-expression "SET #status = :status, ${status}_at = :timestamp" \
-            --expression-attribute-names '{"#status": "status"}' \
-            --expression-attribute-values "{\":status\": {\"S\": \"$status\"}, \":timestamp\": {\"S\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}}"
-    fi
+    while [ $retry_count -lt $max_retries ]; do
+        if [ -n "$error_msg" ]; then
+            if aws dynamodb update-item \
+                --region "$AWS_REGION" \
+                --table-name "$DYNAMODB_TABLE" \
+                --key "{\"job_id\": {\"S\": \"$JOB_ID\"}}" \
+                --update-expression "SET #status = :status, #error = :error, updated_at = :timestamp" \
+                --expression-attribute-names '{"#status": "status", "#error": "error"}' \
+                --expression-attribute-values "{\":status\": {\"S\": \"$status\"}, \":error\": {\"S\": \"$error_msg\"}, \":timestamp\": {\"S\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}}" \
+                2>&1; then
+                log "✓ Successfully updated job status to: $status"
+                return 0
+            fi
+        else
+            if aws dynamodb update-item \
+                --region "$AWS_REGION" \
+                --table-name "$DYNAMODB_TABLE" \
+                --key "{\"job_id\": {\"S\": \"$JOB_ID\"}}" \
+                --update-expression "SET #status = :status, ${status}_at = :timestamp, updated_at = :timestamp" \
+                --expression-attribute-names '{"#status": "status"}' \
+                --expression-attribute-values "{\":status\": {\"S\": \"$status\"}, \":timestamp\": {\"S\": \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\"}}" \
+                2>&1; then
+                log "✓ Successfully updated job status to: $status"
+                return 0
+            fi
+        fi
+
+        retry_count=$((retry_count + 1))
+        if [ $retry_count -lt $max_retries ]; then
+            log "⚠ DynamoDB update failed, retrying ($retry_count/$max_retries)..."
+            sleep $((2 ** retry_count))  # Exponential backoff: 2s, 4s, 8s
+        fi
+    done
+
+    # If all retries failed, log to CloudWatch for alerting
+    log "ERROR: Failed to update job status after $max_retries attempts - JOB MAY BE STUCK"
+    log "ERROR: Job $JOB_ID stuck in previous state, intended status: $status"
+
+    # Emit CloudWatch metric for monitoring
+    aws cloudwatch put-metric-data \
+        --namespace "SerenReplication" \
+        --metric-name "JobStatusUpdateFailed" \
+        --value 1 \
+        --dimensions JobId="$JOB_ID" \
+        2>&1 || log "ERROR: Failed to emit CloudWatch metric"
+
+    return 1
 }
 
 # Update progress in DynamoDB

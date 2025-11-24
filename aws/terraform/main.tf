@@ -409,6 +409,73 @@ resource "aws_lambda_event_source_mapping" "sqs_trigger" {
   enabled          = true
 }
 
+# Cleanup Lambda for stuck job detection
+resource "aws_lambda_function" "cleanup" {
+  filename         = "${path.module}/../lambda/cleanup.zip"
+  source_code_hash = filebase64sha256("${path.module}/../lambda/cleanup.zip")
+  function_name    = "${var.project_name}-cleanup"
+  role             = aws_iam_role.lambda_execution.arn
+  handler          = "cleanup.lambda_handler"
+  runtime          = "python3.11"
+  timeout          = 60 # 1 minute for scanning and cleanup
+  memory_size      = 256
+
+  environment {
+    variables = {
+      DYNAMODB_TABLE    = aws_dynamodb_table.replication_jobs.name
+      MAX_RUNNING_HOURS = "12"
+      MAX_PENDING_HOURS = "1"
+    }
+  }
+
+  tags = {
+    Name      = "${var.project_name}-cleanup"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# CloudWatch Log Group for cleanup Lambda
+resource "aws_cloudwatch_log_group" "cleanup_logs" {
+  name              = "/aws/lambda/${aws_lambda_function.cleanup.function_name}"
+  retention_in_days = 7
+
+  tags = {
+    Name      = "${var.project_name}-cleanup-logs"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# EventBridge rule to trigger cleanup every 15 minutes
+resource "aws_cloudwatch_event_rule" "cleanup_schedule" {
+  name                = "${var.project_name}-cleanup-schedule"
+  description         = "Trigger stuck job cleanup every 15 minutes"
+  schedule_expression = "rate(15 minutes)"
+
+  tags = {
+    Name      = "${var.project_name}-cleanup-schedule"
+    ManagedBy = "terraform"
+    Project   = var.project_name
+  }
+}
+
+# EventBridge target for cleanup Lambda
+resource "aws_cloudwatch_event_target" "cleanup_lambda" {
+  rule      = aws_cloudwatch_event_rule.cleanup_schedule.name
+  target_id = "cleanup-lambda"
+  arn       = aws_lambda_function.cleanup.arn
+}
+
+# Permission for EventBridge to invoke cleanup Lambda
+resource "aws_lambda_permission" "allow_eventbridge" {
+  statement_id  = "AllowExecutionFromEventBridge"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.cleanup.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.cleanup_schedule.arn
+}
+
 # API Gateway (HTTP API)
 resource "aws_apigatewayv2_api" "api" {
   name          = "${var.project_name}-api"
