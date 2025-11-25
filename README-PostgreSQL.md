@@ -4,6 +4,23 @@ Zero-downtime database replication using PostgreSQL logical replication with con
 
 ---
 
+## SerenAI Cloud Replication
+
+**New to SerenAI?** Sign up at [console.serendb.com](https://console.serendb.com) to get started with managed cloud replication.
+
+When replicating to SerenDB targets, this tool runs your replication jobs on SerenAI's cloud infrastructure automatically. Just set your API key and run:
+
+```bash
+export SEREN_API_KEY="your-api-key"  # Get from console.serendb.com
+database-replicator init \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@your-db.serendb.com:5432/db"
+```
+
+For non-SerenDB targets, use the `--local` flag to run replication locally.
+
+---
+
 ## Overview
 
 This guide covers replicating PostgreSQL databases from any PostgreSQL provider (Neon, AWS RDS, Hetzner, self-hosted, etc.) to another PostgreSQL database (including Seren Cloud). The tool uses PostgreSQL's native logical replication for zero-downtime replication with continuous sync.

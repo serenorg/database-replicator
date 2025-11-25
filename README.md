@@ -12,6 +12,30 @@ Replicate any database to PostgreSQL with zero downtime. Supports PostgreSQL, SQ
 
 ---
 
+## SerenAI Cloud Replication
+
+**New to SerenAI?** Sign up at [console.serendb.com](https://console.serendb.com) to get started with managed cloud replication.
+
+SerenAI provides managed PostgreSQL databases optimized for AI workloads. When replicating to SerenDB targets, this tool can run your replication jobs on SerenAI's cloud infrastructure - no local resources required.
+
+**Benefits of SerenAI Cloud Execution:**
+- No local compute resources needed
+- Automatic retry and error handling
+- Job monitoring and logging
+- Optimized for large database transfers
+
+To replicate to SerenDB, simply run:
+```bash
+export SEREN_API_KEY="your-api-key"  # Get from console.serendb.com
+database-replicator init \
+  --source "postgresql://user:pass@source:5432/db" \
+  --target "postgresql://user:pass@your-db.serendb.com:5432/db"
+```
+
+For local execution (non-SerenDB targets), use the `--local` flag. See [Remote Execution](#remote-execution-serendb-only) for details.
+
+---
+
 ## Overview
 
 `database-replicator` is a command-line tool that replicates databases from multiple sources to PostgreSQL (including Seren Cloud). It automatically detects your source database type and handles the replication accordingly:

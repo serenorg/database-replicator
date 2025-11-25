@@ -2,6 +2,25 @@
 
 This guide explains how to replicate MongoDB databases to PostgreSQL using database-replicator's JSONB storage approach.
 
+---
+
+## SerenAI Cloud Replication
+
+**New to SerenAI?** Sign up at [console.serendb.com](https://console.serendb.com) to get started with managed cloud replication.
+
+When replicating to SerenDB targets, this tool runs your replication jobs on SerenAI's cloud infrastructure automatically:
+
+```bash
+export SEREN_API_KEY="your-api-key"  # Get from console.serendb.com
+database-replicator init \
+  --source "mongodb://user:pass@mongo-host:27017/db" \
+  --target "postgresql://user:pass@your-db.serendb.com:5432/db"
+```
+
+For non-SerenDB targets, use the `--local` flag to run replication locally.
+
+---
+
 ## Overview
 
 The tool automatically detects MongoDB connection strings and replicates collections to PostgreSQL using a JSONB storage model. All BSON types are preserved with full type fidelity, including ObjectIds, DateTimes, Binary data, and MongoDB-specific types.

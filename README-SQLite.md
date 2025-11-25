@@ -2,6 +2,23 @@
 
 This guide explains how to replicate SQLite databases to PostgreSQL using database-replicator's JSONB storage approach.
 
+---
+
+## SerenAI Cloud Replication
+
+**New to SerenAI?** Sign up at [console.serendb.com](https://console.serendb.com) to get a managed PostgreSQL database optimized for AI workloads.
+
+**Note:** SQLite replication requires local execution (the `--local` flag) since the source file must be accessible from your machine.
+
+```bash
+database-replicator init \
+  --source /path/to/database.db \
+  --target "postgresql://user:pass@your-db.serendb.com:5432/db" \
+  --local
+```
+
+---
+
 ## Overview
 
 The tool automatically detects SQLite database files and replicates them to PostgreSQL using a JSONB storage model. All SQLite data is preserved with full type fidelity, including BLOBs, NULLs, and special float values.
