@@ -89,57 +89,59 @@ jobs:
 
           # Generate release notes
           cat > release-notes.md << 'EOF'
-          ## 🔧 Patch Release: v2.4.1
+          ## 🚀 database-replicator v5.0.0
 
-          This patch release adds comprehensive automatic connection retry logic with exponential backoff to prevent failures during long-running operations when database connections drop unexpectedly.
+          **Universal database-to-PostgreSQL replication CLI** - Now open source!
 
-          ### 🐛 Bug Fixes
+          This is the first public release of `database-replicator`, a command-line tool for replicating databases from multiple sources to PostgreSQL with zero downtime.
 
-          **Automatic Connection Retry for Direct Database Connections (#119)**
-          - Database connections that drop during long operations now automatically retry instead of failing
-          - Prevents "Connection error: connection closed" errors during `init`, filtered copy, and schema introspection
-          - Applies to: database discovery, creation, filtered table copy, column queries, wal_level checks
-          - Maximum 3 retry attempts with exponential backoff (1s, 2s, 4s delays)
-          - Clear logging shows retry attempts and remaining retries
+          ### ✨ Features
 
-          **Technical Details (#119):**
-          - Exported `connect_with_retry()` function from postgres module
-          - Replaced `connect()` with `connect_with_retry()` in 9 critical locations
-          - Uses existing exponential backoff implementation
+          **Multi-Database Support:**
+          - **PostgreSQL → PostgreSQL**: Zero-downtime replication with continuous sync via logical replication
+          - **SQLite → PostgreSQL**: One-time replication with JSONB storage
+          - **MongoDB → PostgreSQL**: One-time replication with JSONB storage and periodic refresh
+          - **MySQL/MariaDB → PostgreSQL**: One-time replication with JSONB storage and periodic refresh
 
-          **Automatic Retry for External PostgreSQL Commands (#120)**
-          - External subprocess commands (psql, pg_restore, pg_dump, pg_dumpall) now retry on connection failures
-          - Prevents failures during long-running dump/restore operations (5+ minutes)
-          - All dump and restore operations protected with retry logic
-          - Database connections properly scoped to avoid idle timeouts during subprocess execution
-          - Gracefully handles transient network issues, timeouts, and temporary server unavailability
+          **Key Capabilities:**
+          - Automatic source database type detection
+          - Interactive mode for database/table selection
+          - Selective replication with filtering support
+          - Checkpointing for resume support on interruption
+          - Data integrity verification with checksums
+          - Parallel dump/restore operations
+          - Real-time replication lag monitoring
 
-          **Technical Details (#120):**
-          - Added `retry_subprocess_with_backoff()` utility function for subprocess retry
-          - Wrapped all psql/pg_restore/pg_dump/pg_dumpall calls with retry logic
-          - Maximum 3 retry attempts with exponential backoff (1s, 2s, 4s delays)
-          - Properly scoped database connections to drop before long subprocess operations
+          **SerenAI Cloud Execution:**
+          - Run replications on SerenAI managed infrastructure (for SerenDB targets)
+          - Use `--local` flag for local execution to any PostgreSQL target
 
-          ### Installation
+          ### 📦 Installation
 
-          Download the appropriate binary for your platform:
+          **From crates.io:**
+          ```bash
+          cargo install database-replicator
+          ```
 
+          **Download binaries:**
           - **Linux (x64)**: `database-replicator-linux-x64-binary`
           - **macOS (Intel)**: `database-replicator-macos-x64-binary`
           - **macOS (Apple Silicon)**: `database-replicator-macos-arm64-binary`
-
-          Make the binary executable:
 
           ```bash
           chmod +x database-replicator-*-binary
           ./database-replicator-*-binary --version
           ```
 
-          ### Upgrade Recommendation
+          ### 🔗 Links
 
-          **Recommended upgrade** for all users. This fix significantly improves reliability during long-running replications, especially over unstable network connections or when replicating large databases that may exceed connection timeouts.
+          - **Documentation**: https://github.com/serenorg/database-replicator#readme
+          - **Crates.io**: https://crates.io/crates/database-replicator
+          - **Issues**: https://github.com/serenorg/database-replicator/issues
 
-          **Full Changelog**: https://github.com/serenorg/database-replicator/compare/v4.2.3...${VERSION}
+          ### License
+
+          Apache License 2.0
           EOF
 
           # Create release with all binaries
