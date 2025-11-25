@@ -354,15 +354,15 @@ pub async fn init(
                             } else {
                                 // Database exists and has data
                                 let should_drop = if drop_existing {
-                                    // Auto-drop in automated mode with --drop-existing
+                                    // Force drop with --drop-existing flag
                                     true
                                 } else if skip_confirmation {
-                                    // In automated mode without --drop-existing, fail
-                                    bail!(
-                                        "Database '{}' already exists and contains data. \
-                                         Use --drop-existing to overwrite, or manually drop the database first.",
+                                    // Auto-confirm drop with --yes flag (non-interactive)
+                                    tracing::info!(
+                                        "  Auto-confirming drop for database '{}' (--yes flag)",
                                         db_info.name
                                     );
+                                    true
                                 } else {
                                     // Interactive mode: prompt user
                                     prompt_drop_database(&db_info.name)?
