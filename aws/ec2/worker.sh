@@ -98,18 +98,49 @@ update_job_status() {
 
 # Update progress in DynamoDB
 update_progress() {
-    local current_db="$1"
-    local completed="$2"
-    local total="$3"
+    local message="$1"
+    local current_db="${2:-}"
+    local completed="${3:-0}"
+    local total="${4:-1}"
 
-    local progress_json="{\"current_database\": \"$current_db\", \"databases_completed\": $completed, \"databases_total\": $total}"
+    # Build progress JSON with message
+    local progress_json="{\"message\": \"$message\""
+    if [ -n "$current_db" ]; then
+        progress_json="$progress_json, \"current_database\": \"$current_db\""
+    fi
+    progress_json="$progress_json, \"databases_completed\": $completed, \"databases_total\": $total}"
 
     aws dynamodb update-item \
         --region "$AWS_REGION" \
         --table-name "$DYNAMODB_TABLE" \
         --key "{\"job_id\": {\"S\": \"$JOB_ID\"}}" \
         --update-expression "SET progress = :progress" \
-        --expression-attribute-values "{\":progress\": {\"S\": \"$progress_json\"}}"
+        --expression-attribute-values "{\":progress\": {\"S\": \"$progress_json\"}}" \
+        2>&1 || log "WARNING: Failed to update progress"
+}
+
+# Parse replicator output and update progress
+parse_and_update_progress() {
+    local last_update=0
+    local update_interval=2  # Update every 2 seconds to avoid rate limiting
+
+    while IFS= read -r line; do
+        # Forward all output to logs
+        echo "$line"
+
+        # Extract INFO messages that indicate progress
+        if echo "$line" | grep -q " INFO "; then
+            # Extract the message part after the timestamp and log level
+            local message=$(echo "$line" | sed -E 's/.*INFO[[:space:]]+//')
+
+            # Only update DynamoDB periodically to avoid rate limiting
+            local now=$(date +%s)
+            if [ $((now - last_update)) -ge $update_interval ]; then
+                update_progress "$message"
+                last_update=$now
+            fi
+        fi
+    done
 }
 
 # Terminate this instance
@@ -252,13 +283,18 @@ main() {
     CMD_DISPLAY=("$REPLICATOR_BIN" "$COMMAND" "--source" "$(redact_url "$SOURCE_URL")" "--target" "$(redact_url "$TARGET_URL")" "--yes")
     log "Command: ${CMD_DISPLAY[*]}"
 
-    if "${CMD[@]}"; then
+    # Pipe output through progress parser (combine stdout and stderr)
+    set +e  # Temporarily disable exit on error to capture exit code
+    "${CMD[@]}" 2>&1 | parse_and_update_progress
+    EXIT_CODE=${PIPESTATUS[0]}
+    set -e
+
+    if [ $EXIT_CODE -eq 0 ]; then
         log "Replication completed successfully"
         # Kill the timeout watchdog since job completed
         kill "$WATCHDOG_PID" 2>/dev/null || true
         update_job_status "completed"
     else
-        EXIT_CODE=$?
         log "Replication failed with exit code: $EXIT_CODE"
         # Kill the timeout watchdog since job completed (failed)
         kill "$WATCHDOG_PID" 2>/dev/null || true

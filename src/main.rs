@@ -507,12 +507,17 @@ async fn init_remote(
             "provisioning" => println!("Status: provisioning EC2 instance..."),
             "running" => {
                 if let Some(ref progress) = status.progress {
-                    println!(
-                        "Status: running ({}/{}): {}",
-                        progress.databases_completed,
-                        progress.databases_total,
-                        progress.current_database.as_deref().unwrap_or("unknown")
-                    );
+                    // Display detailed message if available
+                    if let Some(ref message) = progress.message {
+                        println!("{}", message);
+                    } else {
+                        println!(
+                            "Status: running ({}/{}): {}",
+                            progress.databases_completed,
+                            progress.databases_total,
+                            progress.current_database.as_deref().unwrap_or("unknown")
+                        );
+                    }
                 } else {
                     println!("Status: running...");
                 }

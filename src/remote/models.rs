@@ -44,4 +44,5 @@ pub struct ProgressInfo {
     pub current_database: Option<String>,
     pub databases_completed: usize,
     pub databases_total: usize,
+    pub message: Option<String>,
 }
