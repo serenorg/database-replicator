@@ -456,6 +456,14 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 Please report bugs and feature requests on the [GitHub Issues](https://github.com/serenorg/database-replicator/issues) page.
 
+## About SerenAI
+
+SerenAI is building infrastructure for AI agent data access. Agents are hungry for data and they will pay to access the data in your database. We're creating the layer that powers secure, compliant enterprise data commerce and data delivery for AI agents. SerenAI includes agent identity verification, persistent memory via SerenDB, data access control, tiered data-access pricing, SOC2-ready compliance systems, as well as micropayments and settlement.
+
+Our team brings decades of experience building enterprise databases and security systems. We believe AI agents need to pay to access your data.
+
+**Get in touch:** [hello@serendb.com](mailto:hello@serendb.com) | [serendb.com](https://serendb.com)
+
 ## License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
