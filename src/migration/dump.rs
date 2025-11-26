@@ -65,6 +65,7 @@ pub async fn dump_globals(source_url: &str, output_path: &str) -> Result<()> {
         Duration::from_secs(1), // Start with 1 second delay
         "pg_dumpall (dump globals)",
     )
+    .await
     .context(
         "pg_dumpall failed to dump global objects.\n\
          \n\
@@ -172,6 +173,7 @@ pub async fn dump_schema(
         Duration::from_secs(1), // Start with 1 second delay
         "pg_dump (dump schema)",
     )
+    .await
     .with_context(|| {
         format!(
             "pg_dump failed to dump schema for database '{}'.\n\
@@ -299,6 +301,7 @@ pub async fn dump_data(
         Duration::from_secs(1), // Start with 1 second delay
         "pg_dump (dump data)",
     )
+    .await
     .with_context(|| {
         format!(
             "pg_dump failed to dump data for database '{}'.\n\

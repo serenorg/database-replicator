@@ -9,6 +9,13 @@ use database_replicator::commands;
 #[command(about = "Universal database-to-PostgreSQL replication CLI", long_about = None)]
 #[command(version)]
 struct Cli {
+    /// Allow self-signed TLS certificates (insecure - use only for testing)
+    #[arg(
+        long = "allow-self-signed-certs",
+        global = true,
+        default_value_t = false
+    )]
+    allow_self_signed_certs: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -180,6 +187,9 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let cli = Cli::parse();
+
+    // Initialize TLS policy using thread-safe OnceLock
+    database_replicator::postgres::connection::init_tls_policy(cli.allow_self_signed_certs);
 
     match cli.command {
         Commands::Validate {
@@ -402,7 +412,7 @@ async fn init_remote(
     drop_existing: bool,
     no_sync: bool,
     seren_api: String,
-    _job_timeout: u64,
+    job_timeout: u64,
 ) -> anyhow::Result<()> {
     use database_replicator::migration;
     use database_replicator::postgres;
@@ -466,6 +476,8 @@ async fn init_remote(
     } else {
         Some(FilterSpec {
             include_databases,
+            exclude_databases,
+            include_tables,
             exclude_tables,
         })
     };
@@ -481,7 +493,12 @@ async fn init_remote(
         "estimated_size_bytes".to_string(),
         serde_json::Value::Number(serde_json::Number::from(estimated_size_bytes)),
     );
-    // Note: "yes" and "job_timeout" are client-side only options, not sent to server
+    // Optional timeout hint for remote orchestrator
+    options.insert(
+        "job_timeout_seconds".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(job_timeout as i64)),
+    );
+    // Note: "yes" is client-side only, not sent to server
 
     let job_spec = JobSpec {
         version: "1.0".to_string(),

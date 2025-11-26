@@ -95,7 +95,7 @@ pub fn get_table_row_count(conn: &Connection, table: &str) -> Result<usize> {
     tracing::debug!("Getting row count for table '{}'", table);
 
     // Note: table name is validated above, so it's safe to use in SQL
-    let query = format!("SELECT COUNT(*) FROM \"{}\"", table);
+    let query = format!("SELECT COUNT(*) FROM {}", crate::utils::quote_ident(table));
 
     let count: i64 = conn
         .query_row(&query, [], |row| row.get(0))
@@ -151,7 +151,7 @@ pub fn read_table_data(
     tracing::info!("Reading all data from table '{}'", table);
 
     // Note: table name is validated above
-    let query = format!("SELECT * FROM \"{}\"", table);
+    let query = format!("SELECT * FROM {}", crate::utils::quote_ident(table));
 
     let mut stmt = conn
         .prepare(&query)

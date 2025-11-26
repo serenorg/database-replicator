@@ -330,7 +330,10 @@ pub async fn init(
                 .with_context(|| format!("Invalid database name: '{}'", db_info.name))?;
 
             // Try to create database atomically (avoids TOCTOU vulnerability)
-            let create_query = format!("CREATE DATABASE \"{}\"", db_info.name);
+            let create_query = format!(
+                "CREATE DATABASE {}",
+                crate::utils::quote_ident(&db_info.name)
+            );
             match target_client.execute(&create_query, &[]).await {
                 Ok(_) => {
                     tracing::info!("  Created database '{}'", db_info.name);
@@ -372,8 +375,10 @@ pub async fn init(
                                     drop_database_if_exists(&target_client, &db_info.name).await?;
 
                                     // Recreate the database
-                                    let create_query =
-                                        format!("CREATE DATABASE \"{}\"", db_info.name);
+                                    let create_query = format!(
+                                        "CREATE DATABASE {}",
+                                        crate::utils::quote_ident(&db_info.name)
+                                    );
                                     target_client
                                         .execute(&create_query, &[])
                                         .await
@@ -666,7 +671,10 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
     target_conn.execute(terminate_query, &[&db_name]).await?;
 
     // Drop the database
-    let drop_query = format!("DROP DATABASE IF EXISTS \"{}\"", db_name);
+    let drop_query = format!(
+        "DROP DATABASE IF EXISTS {}",
+        crate::utils::quote_ident(db_name)
+    );
     target_conn
         .execute(&drop_query, &[])
         .await

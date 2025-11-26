@@ -39,7 +39,10 @@ pub async fn create_publication(
     tracing::info!("Creating publication '{}'...", publication_name);
 
     if filter.is_empty() {
-        let query = format!("CREATE PUBLICATION \"{}\" FOR ALL TABLES", publication_name);
+        let query = format!(
+            "CREATE PUBLICATION {} FOR ALL TABLES",
+            crate::utils::quote_ident(publication_name)
+        );
         return execute_publication_query(client, publication_name, &query).await;
     }
 
@@ -121,8 +124,8 @@ pub async fn create_publication(
     );
 
     let query = format!(
-        "CREATE PUBLICATION \"{}\" FOR TABLE {}",
-        publication_name,
+        "CREATE PUBLICATION {} FOR TABLE {}",
+        crate::utils::quote_ident(publication_name),
         clauses.join(", ")
     );
 
@@ -218,7 +221,10 @@ pub async fn drop_publication(client: &Client, publication_name: &str) -> Result
 
     tracing::info!("Dropping publication '{}'...", publication_name);
 
-    let query = format!("DROP PUBLICATION IF EXISTS \"{}\"", publication_name);
+    let query = format!(
+        "DROP PUBLICATION IF EXISTS {}",
+        crate::utils::quote_ident(publication_name)
+    );
 
     client
         .execute(&query, &[])

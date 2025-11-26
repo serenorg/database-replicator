@@ -261,7 +261,7 @@ where
 /// # use std::time::Duration;
 /// # use std::process::Command;
 /// # use database_replicator::utils::retry_subprocess_with_backoff;
-/// # fn example() -> Result<()> {
+/// # async fn example() -> Result<()> {
 /// retry_subprocess_with_backoff(
 ///     || {
 ///         let mut cmd = Command::new("psql");
@@ -271,11 +271,11 @@ where
 ///     3,  // Try up to 3 times
 ///     Duration::from_secs(1),  // Start with 1s delay
 ///     "psql"
-/// )?;
+/// ).await?;
 /// # Ok(())
 /// # }
 /// ```
-pub fn retry_subprocess_with_backoff<F>(
+pub async fn retry_subprocess_with_backoff<F>(
     mut operation: F,
     max_retries: u32,
     initial_delay: Duration,
@@ -311,7 +311,7 @@ where
                             max_retries + 1,
                             delay
                         );
-                        std::thread::sleep(delay);
+                        tokio::time::sleep(delay).await;
                         delay *= 2; // Exponential backoff
                     }
                 }
@@ -328,7 +328,7 @@ where
                         last_error.as_ref().unwrap(),
                         delay
                     );
-                    std::thread::sleep(delay);
+                    tokio::time::sleep(delay).await;
                     delay *= 2; // Exponential backoff
                 }
             }
@@ -490,6 +490,57 @@ pub fn quote_ident(identifier: &str) -> String {
     quoted
 }
 
+/// Quote a SQL string literal (for use in SQL statements)
+///
+/// Escapes single quotes by doubling them and wraps the string in single quotes.
+/// Use this for string values in SQL, not for identifiers.
+///
+/// # Examples
+///
+/// ```
+/// use database_replicator::utils::quote_literal;
+/// assert_eq!(quote_literal("hello"), "'hello'");
+/// assert_eq!(quote_literal("it's"), "'it''s'");
+/// assert_eq!(quote_literal(""), "''");
+/// ```
+pub fn quote_literal(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for ch in value.chars() {
+        if ch == '\'' {
+            quoted.push('\'');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('\'');
+    quoted
+}
+
+/// Quote a MySQL identifier (database, table, column)
+///
+/// MySQL uses backticks for identifier quoting. Escapes embedded backticks
+/// by doubling them.
+///
+/// # Examples
+///
+/// ```
+/// use database_replicator::utils::quote_mysql_ident;
+/// assert_eq!(quote_mysql_ident("users"), "`users`");
+/// assert_eq!(quote_mysql_ident("user`name"), "`user``name`");
+/// ```
+pub fn quote_mysql_ident(identifier: &str) -> String {
+    let mut quoted = String::with_capacity(identifier.len() + 2);
+    quoted.push('`');
+    for ch in identifier.chars() {
+        if ch == '`' {
+            quoted.push('`');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('`');
+    quoted
+}
+
 /// Validate that source and target URLs are different to prevent accidental data loss
 ///
 /// Compares two PostgreSQL connection URLs to ensure they point to different databases.
@@ -561,7 +612,18 @@ pub fn validate_source_target_different(source_url: &str, target_url: &str) -> R
         && source_parts.user == target_parts.user
     {
         bail!(
-            "Source and target URLs point to the same database!\\n\\\n             \\n\\\n             This would cause DATA LOSS - the target would overwrite the source.\\n\\\n             \\n\\\n             Source: {}@{}:{}/{}\\n\\\n             Target: {}@{}:{}/{}\\n\\\n             \\n\\\n             Please ensure source and target are different databases.\\n\\\n             Common causes:\\n\\\n             - Copy-paste error in connection strings\\n\\\n             - Wrong environment variables (e.g., SOURCE_URL == TARGET_URL)\\n\\\n             - Typo in database name or host",
+            "Source and target URLs point to the same database!\n\
+             \n\
+             This would cause DATA LOSS - the target would overwrite the source.\n\
+             \n\
+             Source: {}@{}:{}/{}\n\
+             Target: {}@{}:{}/{}\n\
+             \n\
+             Please ensure source and target are different databases.\n\
+             Common causes:\n\
+             - Copy-paste error in connection strings\n\
+             - Wrong environment variables (e.g., SOURCE_URL == TARGET_URL)\n\
+             - Typo in database name or host",
             source_parts.user.as_deref().unwrap_or("(no user)"),
             source_parts.host,
             source_parts.port,
