@@ -266,6 +266,8 @@ async fn test_remote_job_submission_with_filters() {
     // Create a job spec with database filters
     let filter = database_replicator::remote::FilterSpec {
         include_databases: Some(vec!["postgres".to_string()]),
+        exclude_databases: None,
+        include_tables: None,
         exclude_tables: None,
     };
 

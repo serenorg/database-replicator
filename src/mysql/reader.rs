@@ -86,7 +86,11 @@ pub async fn get_table_row_count(
     tracing::debug!("Getting row count for table '{}.{}'", db_name, table_name);
 
     // Use backticks for identifiers to allow reserved words
-    let query = format!("SELECT COUNT(*) FROM `{}`.`{}`", db_name, table_name);
+    let query = format!(
+        "SELECT COUNT(*) FROM {}.{}",
+        crate::utils::quote_mysql_ident(db_name),
+        crate::utils::quote_mysql_ident(table_name)
+    );
 
     let count: Option<u64> = conn
         .query_first(&query)
@@ -137,7 +141,11 @@ pub async fn read_table_data(conn: &mut Conn, db_name: &str, table_name: &str) -
     tracing::info!("Reading all rows from table '{}.{}'", db_name, table_name);
 
     // Use backticks for identifiers
-    let query = format!("SELECT * FROM `{}`.`{}`", db_name, table_name);
+    let query = format!(
+        "SELECT * FROM {}.{}",
+        crate::utils::quote_mysql_ident(db_name),
+        crate::utils::quote_mysql_ident(table_name)
+    );
 
     let rows: Vec<Row> = conn
         .query(&query)

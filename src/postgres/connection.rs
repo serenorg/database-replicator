@@ -5,8 +5,27 @@ use crate::utils;
 use anyhow::{Context, Result};
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
+use std::sync::OnceLock;
 use std::time::Duration;
 use tokio_postgres::Client;
+
+/// Thread-safe storage for TLS configuration set at startup
+static ALLOW_SELF_SIGNED_CERTS: OnceLock<bool> = OnceLock::new();
+
+/// Initialize the TLS certificate policy (call once at startup)
+///
+/// This must be called before any database connections are made.
+/// It is thread-safe and will only set the value once.
+///
+/// # Arguments
+///
+/// * `allow` - If true, accept self-signed/invalid TLS certificates (insecure)
+pub fn init_tls_policy(allow: bool) {
+    let _ = ALLOW_SELF_SIGNED_CERTS.set(allow);
+    if allow {
+        tracing::warn!("TLS policy: Allowing self-signed/invalid certificates (insecure)");
+    }
+}
 
 /// Add TCP keepalive parameters to a PostgreSQL connection string
 ///
@@ -130,20 +149,11 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
     )?;
 
     // Set up TLS connector for cloud connections
-    // By default, require valid certificates. Allow opt-in for self-signed/invalid certs via env.
-    let allow_self_signed = std::env::var("SEREN_ALLOW_SELF_SIGNED_CERTS")
-        .ok()
-        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
-        .unwrap_or(false)
-        // Backward compatibility with older env name
-        || std::env::var("SEREN_ALLOW_INVALID_CERTS")
-            .ok()
-            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
-            .unwrap_or(false);
+    // By default, require valid certificates. Allow opt-in via init_tls_policy() called at startup.
+    let allow_self_signed = ALLOW_SELF_SIGNED_CERTS.get().copied().unwrap_or(false);
 
     let mut tls_builder = TlsConnector::builder();
     if allow_self_signed {
-        tracing::warn!("Accepting self-signed/invalid TLS certificates");
         tls_builder.danger_accept_invalid_certs(true);
     }
 

@@ -50,12 +50,11 @@ pub async fn create_subscription(
         "  To avoid storing passwords, configure .pgpass on the target PostgreSQL server"
     );
 
-    // Escape single quotes in connection string to avoid breaking SQL literal
-    let escaped_conn = source_connection_string.replace('\'', "''");
-
     let query = format!(
-        "CREATE SUBSCRIPTION \"{}\" CONNECTION '{}' PUBLICATION \"{}\"",
-        subscription_name, escaped_conn, publication_name
+        "CREATE SUBSCRIPTION {} CONNECTION {} PUBLICATION {}",
+        crate::utils::quote_ident(subscription_name),
+        crate::utils::quote_literal(source_connection_string),
+        crate::utils::quote_ident(publication_name)
     );
 
     match client.execute(&query, &[]).await {
@@ -158,7 +157,10 @@ pub async fn drop_subscription(client: &Client, subscription_name: &str) -> Resu
 
     tracing::info!("Dropping subscription '{}'...", subscription_name);
 
-    let query = format!("DROP SUBSCRIPTION IF EXISTS \"{}\"", subscription_name);
+    let query = format!(
+        "DROP SUBSCRIPTION IF EXISTS {}",
+        crate::utils::quote_ident(subscription_name)
+    );
 
     client.execute(&query, &[]).await.context(format!(
         "Failed to drop subscription '{}'",

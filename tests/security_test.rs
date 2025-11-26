@@ -787,10 +787,7 @@ fn test_mysql_url_with_special_chars_in_password() {
 fn test_mysql_error_messages_dont_leak_credentials() {
     use database_replicator::mysql;
 
-    // SECURITY NOTE: Current implementation includes full URL in error messages
-    // This test documents the current behavior - ideally this should be fixed
-    // to sanitize URLs before including in error messages
-
+    // SECURITY: Error messages should NOT leak passwords or full URLs
     let url_with_password = "not-mysql://admin:secretpass@host:3306/db";
 
     let result = mysql::validate_mysql_url(url_with_password);
@@ -798,22 +795,23 @@ fn test_mysql_error_messages_dont_leak_credentials() {
 
     let error_msg = result.unwrap_err().to_string();
 
-    // KNOWN ISSUE: Error message currently contains the full URL including password
-    // This test verifies current behavior, but this should be improved
+    // Verify password is NOT leaked in error message
     assert!(
-        error_msg.contains("secretpass") || error_msg.contains("not-mysql://"),
-        "Error message currently includes full URL (known issue)"
+        !error_msg.contains("secretpass"),
+        "Error message should not contain password: {error_msg}"
+    );
+
+    // Verify full URL is NOT leaked in error message
+    assert!(
+        !error_msg.contains("not-mysql://"),
+        "Error message should not contain full malformed URL: {error_msg}"
     );
 
     // Verify it does explain the validation failure
     assert!(
         error_msg.contains("mysql://") || error_msg.contains("Invalid"),
-        "Error should explain validation requirement"
+        "Error should explain validation requirement: {error_msg}"
     );
-
-    // TODO: Enhance validate_mysql_url to sanitize URLs in error messages
-    // Expected: "Invalid MySQL connection string. Must start with 'mysql://'"
-    // (without exposing the actual malformed URL)
 }
 
 // ----------------------------------------------------------------------------

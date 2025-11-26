@@ -261,7 +261,7 @@ where
 /// # use std::time::Duration;
 /// # use std::process::Command;
 /// # use database_replicator::utils::retry_subprocess_with_backoff;
-/// # fn example() -> Result<()> {
+/// # async fn example() -> Result<()> {
 /// retry_subprocess_with_backoff(
 ///     || {
 ///         let mut cmd = Command::new("psql");
@@ -311,7 +311,7 @@ where
                             max_retries + 1,
                             delay
                         );
-                        std::thread::sleep(delay);
+                        tokio::time::sleep(delay).await;
                         delay *= 2; // Exponential backoff
                     }
                 }
@@ -487,6 +487,57 @@ pub fn quote_ident(identifier: &str) -> String {
         quoted.push(ch);
     }
     quoted.push('"');
+    quoted
+}
+
+/// Quote a SQL string literal (for use in SQL statements)
+///
+/// Escapes single quotes by doubling them and wraps the string in single quotes.
+/// Use this for string values in SQL, not for identifiers.
+///
+/// # Examples
+///
+/// ```
+/// use database_replicator::utils::quote_literal;
+/// assert_eq!(quote_literal("hello"), "'hello'");
+/// assert_eq!(quote_literal("it's"), "'it''s'");
+/// assert_eq!(quote_literal(""), "''");
+/// ```
+pub fn quote_literal(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('\'');
+    for ch in value.chars() {
+        if ch == '\'' {
+            quoted.push('\'');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('\'');
+    quoted
+}
+
+/// Quote a MySQL identifier (database, table, column)
+///
+/// MySQL uses backticks for identifier quoting. Escapes embedded backticks
+/// by doubling them.
+///
+/// # Examples
+///
+/// ```
+/// use database_replicator::utils::quote_mysql_ident;
+/// assert_eq!(quote_mysql_ident("users"), "`users`");
+/// assert_eq!(quote_mysql_ident("user`name"), "`user``name`");
+/// ```
+pub fn quote_mysql_ident(identifier: &str) -> String {
+    let mut quoted = String::with_capacity(identifier.len() + 2);
+    quoted.push('`');
+    for ch in identifier.chars() {
+        if ch == '`' {
+            quoted.push('`');
+        }
+        quoted.push(ch);
+    }
+    quoted.push('`');
     quoted
 }
 
