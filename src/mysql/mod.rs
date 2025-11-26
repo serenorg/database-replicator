@@ -44,11 +44,7 @@ pub fn validate_mysql_url(connection_string: &str) -> Result<String> {
     }
 
     if !connection_string.starts_with("mysql://") {
-        bail!(
-            "Invalid MySQL connection string '{}'. \
-             Must start with 'mysql://'",
-            connection_string
-        );
+        bail!("Invalid MySQL connection string. Must start with 'mysql://'");
     }
 
     tracing::debug!("Validated MySQL connection string");

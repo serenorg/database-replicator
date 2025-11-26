@@ -34,41 +34,47 @@ pub async fn get_replication_lag(
     client: &Client,
     subscription_name: Option<&str>,
 ) -> Result<Vec<SourceReplicationStats>> {
-    let query = if let Some(sub_name) = subscription_name {
-        format!(
-            "SELECT
-                application_name,
-                state,
-                sent_lsn::text,
-                write_lsn::text,
-                flush_lsn::text,
-                replay_lsn::text,
-                EXTRACT(EPOCH FROM write_lag) * 1000 as write_lag_ms,
-                EXTRACT(EPOCH FROM flush_lag) * 1000 as flush_lag_ms,
-                EXTRACT(EPOCH FROM replay_lag) * 1000 as replay_lag_ms
-            FROM pg_stat_replication
-            WHERE application_name = '{}'",
-            sub_name
-        )
-    } else {
-        "SELECT
-            application_name,
-            state,
-            sent_lsn::text,
-            write_lsn::text,
-            flush_lsn::text,
-            replay_lsn::text,
-            EXTRACT(EPOCH FROM write_lag) * 1000 as write_lag_ms,
-            EXTRACT(EPOCH FROM flush_lag) * 1000 as flush_lag_ms,
-            EXTRACT(EPOCH FROM replay_lag) * 1000 as replay_lag_ms
-        FROM pg_stat_replication"
-            .to_string()
-    };
+    if let Some(name) = subscription_name {
+        crate::utils::validate_postgres_identifier(name).context("Invalid subscription name")?;
+    }
 
-    let rows = client
-        .query(&query, &[])
-        .await
-        .context("Failed to query replication statistics")?;
+    let rows = if let Some(sub_name) = subscription_name {
+        client
+            .query(
+                "SELECT
+                    application_name,
+                    state,
+                    sent_lsn::text,
+                    write_lsn::text,
+                    flush_lsn::text,
+                    replay_lsn::text,
+                    EXTRACT(EPOCH FROM write_lag) * 1000 as write_lag_ms,
+                    EXTRACT(EPOCH FROM flush_lag) * 1000 as flush_lag_ms,
+                    EXTRACT(EPOCH FROM replay_lag) * 1000 as replay_lag_ms
+                FROM pg_stat_replication
+                WHERE application_name = $1",
+                &[&sub_name],
+            )
+            .await
+    } else {
+        client
+            .query(
+                "SELECT
+                    application_name,
+                    state,
+                    sent_lsn::text,
+                    write_lsn::text,
+                    flush_lsn::text,
+                    replay_lsn::text,
+                    EXTRACT(EPOCH FROM write_lag) * 1000 as write_lag_ms,
+                    EXTRACT(EPOCH FROM flush_lag) * 1000 as flush_lag_ms,
+                    EXTRACT(EPOCH FROM replay_lag) * 1000 as replay_lag_ms
+                FROM pg_stat_replication",
+                &[],
+            )
+            .await
+    }
+    .context("Failed to query replication statistics")?;
 
     let mut stats = Vec::new();
     for row in rows {
@@ -94,33 +100,39 @@ pub async fn get_subscription_status(
     client: &Client,
     subscription_name: Option<&str>,
 ) -> Result<Vec<SubscriptionStats>> {
-    let query = if let Some(sub_name) = subscription_name {
-        format!(
-            "SELECT
-                subname,
-                pid,
-                received_lsn::text,
-                latest_end_lsn::text,
-                srsubstate
-            FROM pg_stat_subscription
-            WHERE subname = '{}'",
-            sub_name
-        )
-    } else {
-        "SELECT
-            subname,
-            pid,
-            received_lsn::text,
-            latest_end_lsn::text,
-            srsubstate
-        FROM pg_stat_subscription"
-            .to_string()
-    };
+    if let Some(name) = subscription_name {
+        crate::utils::validate_postgres_identifier(name).context("Invalid subscription name")?;
+    }
 
-    let rows = client
-        .query(&query, &[])
-        .await
-        .context("Failed to query subscription statistics")?;
+    let rows = if let Some(sub_name) = subscription_name {
+        client
+            .query(
+                "SELECT
+                    subname,
+                    pid,
+                    received_lsn::text,
+                    latest_end_lsn::text,
+                    srsubstate
+                FROM pg_stat_subscription
+                WHERE subname = $1",
+                &[&sub_name],
+            )
+            .await
+    } else {
+        client
+            .query(
+                "SELECT
+                    subname,
+                    pid,
+                    received_lsn::text,
+                    latest_end_lsn::text,
+                    srsubstate
+                FROM pg_stat_subscription",
+                &[],
+            )
+            .await
+    }
+    .context("Failed to query subscription statistics")?;
 
     let mut stats = Vec::new();
     for row in rows {

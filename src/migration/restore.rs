@@ -62,7 +62,8 @@ pub async fn restore_globals(target_url: &str, input_path: &str) -> Result<()> {
         3,                      // Max 3 retries
         Duration::from_secs(1), // Start with 1 second delay
         "psql (restore globals)",
-    );
+    )
+    .await;
 
     // Handle result - don't fail on warnings for global objects
     match result {
@@ -136,6 +137,7 @@ pub async fn restore_schema(target_url: &str, input_path: &str) -> Result<()> {
         Duration::from_secs(1), // Start with 1 second delay
         "psql (restore schema)",
     )
+    .await
     .context(
         "Schema restoration failed.\n\
          \n\
@@ -228,6 +230,7 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
         Duration::from_secs(1), // Start with 1 second delay
         "pg_restore (restore data)",
     )
+    .await
     .context(
         "Data restoration failed.\n\
          \n\

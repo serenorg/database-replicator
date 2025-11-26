@@ -130,10 +130,24 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
     )?;
 
     // Set up TLS connector for cloud connections
-    // TEMPORARY: Accept invalid certs to debug TLS issues
-    // TODO: Remove this once we identify the certificate validation issue
-    let tls_connector = TlsConnector::builder()
-        .danger_accept_invalid_certs(true)
+    // By default, require valid certificates. Allow opt-in for self-signed/invalid certs via env.
+    let allow_self_signed = std::env::var("SEREN_ALLOW_SELF_SIGNED_CERTS")
+        .ok()
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+        // Backward compatibility with older env name
+        || std::env::var("SEREN_ALLOW_INVALID_CERTS")
+            .ok()
+            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+
+    let mut tls_builder = TlsConnector::builder();
+    if allow_self_signed {
+        tracing::warn!("Accepting self-signed/invalid TLS certificates");
+        tls_builder.danger_accept_invalid_certs(true);
+    }
+
+    let tls_connector = tls_builder
         .build()
         .context("Failed to build TLS connector")?;
     let tls = MakeTlsConnector::new(tls_connector);

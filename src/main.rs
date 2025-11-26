@@ -9,6 +9,9 @@ use database_replicator::commands;
 #[command(about = "Universal database-to-PostgreSQL replication CLI", long_about = None)]
 #[command(version)]
 struct Cli {
+    /// Allow self-signed TLS certificates. Also honors SEREN_ALLOW_SELF_SIGNED_CERTS=1
+    #[arg(long = "allow-self-signed-certs", global = true, default_value_t = false)]
+    allow_self_signed_certs: bool,
     #[command(subcommand)]
     command: Commands,
 }
@@ -180,6 +183,24 @@ async fn main() -> anyhow::Result<()> {
     }
 
     let cli = Cli::parse();
+
+    // Honor allow-self-signed flag or env var by setting env consumed in postgres::connection
+    let allow_self_signed_env = std::env::var("SEREN_ALLOW_SELF_SIGNED_CERTS")
+        .ok()
+        .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+        .unwrap_or(false)
+        // Backward compatibility with older env name
+        || std::env::var("SEREN_ALLOW_INVALID_CERTS")
+            .ok()
+            .map(|v| matches!(v.to_lowercase().as_str(), "1" | "true" | "yes"))
+            .unwrap_or(false);
+
+    if cli.allow_self_signed_certs || allow_self_signed_env {
+        // Set both names for compatibility
+        std::env::set_var("SEREN_ALLOW_SELF_SIGNED_CERTS", "1");
+        std::env::set_var("SEREN_ALLOW_INVALID_CERTS", "1");
+        tracing::warn!("Allowing self-signed/invalid TLS certificates (insecure)");
+    }
 
     match cli.command {
         Commands::Validate {
@@ -402,7 +423,7 @@ async fn init_remote(
     drop_existing: bool,
     no_sync: bool,
     seren_api: String,
-    _job_timeout: u64,
+    job_timeout: u64,
 ) -> anyhow::Result<()> {
     use database_replicator::migration;
     use database_replicator::postgres;
@@ -466,6 +487,8 @@ async fn init_remote(
     } else {
         Some(FilterSpec {
             include_databases,
+            exclude_databases,
+            include_tables,
             exclude_tables,
         })
     };
@@ -481,7 +504,12 @@ async fn init_remote(
         "estimated_size_bytes".to_string(),
         serde_json::Value::Number(serde_json::Number::from(estimated_size_bytes)),
     );
-    // Note: "yes" and "job_timeout" are client-side only options, not sent to server
+    // Optional timeout hint for remote orchestrator
+    options.insert(
+        "job_timeout_seconds".to_string(),
+        serde_json::Value::Number(serde_json::Number::from(job_timeout as i64)),
+    );
+    // Note: "yes" is client-side only, not sent to server
 
     let job_spec = JobSpec {
         version: "1.0".to_string(),

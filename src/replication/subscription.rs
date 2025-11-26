@@ -50,9 +50,12 @@ pub async fn create_subscription(
         "  To avoid storing passwords, configure .pgpass on the target PostgreSQL server"
     );
 
+    // Escape single quotes in connection string to avoid breaking SQL literal
+    let escaped_conn = source_connection_string.replace('\'', "''");
+
     let query = format!(
         "CREATE SUBSCRIPTION \"{}\" CONNECTION '{}' PUBLICATION \"{}\"",
-        subscription_name, source_connection_string, publication_name
+        subscription_name, escaped_conn, publication_name
     );
 
     match client.execute(&query, &[]).await {

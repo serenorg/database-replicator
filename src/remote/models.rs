@@ -19,6 +19,8 @@ pub struct JobSpec {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FilterSpec {
     pub include_databases: Option<Vec<String>>,
+    pub exclude_databases: Option<Vec<String>>,
+    pub include_tables: Option<Vec<String>>,
     pub exclude_tables: Option<Vec<String>>,
 }
 

@@ -271,11 +271,11 @@ where
 ///     3,  // Try up to 3 times
 ///     Duration::from_secs(1),  // Start with 1s delay
 ///     "psql"
-/// )?;
+/// ).await?;
 /// # Ok(())
 /// # }
 /// ```
-pub fn retry_subprocess_with_backoff<F>(
+pub async fn retry_subprocess_with_backoff<F>(
     mut operation: F,
     max_retries: u32,
     initial_delay: Duration,
@@ -328,7 +328,7 @@ where
                         last_error.as_ref().unwrap(),
                         delay
                     );
-                    std::thread::sleep(delay);
+                    tokio::time::sleep(delay).await;
                     delay *= 2; // Exponential backoff
                 }
             }
@@ -561,7 +561,18 @@ pub fn validate_source_target_different(source_url: &str, target_url: &str) -> R
         && source_parts.user == target_parts.user
     {
         bail!(
-            "Source and target URLs point to the same database!\\n\\\n             \\n\\\n             This would cause DATA LOSS - the target would overwrite the source.\\n\\\n             \\n\\\n             Source: {}@{}:{}/{}\\n\\\n             Target: {}@{}:{}/{}\\n\\\n             \\n\\\n             Please ensure source and target are different databases.\\n\\\n             Common causes:\\n\\\n             - Copy-paste error in connection strings\\n\\\n             - Wrong environment variables (e.g., SOURCE_URL == TARGET_URL)\\n\\\n             - Typo in database name or host",
+            "Source and target URLs point to the same database!\n\
+             \n\
+             This would cause DATA LOSS - the target would overwrite the source.\n\
+             \n\
+             Source: {}@{}:{}/{}\n\
+             Target: {}@{}:{}/{}\n\
+             \n\
+             Please ensure source and target are different databases.\n\
+             Common causes:\n\
+             - Copy-paste error in connection strings\n\
+             - Wrong environment variables (e.g., SOURCE_URL == TARGET_URL)\n\
+             - Typo in database name or host",
             source_parts.user.as_deref().unwrap_or("(no user)"),
             source_parts.host,
             source_parts.port,
