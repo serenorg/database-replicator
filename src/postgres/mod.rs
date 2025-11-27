@@ -11,5 +11,6 @@ pub use extensions::{
     AvailableExtension, Extension,
 };
 pub use privileges::{
-    check_source_privileges, check_target_privileges, check_wal_level, PrivilegeCheck,
+    check_source_privileges, check_table_select_permissions, check_target_privileges,
+    check_wal_level, PrivilegeCheck, TablePermissionCheck,
 };

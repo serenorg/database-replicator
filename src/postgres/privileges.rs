@@ -141,6 +141,98 @@ pub async fn check_wal_level(client: &Client) -> Result<String> {
     Ok(wal_level)
 }
 
+/// Result of table-level permission check
+#[derive(Debug, Clone)]
+pub struct TablePermissionCheck {
+    /// Tables the user CAN read (has SELECT privilege)
+    pub accessible_tables: Vec<String>,
+    /// Tables the user CANNOT read (missing SELECT privilege)
+    pub inaccessible_tables: Vec<String>,
+}
+
+impl TablePermissionCheck {
+    /// Returns true if user has SELECT on all tables
+    pub fn all_accessible(&self) -> bool {
+        self.inaccessible_tables.is_empty()
+    }
+
+    /// Count of inaccessible tables
+    pub fn inaccessible_count(&self) -> usize {
+        self.inaccessible_tables.len()
+    }
+}
+
+/// Check SELECT permission on all user tables in a database
+///
+/// Queries pg_tables to find all user tables (excluding pg_catalog and
+/// information_schema) and checks if current user has SELECT privilege.
+///
+/// # Arguments
+///
+/// * `client` - Connected PostgreSQL client (must be connected to the target database)
+///
+/// # Returns
+///
+/// Returns `TablePermissionCheck` with lists of accessible and inaccessible tables.
+///
+/// # Errors
+///
+/// Returns an error if the permission query fails.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use anyhow::Result;
+/// # use database_replicator::postgres::{connect, check_table_select_permissions};
+/// # async fn example() -> Result<()> {
+/// let client = connect("postgresql://user:pass@localhost:5432/mydb").await?;
+/// let perms = check_table_select_permissions(&client).await?;
+/// if !perms.all_accessible() {
+///     println!("Cannot read {} tables", perms.inaccessible_count());
+/// }
+/// # Ok(())
+/// # }
+/// ```
+pub async fn check_table_select_permissions(client: &Client) -> Result<TablePermissionCheck> {
+    // Query all user tables and check SELECT permission
+    let query = r#"
+        SELECT
+            schemaname,
+            tablename,
+            has_table_privilege(current_user, quote_ident(schemaname) || '.' || quote_ident(tablename), 'SELECT') as has_select
+        FROM pg_tables
+        WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+        ORDER BY schemaname, tablename
+    "#;
+
+    let rows = client
+        .query(query, &[])
+        .await
+        .context("Failed to query table permissions")?;
+
+    let mut accessible = Vec::new();
+    let mut inaccessible = Vec::new();
+
+    for row in rows {
+        let schema: String = row.get(0);
+        let table: String = row.get(1);
+        let has_select: bool = row.get(2);
+
+        let full_name = format!("{}.{}", schema, table);
+
+        if has_select {
+            accessible.push(full_name);
+        } else {
+            inaccessible.push(full_name);
+        }
+    }
+
+    Ok(TablePermissionCheck {
+        accessible_tables: accessible,
+        inaccessible_tables: inaccessible,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,5 +266,36 @@ mod tests {
             privileges.has_create_db || privileges.is_superuser,
             "Target user should have CREATE DATABASE privilege or be superuser"
         );
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database connection
+    async fn test_check_table_select_permissions() {
+        let url = std::env::var("TEST_SOURCE_URL").expect("TEST_SOURCE_URL not set");
+        let client = connect(&url).await.unwrap();
+
+        let result = check_table_select_permissions(&client).await.unwrap();
+
+        // Just verify the function runs without error
+        // In a real database, results depend on actual permissions
+        println!("Accessible tables: {}", result.accessible_tables.len());
+        println!("Inaccessible tables: {}", result.inaccessible_tables.len());
+    }
+
+    #[test]
+    fn test_table_permission_check_struct() {
+        let check = TablePermissionCheck {
+            accessible_tables: vec!["public.users".to_string()],
+            inaccessible_tables: vec![],
+        };
+        assert!(check.all_accessible());
+        assert_eq!(check.inaccessible_count(), 0);
+
+        let check_with_issues = TablePermissionCheck {
+            accessible_tables: vec!["public.users".to_string()],
+            inaccessible_tables: vec!["public.secrets".to_string()],
+        };
+        assert!(!check_with_issues.all_accessible());
+        assert_eq!(check_with_issues.inaccessible_count(), 1);
     }
 }
