@@ -1143,6 +1143,113 @@ pub fn remove_managed_temp_dir(path: &std::path::Path) -> Result<()> {
     Ok(())
 }
 
+/// Check if a PostgreSQL URL points to a SerenDB instance
+///
+/// SerenDB hosts have domains ending with `.serendb.com`
+///
+/// # Arguments
+///
+/// * `url` - PostgreSQL connection string to check
+///
+/// # Returns
+///
+/// Returns `true` if the URL points to a SerenDB host.
+///
+/// # Examples
+///
+/// ```
+/// use database_replicator::utils::is_serendb_target;
+///
+/// assert!(is_serendb_target("postgresql://user:pass@db.serendb.com/mydb"));
+/// assert!(is_serendb_target("postgresql://user:pass@cluster-123.console.serendb.com/mydb"));
+/// assert!(!is_serendb_target("postgresql://user:pass@localhost/mydb"));
+/// assert!(!is_serendb_target("postgresql://user:pass@rds.amazonaws.com/mydb"));
+/// ```
+pub fn is_serendb_target(url: &str) -> bool {
+    match parse_postgres_url(url) {
+        Ok(parts) => parts.host.ends_with(".serendb.com") || parts.host == "serendb.com",
+        Err(_) => false,
+    }
+}
+
+/// Get the major version of a PostgreSQL client tool (pg_dump, psql, etc.)
+///
+/// Executes `<tool> --version` and parses the output.
+///
+/// # Arguments
+///
+/// * `tool` - Name of the tool (e.g., "pg_dump", "psql")
+///
+/// # Returns
+///
+/// The major version number (e.g., 16 for pg_dump 16.10)
+///
+/// # Errors
+///
+/// Returns an error if:
+/// - Tool is not found in PATH
+/// - Tool execution fails
+/// - Version output cannot be parsed
+///
+/// # Examples
+///
+/// ```no_run
+/// use database_replicator::utils::get_pg_tool_version;
+/// use anyhow::Result;
+///
+/// fn example() -> Result<()> {
+///     let version = get_pg_tool_version("pg_dump")?;
+///     println!("pg_dump major version: {}", version); // e.g., 16
+///     Ok(())
+/// }
+/// ```
+pub fn get_pg_tool_version(tool: &str) -> Result<u32> {
+    use std::process::Command;
+
+    let path = which(tool).with_context(|| format!("{} not found in PATH", tool))?;
+
+    let output = Command::new(&path)
+        .arg("--version")
+        .output()
+        .with_context(|| format!("Failed to execute {} --version", tool))?;
+
+    let version_str = String::from_utf8_lossy(&output.stdout);
+    parse_pg_version_string(&version_str)
+}
+
+/// Parse major version from PostgreSQL version string
+///
+/// Handles formats like:
+/// - "pg_dump (PostgreSQL) 16.10 (Ubuntu 16.10-0ubuntu0.24.04.1)"
+/// - "psql (PostgreSQL) 17.2"
+/// - "17.2 (Debian 17.2-1.pgdg120+1)"
+///
+/// # Arguments
+///
+/// * `version_str` - Version string output from a PostgreSQL tool
+///
+/// # Returns
+///
+/// The major version number (e.g., 16, 17)
+///
+/// # Errors
+///
+/// Returns an error if the version cannot be parsed.
+pub fn parse_pg_version_string(version_str: &str) -> Result<u32> {
+    // Look for version pattern: major.minor
+    for word in version_str.split_whitespace() {
+        if let Some(major_str) = word.split('.').next() {
+            if let Ok(major) = major_str.parse::<u32>() {
+                // Valid PostgreSQL versions are between 9 and 99
+                if (9..=99).contains(&major) {
+                    return Ok(major);
+                }
+            }
+        }
+    }
+    bail!("Could not parse PostgreSQL version from: {}", version_str)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1496,5 +1603,99 @@ mod tests {
         assert!(validate_postgres_identifier("my\ndb").is_err());
         assert!(validate_postgres_identifier("my\tdb").is_err());
         assert!(validate_postgres_identifier("my\x00db").is_err());
+    }
+
+    #[test]
+    fn test_is_serendb_target() {
+        // Positive cases - SerenDB hosts
+        assert!(is_serendb_target(
+            "postgresql://user:pass@db.serendb.com/mydb"
+        ));
+        assert!(is_serendb_target(
+            "postgresql://user:pass@cluster.console.serendb.com/mydb"
+        ));
+        assert!(is_serendb_target(
+            "postgres://u:p@x.serendb.com:5432/db?sslmode=require"
+        ));
+        assert!(is_serendb_target(
+            "postgresql://user:pass@serendb.com/mydb"
+        ));
+
+        // Negative cases - not SerenDB
+        assert!(!is_serendb_target(
+            "postgresql://user:pass@localhost/mydb"
+        ));
+        assert!(!is_serendb_target(
+            "postgresql://user:pass@rds.amazonaws.com/mydb"
+        ));
+        assert!(!is_serendb_target(
+            "postgresql://user:pass@neon.tech/mydb"
+        ));
+        // Domain spoofing attempt - should NOT match
+        assert!(!is_serendb_target(
+            "postgresql://user:pass@serendb.com.evil.com/mydb"
+        ));
+        assert!(!is_serendb_target(
+            "postgresql://user:pass@notserendb.com/mydb"
+        ));
+        // Invalid URL
+        assert!(!is_serendb_target("not-a-url"));
+    }
+
+    #[test]
+    fn test_parse_pg_version_string() {
+        // Standard pg_dump output
+        assert_eq!(
+            parse_pg_version_string(
+                "pg_dump (PostgreSQL) 16.10 (Ubuntu 16.10-0ubuntu0.24.04.1)"
+            )
+            .unwrap(),
+            16
+        );
+
+        // Standard psql output
+        assert_eq!(
+            parse_pg_version_string("psql (PostgreSQL) 17.2").unwrap(),
+            17
+        );
+
+        // pg_restore output
+        assert_eq!(
+            parse_pg_version_string("pg_restore (PostgreSQL) 15.4").unwrap(),
+            15
+        );
+
+        // Debian-style version
+        assert_eq!(
+            parse_pg_version_string("17.2 (Debian 17.2-1.pgdg120+1)").unwrap(),
+            17
+        );
+
+        // Should fail on invalid input
+        assert!(parse_pg_version_string("not a version").is_err());
+        assert!(parse_pg_version_string("version 1.2.3").is_err()); // 1 is < 9
+        assert!(parse_pg_version_string("").is_err());
+    }
+
+    #[test]
+    fn test_get_pg_tool_version() {
+        // This test will only pass if pg_dump is installed
+        // Skip gracefully if not available
+        if which("pg_dump").is_ok() {
+            let version = get_pg_tool_version("pg_dump").unwrap();
+            assert!(
+                version >= 12,
+                "Expected pg_dump version >= 12, got {}",
+                version
+            );
+            assert!(
+                version <= 99,
+                "Expected pg_dump version <= 99, got {}",
+                version
+            );
+        }
+
+        // Non-existent tool should fail
+        assert!(get_pg_tool_version("nonexistent_pg_tool_xyz").is_err());
     }
 }
