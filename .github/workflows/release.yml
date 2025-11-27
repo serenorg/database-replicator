@@ -89,32 +89,16 @@ jobs:
 
           # Generate release notes
           cat > release-notes.md << 'EOF'
-          ## 🚀 database-replicator v5.0.0
+          ## 🚀 database-replicator v5.1.0
 
-          **Universal database-to-PostgreSQL replication CLI** - Now open source!
+          This release focuses on sharper pre-flight validation, a rebuilt interactive wizard, and smarter execution paths for SerenAI Cloud targets.
 
-          This is the first public release of `database-replicator`, a command-line tool for replicating databases from multiple sources to PostgreSQL with zero downtime.
+          ### ✨ Highlights
 
-          ### ✨ Features
-
-          **Multi-Database Support:**
-          - **PostgreSQL → PostgreSQL**: Zero-downtime replication with continuous sync via logical replication
-          - **SQLite → PostgreSQL**: One-time replication with JSONB storage
-          - **MongoDB → PostgreSQL**: One-time replication with JSONB storage and periodic refresh
-          - **MySQL/MariaDB → PostgreSQL**: One-time replication with JSONB storage and periodic refresh
-
-          **Key Capabilities:**
-          - Automatic source database type detection
-          - Interactive mode for database/table selection
-          - Selective replication with filtering support
-          - Checkpointing for resume support on interruption
-          - Data integrity verification with checksums
-          - Parallel dump/restore operations
-          - Real-time replication lag monitoring
-
-          **SerenAI Cloud Execution:**
-          - Run replications on SerenAI managed infrastructure (for SerenDB targets)
-          - Use `--local` flag for local execution to any PostgreSQL target
+          - **Interactive wizard rewrite:** migrates to `inquire` with breadcrumb-style back navigation plus richer prompts for filtering tables and choosing execution mode.
+          - **Pre-flight validation stack:** new module blocks misconfigurations early, adds per-table `SELECT` permission checks, and surfaces actionable remediation tips before the copy starts.
+          - **Smart execution & remote fallback:** detects SerenDB endpoints automatically, retries with remote workers when local binaries are missing, and prevents accidental interactive prompts in non-TTY sessions.
+          - **Security hardening:** tighter SQL quoting, TLS defaults, and async handling reduce injection and connection risks across adapters.
 
           ### 📦 Installation
 
