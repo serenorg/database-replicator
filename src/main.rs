@@ -89,7 +89,10 @@ enum Commands {
         /// Drop existing databases on target before copying
         #[arg(long)]
         drop_existing: bool,
-        /// Disable automatic continuous replication setup after snapshot (default: false, meaning sync IS enabled)
+        /// Enable continuous replication after snapshot (default)
+        #[arg(long)]
+        sync: bool,
+        /// Disable automatic continuous replication setup after snapshot
         #[arg(long)]
         no_sync: bool,
         /// Ignore any previous checkpoint and start a fresh run
@@ -228,22 +231,31 @@ async fn main() -> anyhow::Result<()> {
             no_interactive,
             table_rules,
             drop_existing,
+            sync: _,  // sync is the default behavior, no_sync overrides it
             no_sync,
             no_resume,
             seren,
-            local: _, // local is implicit when --seren is not specified
+            local,
             seren_api,
             job_timeout,
         } => {
-            // Interactive mode is default unless --no-interactive or --yes is specified
-            // (--yes implies automation, so it disables interactive mode)
+            // Check if CLI filter flags were provided (skip interactive if so)
+            let has_cli_filters = include_databases.is_some()
+                || exclude_databases.is_some()
+                || include_tables.is_some()
+                || exclude_tables.is_some();
+
+            // Interactive mode is default unless:
+            // - --no-interactive flag is set
+            // - --yes flag is set (implies automation)
+            // - CLI filter flags are provided
             // Run this BEFORE remote execution check so interactive mode works for both local and remote
             let (
                 final_include_databases,
                 final_exclude_databases,
                 final_include_tables,
                 final_exclude_tables,
-            ) = if !no_interactive && !yes {
+            ) = if !no_interactive && !yes && !has_cli_filters {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, _rules) =
                     database_replicator::interactive::select_databases_and_tables(&source).await?;
@@ -265,8 +277,21 @@ async fn main() -> anyhow::Result<()> {
                 )
             };
 
-            // SerenAI cloud execution path (when --seren flag is used)
-            if seren {
+            // Determine execution mode:
+            // 1. --seren flag → remote execution
+            // 2. --local flag → local execution
+            // 3. Neither → auto-detect based on target URL (SerenDB = remote)
+            let use_remote = if seren {
+                true
+            } else if local {
+                false
+            } else {
+                // Auto-detect: SerenDB targets default to remote execution
+                database_replicator::utils::is_serendb_target(&target)
+            };
+
+            if use_remote {
+                tracing::info!("Using SerenAI cloud execution");
                 return init_remote(
                     source,
                     target,
@@ -283,7 +308,7 @@ async fn main() -> anyhow::Result<()> {
                 .await;
             }
 
-            // Local execution path (existing code continues below)
+            // Local execution path
             let filter = database_replicator::filters::ReplicationFilter::new(
                 final_include_databases,
                 final_exclude_databases,
