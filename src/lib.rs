@@ -11,6 +11,7 @@ pub mod migration;
 pub mod mongodb;
 pub mod mysql;
 pub mod postgres;
+pub mod preflight;
 pub mod remote;
 pub mod replication;
 pub mod sqlite;
