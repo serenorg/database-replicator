@@ -225,9 +225,10 @@ fn check_local_environment(result: &mut PreflightResult) {
             }
             Err(_) => {
                 missing.push(tool);
-                result
-                    .local_env
-                    .push(CheckResult::fail(tool, format!("{} not found in PATH", tool)));
+                result.local_env.push(CheckResult::fail(
+                    tool,
+                    format!("{} not found in PATH", tool),
+                ));
             }
         }
     }
@@ -342,9 +343,10 @@ async fn check_source_permissions(result: &mut PreflightResult, source_url: &str
         match crate::postgres::check_source_privileges(&client).await {
             Ok(privs) => {
                 if privs.has_replication || privs.is_superuser {
-                    result
-                        .source_permissions
-                        .push(CheckResult::pass("replication", "Has REPLICATION privilege"));
+                    result.source_permissions.push(CheckResult::pass(
+                        "replication",
+                        "Has REPLICATION privilege",
+                    ));
                 } else {
                     result.source_permissions.push(CheckResult::fail(
                         "replication",
@@ -376,7 +378,8 @@ async fn check_source_permissions(result: &mut PreflightResult, source_url: &str
                 } else {
                     let inaccessible = &perms.inaccessible_tables;
                     let count = inaccessible.len();
-                    let preview: Vec<&str> = inaccessible.iter().take(5).map(|s| s.as_str()).collect();
+                    let preview: Vec<&str> =
+                        inaccessible.iter().take(5).map(|s| s.as_str()).collect();
                     let details = if count > 5 {
                         format!("{}, ... ({} more)", preview.join(", "), count - 5)
                     } else {
@@ -389,12 +392,10 @@ async fn check_source_permissions(result: &mut PreflightResult, source_url: &str
                     );
                     result.issues.push(PreflightIssue {
                         title: "Missing table permissions".to_string(),
-                        explanation: format!(
-                            "User needs SELECT on {} tables",
-                            count
-                        ),
+                        explanation: format!("User needs SELECT on {} tables", count),
                         fixes: vec![
-                            "Run: GRANT SELECT ON ALL TABLES IN SCHEMA public TO <username>;".to_string(),
+                            "Run: GRANT SELECT ON ALL TABLES IN SCHEMA public TO <username>;"
+                                .to_string(),
                         ],
                     });
                 }
@@ -429,9 +430,10 @@ async fn check_target_permissions(result: &mut PreflightResult, target_url: &str
                 }
 
                 if privs.is_superuser || privs.has_replication {
-                    result
-                        .target_permissions
-                        .push(CheckResult::pass("subscription", "Can create subscriptions"));
+                    result.target_permissions.push(CheckResult::pass(
+                        "subscription",
+                        "Can create subscriptions",
+                    ));
                 } else {
                     result.target_permissions.push(CheckResult::fail(
                         "subscription",

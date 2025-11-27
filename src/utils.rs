@@ -1617,20 +1617,14 @@ mod tests {
         assert!(is_serendb_target(
             "postgres://u:p@x.serendb.com:5432/db?sslmode=require"
         ));
-        assert!(is_serendb_target(
-            "postgresql://user:pass@serendb.com/mydb"
-        ));
+        assert!(is_serendb_target("postgresql://user:pass@serendb.com/mydb"));
 
         // Negative cases - not SerenDB
-        assert!(!is_serendb_target(
-            "postgresql://user:pass@localhost/mydb"
-        ));
+        assert!(!is_serendb_target("postgresql://user:pass@localhost/mydb"));
         assert!(!is_serendb_target(
             "postgresql://user:pass@rds.amazonaws.com/mydb"
         ));
-        assert!(!is_serendb_target(
-            "postgresql://user:pass@neon.tech/mydb"
-        ));
+        assert!(!is_serendb_target("postgresql://user:pass@neon.tech/mydb"));
         // Domain spoofing attempt - should NOT match
         assert!(!is_serendb_target(
             "postgresql://user:pass@serendb.com.evil.com/mydb"
@@ -1646,10 +1640,8 @@ mod tests {
     fn test_parse_pg_version_string() {
         // Standard pg_dump output
         assert_eq!(
-            parse_pg_version_string(
-                "pg_dump (PostgreSQL) 16.10 (Ubuntu 16.10-0ubuntu0.24.04.1)"
-            )
-            .unwrap(),
+            parse_pg_version_string("pg_dump (PostgreSQL) 16.10 (Ubuntu 16.10-0ubuntu0.24.04.1)")
+                .unwrap(),
             16
         );
 

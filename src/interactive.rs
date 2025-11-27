@@ -96,10 +96,11 @@ pub async fn select_databases_and_tables(
 
                 let defaults: Vec<usize> = selected_db_indices.clone();
 
-                let selections = MultiSelect::new("Select databases to replicate:", db_names.clone())
-                    .with_default(&defaults)
-                    .with_help_message("↑↓ navigate, Space toggle, Enter confirm")
-                    .prompt();
+                let selections =
+                    MultiSelect::new("Select databases to replicate:", db_names.clone())
+                        .with_default(&defaults)
+                        .with_help_message("↑↓ navigate, Space toggle, Enter confirm")
+                        .prompt();
 
                 match selections {
                     Ok(selected) => {
@@ -183,7 +184,8 @@ pub async fn select_databases_and_tables(
                             .iter()
                             .filter_map(|t| {
                                 // Strip db name prefix to match display names
-                                let stripped = t.strip_prefix(&format!("{}.", db_name)).unwrap_or(t);
+                                let stripped =
+                                    t.strip_prefix(&format!("{}.", db_name)).unwrap_or(t);
                                 table_display_names.iter().position(|n| n == stripped)
                             })
                             .collect()

@@ -120,7 +120,9 @@ pub async fn init(
                     && !force_local
                 {
                     println!();
-                    tracing::info!("Tool version incompatible. Switching to SerenAI cloud execution...");
+                    tracing::info!(
+                        "Tool version incompatible. Switching to SerenAI cloud execution..."
+                    );
                     // Return special error that main.rs catches to trigger remote
                     bail!("PREFLIGHT_FALLBACK_TO_REMOTE");
                 }

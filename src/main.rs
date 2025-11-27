@@ -231,7 +231,7 @@ async fn main() -> anyhow::Result<()> {
             no_interactive,
             table_rules,
             drop_existing,
-            sync: _,  // sync is the default behavior, no_sync overrides it
+            sync: _, // sync is the default behavior, no_sync overrides it
             no_sync,
             no_resume,
             seren,
