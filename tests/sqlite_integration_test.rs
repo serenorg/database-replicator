@@ -89,6 +89,7 @@ async fn test_sqlite_full_migration_integration() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -127,6 +128,7 @@ async fn test_sqlite_null_and_blob_handling() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -169,6 +171,7 @@ async fn test_sqlite_empty_table_migration() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -230,6 +233,7 @@ async fn test_sqlite_all_data_types() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -269,6 +273,7 @@ async fn test_sqlite_empty_database() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -303,6 +308,7 @@ async fn test_sqlite_invalid_path_fails() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -334,6 +340,7 @@ async fn test_sqlite_path_traversal_prevention() {
         false,
         false,
         true,
+        false,
     )
     .await;
 

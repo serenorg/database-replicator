@@ -198,6 +198,7 @@ async fn benchmark_sqlite_small_migration() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -238,6 +239,7 @@ async fn benchmark_sqlite_medium_migration() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -278,6 +280,7 @@ async fn benchmark_sqlite_large_migration() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -321,6 +324,7 @@ async fn benchmark_mongodb_small_collection() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -354,6 +358,7 @@ async fn benchmark_mongodb_medium_collection() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -391,6 +396,7 @@ async fn benchmark_mysql_small_table() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -424,6 +430,7 @@ async fn benchmark_mysql_medium_table() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -462,6 +469,7 @@ async fn benchmark_jsonb_batch_insert() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();
@@ -560,6 +568,7 @@ async fn benchmark_many_small_tables() {
         false,
         false,
         true,
+        false,
     )
     .await;
     let elapsed = start.elapsed();

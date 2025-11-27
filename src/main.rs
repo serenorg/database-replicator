@@ -309,6 +309,12 @@ async fn main() -> anyhow::Result<()> {
             }
 
             // Local execution path
+            // Clone filter values for potential fallback to remote
+            let fallback_include_dbs = final_include_databases.clone();
+            let fallback_exclude_dbs = final_exclude_databases.clone();
+            let fallback_include_tables = final_include_tables.clone();
+            let fallback_exclude_tables = final_exclude_tables.clone();
+
             let filter = database_replicator::filters::ReplicationFilter::new(
                 final_include_databases,
                 final_exclude_databases,
@@ -319,7 +325,9 @@ async fn main() -> anyhow::Result<()> {
             let filter = filter.with_table_rules(table_rule_data);
 
             let enable_sync = !no_sync; // Invert the flag: by default sync is enabled
-            commands::init(
+
+            // Run init with pre-flight checks, handle fallback to remote
+            match commands::init(
                 &source,
                 &target,
                 yes,
@@ -327,8 +335,30 @@ async fn main() -> anyhow::Result<()> {
                 drop_existing,
                 enable_sync,
                 !no_resume,
+                local, // Pass whether --local was explicit
             )
             .await
+            {
+                Ok(_) => Ok(()),
+                Err(e) if e.to_string().contains("PREFLIGHT_FALLBACK_TO_REMOTE") => {
+                    // Auto-fallback to remote execution
+                    init_remote(
+                        source,
+                        target,
+                        yes,
+                        fallback_include_dbs,
+                        fallback_exclude_dbs,
+                        fallback_include_tables,
+                        fallback_exclude_tables,
+                        drop_existing,
+                        no_sync,
+                        seren_api,
+                        job_timeout,
+                    )
+                    .await
+                }
+                Err(e) => Err(e),
+            }
         }
         Commands::Sync {
             source,

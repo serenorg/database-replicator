@@ -28,6 +28,7 @@ use tokio_postgres::Client;
 /// * `drop_existing` - Drop existing databases on target before copying
 /// * `enable_sync` - Set up continuous logical replication after snapshot (default: true)
 /// * `allow_resume` - Resume from checkpoint if available (default: true)
+/// * `force_local` - If true, --local was explicitly set (fail instead of fallback to remote)
 ///
 /// # Returns
 ///
@@ -58,8 +59,9 @@ use tokio_postgres::Client;
 ///     false,
 ///     ReplicationFilter::empty(),
 ///     false,
-///     true,  // Enable continuous replication
-///     true   // Allow resume
+///     true,   // Enable continuous replication
+///     true,   // Allow resume
+///     false,  // Not forcing local execution
 /// ).await?;
 ///
 /// // Snapshot only (no continuous replication)
@@ -69,12 +71,14 @@ use tokio_postgres::Client;
 ///     true,
 ///     ReplicationFilter::empty(),
 ///     false,
-///     false, // Disable continuous replication
-///     true   // Allow resume
+///     false,  // Disable continuous replication
+///     true,   // Allow resume
+///     true,   // Force local execution (--local flag)
 /// ).await?;
 /// # Ok(())
 /// # }
 /// ```
+#[allow(clippy::too_many_arguments)]
 pub async fn init(
     source_url: &str,
     target_url: &str,
@@ -83,6 +87,7 @@ pub async fn init(
     drop_existing: bool,
     enable_sync: bool,
     allow_resume: bool,
+    force_local: bool,
 ) -> Result<()> {
     tracing::info!("Starting initial replication...");
 
@@ -94,6 +99,44 @@ pub async fn init(
         crate::SourceType::PostgreSQL => {
             // PostgreSQL to PostgreSQL replication (existing logic below)
             tracing::info!("Source type: PostgreSQL");
+
+            // Run pre-flight checks before any destructive operations
+            tracing::info!("Running pre-flight checks...");
+
+            let databases = filter.include_databases().map(|v| v.to_vec());
+            let preflight_result = crate::preflight::run_preflight_checks(
+                source_url,
+                target_url,
+                databases.as_deref(),
+            )
+            .await?;
+
+            preflight_result.print();
+
+            if !preflight_result.all_passed() {
+                // Check if we can auto-fallback to remote
+                if preflight_result.tool_version_incompatible
+                    && crate::utils::is_serendb_target(target_url)
+                    && !force_local
+                {
+                    println!();
+                    tracing::info!("Tool version incompatible. Switching to SerenAI cloud execution...");
+                    // Return special error that main.rs catches to trigger remote
+                    bail!("PREFLIGHT_FALLBACK_TO_REMOTE");
+                }
+
+                // Cannot auto-fallback
+                if force_local {
+                    bail!(
+                        "Pre-flight checks failed. Cannot continue with --local flag.\n\
+                         Fix the issues above or remove --local to allow remote execution."
+                    );
+                }
+
+                bail!("Pre-flight checks failed. Fix the issues above and retry.");
+            }
+
+            println!();
         }
         crate::SourceType::SQLite => {
             // SQLite to PostgreSQL migration (simpler path)
@@ -1106,7 +1149,7 @@ mod tests {
 
         // Skip confirmation for automated tests, disable sync to keep test simple
         let filter = crate::filters::ReplicationFilter::empty();
-        let result = init(&source, &target, true, filter, false, false, true).await;
+        let result = init(&source, &target, true, filter, false, false, true, false).await;
         assert!(result.is_ok());
     }
 

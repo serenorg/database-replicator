@@ -154,6 +154,7 @@ async fn test_mysql_full_replication_integration() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -195,6 +196,7 @@ async fn test_mysql_null_and_blob_handling() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -240,6 +242,7 @@ async fn test_mysql_empty_table_replication() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -331,6 +334,7 @@ async fn test_mysql_all_data_types() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -368,6 +372,7 @@ async fn test_mysql_empty_database_fails_gracefully() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -400,6 +405,7 @@ async fn test_mysql_invalid_url_fails() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -438,6 +444,7 @@ async fn test_mysql_missing_database_name_fails() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
@@ -507,6 +514,7 @@ async fn test_mysql_decimal_and_datetime_precision() {
         false,
         false,
         true,
+        false,
     )
     .await;
 
