@@ -16,6 +16,18 @@ pub struct PrivilegeCheck {
     pub has_create_role: bool,
     /// User is a superuser (bypasses other privilege requirements)
     pub is_superuser: bool,
+    /// User has AWS RDS rds_replication role (RDS-specific alternative to REPLICATION)
+    pub has_rds_replication: bool,
+}
+
+impl PrivilegeCheck {
+    /// Returns true if user can perform replication (any method)
+    ///
+    /// Checks for standard PostgreSQL REPLICATION privilege, superuser status,
+    /// or AWS RDS rds_replication role membership.
+    pub fn can_replicate(&self) -> bool {
+        self.has_replication || self.is_superuser || self.has_rds_replication
+    }
 }
 
 /// Check if connected user has replication privileges (needed for source)
@@ -59,11 +71,24 @@ pub async fn check_source_privileges(client: &Client) -> Result<PrivilegeCheck> 
         .await
         .context("Failed to query user privileges")?;
 
+    // Check for AWS RDS rds_replication role membership
+    // This role exists only on AWS RDS and provides replication capability
+    let has_rds_replication = client
+        .query_opt(
+            "SELECT 1 FROM pg_roles WHERE rolname = 'rds_replication'
+             AND pg_has_role(current_user, 'rds_replication', 'MEMBER')",
+            &[],
+        )
+        .await
+        .unwrap_or(None)
+        .is_some();
+
     Ok(PrivilegeCheck {
         has_replication: row.get(0),
         has_create_db: row.get(1),
         has_create_role: row.get(2),
         is_superuser: row.get(3),
+        has_rds_replication,
     })
 }
 
@@ -246,10 +271,10 @@ mod tests {
 
         let privileges = check_source_privileges(&client).await.unwrap();
 
-        // Should have at least one privilege
+        // Should have at least one replication method
         assert!(
-            privileges.has_replication || privileges.is_superuser,
-            "Source user should have REPLICATION privilege or be superuser"
+            privileges.can_replicate(),
+            "Source user should have REPLICATION privilege, rds_replication role, or be superuser"
         );
     }
 

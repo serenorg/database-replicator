@@ -339,14 +339,20 @@ fn check_version_compatibility(result: &mut PreflightResult) {
 
 async fn check_source_permissions(result: &mut PreflightResult, source_url: &str) {
     if let Ok(client) = crate::postgres::connect_with_retry(source_url).await {
-        // Check REPLICATION privilege
+        // Check REPLICATION privilege (or AWS RDS rds_replication role)
         match crate::postgres::check_source_privileges(&client).await {
             Ok(privs) => {
-                if privs.has_replication || privs.is_superuser {
-                    result.source_permissions.push(CheckResult::pass(
-                        "replication",
-                        "Has REPLICATION privilege",
-                    ));
+                if privs.can_replicate() {
+                    let method = if privs.has_rds_replication {
+                        "Has rds_replication role (AWS RDS)"
+                    } else if privs.is_superuser {
+                        "Has superuser privilege"
+                    } else {
+                        "Has REPLICATION privilege"
+                    };
+                    result
+                        .source_permissions
+                        .push(CheckResult::pass("replication", method));
                 } else {
                     result.source_permissions.push(CheckResult::fail(
                         "replication",
@@ -355,7 +361,11 @@ async fn check_source_permissions(result: &mut PreflightResult, source_url: &str
                     result.issues.push(PreflightIssue {
                         title: "Missing REPLICATION privilege".to_string(),
                         explanation: "Required for continuous sync".to_string(),
-                        fixes: vec!["Run: ALTER USER <username> REPLICATION;".to_string()],
+                        fixes: vec![
+                            "Standard PostgreSQL: ALTER USER <username> WITH REPLICATION;"
+                                .to_string(),
+                            "AWS RDS: GRANT rds_replication TO <username>;".to_string(),
+                        ],
                     });
                 }
             }
@@ -429,7 +439,7 @@ async fn check_target_permissions(result: &mut PreflightResult, target_url: &str
                     });
                 }
 
-                if privs.is_superuser || privs.has_replication {
+                if privs.can_replicate() {
                     result.target_permissions.push(CheckResult::pass(
                         "subscription",
                         "Can create subscriptions",
