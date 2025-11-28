@@ -17,3 +17,12 @@ Thumbs.db
 # Checkpoints
 /.seren-replicator/
 /.database-replicator/
+
+# Local AI/Agent configuration
+CLAUDE.md
+AGENTS.md
+
+# Local documentation (not for repo)
+docs/20251127_AlphaGrowth_Testing_Bugs.md
+docs/design-onboarding-improvements.md
+docs/plans/
