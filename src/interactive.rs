@@ -28,7 +28,7 @@ struct CachedDbTables {
 ///
 /// Presents a terminal UI for selecting:
 /// 1. Which databases to replicate (multi-select)
-/// 2. For each selected database: tables to exclude
+/// 2. For each selected database: tables to include (Enter = include all)
 /// 3. For each selected database: tables to replicate schema-only (no data)
 /// 4. For each selected database: time-based filters
 /// 5. Summary and confirmation
@@ -97,7 +97,7 @@ pub async fn select_databases_and_tables(
     let mut current_step = WizardStep::SelectDatabases;
 
     // Track selections per database for back navigation
-    let mut excluded_tables_by_db: std::collections::HashMap<String, Vec<String>> =
+    let mut included_tables_by_db: std::collections::HashMap<String, Vec<String>> =
         std::collections::HashMap::new();
     let mut schema_only_by_db: std::collections::HashMap<String, Vec<(String, String)>> =
         std::collections::HashMap::new(); // (schema, table)
@@ -140,7 +140,7 @@ pub async fn select_databases_and_tables(
                         }
 
                         // Clear previous selections when re-selecting databases
-                        excluded_tables_by_db.clear();
+                        included_tables_by_db.clear();
                         schema_only_by_db.clear();
                         time_filters_by_db.clear();
                         table_cache.clear();
@@ -160,11 +160,12 @@ pub async fn select_databases_and_tables(
             WizardStep::SelectTablesForDb(db_idx) => {
                 let db_name = &db_names[selected_db_indices[db_idx]].clone();
                 print_header(&format!(
-                    "Step 2 of 5: Select Tables to Exclude ({}/{})",
+                    "Step 2 of 5: Select Tables to Include ({}/{})",
                     db_idx + 1,
                     selected_db_indices.len()
                 ));
                 println!("Database: {}", db_name);
+                println!("Press Enter without selecting to include ALL tables.");
                 println!("Navigation: Space to toggle, Enter to continue, Esc to go back");
                 println!();
 
@@ -182,11 +183,11 @@ pub async fn select_databases_and_tables(
                     continue;
                 }
 
-                // Get previously excluded tables for this database (for back navigation)
-                let previous_exclusions: Vec<usize> = excluded_tables_by_db
+                // Get previously included tables for this database (for back navigation)
+                let previous_inclusions: Vec<usize> = included_tables_by_db
                     .get(db_name)
-                    .map(|excluded| {
-                        excluded
+                    .map(|included| {
+                        included
                             .iter()
                             .filter_map(|t| {
                                 // Strip db name prefix to match display names
@@ -202,23 +203,31 @@ pub async fn select_databases_and_tables(
                     .unwrap_or_default();
 
                 let selections = MultiSelect::new(
-                    "Select tables to EXCLUDE (or press Enter to include all):",
+                    "Select tables to INCLUDE (Enter = include all):",
                     cached.table_display_names.clone(),
                 )
-                .with_default(&previous_exclusions)
+                .with_default(&previous_inclusions)
                 .with_help_message("Space toggle, Enter confirm, Esc go back")
                 .prompt();
 
                 match selections {
-                    Ok(selected_exclusions) => {
-                        // Build exclusion list for this database
-                        let db_exclusions: Vec<String> = selected_exclusions
-                            .iter()
-                            .map(|table_name| format!("{}.{}", db_name, table_name))
-                            .collect();
+                    Ok(selected_inclusions) => {
+                        // If nothing selected, include all tables
+                        let db_inclusions: Vec<String> = if selected_inclusions.is_empty() {
+                            cached
+                                .table_display_names
+                                .iter()
+                                .map(|table_name| format!("{}.{}", db_name, table_name))
+                                .collect()
+                        } else {
+                            selected_inclusions
+                                .iter()
+                                .map(|table_name| format!("{}.{}", db_name, table_name))
+                                .collect()
+                        };
 
                         // Store for back navigation
-                        excluded_tables_by_db.insert(db_name.clone(), db_exclusions);
+                        included_tables_by_db.insert(db_name.clone(), db_inclusions);
 
                         // Move to next database or schema-only step
                         if db_idx + 1 < selected_db_indices.len() {
@@ -266,21 +275,21 @@ pub async fn select_databases_and_tables(
                     continue;
                 }
 
-                // Filter out excluded tables
-                let excluded = excluded_tables_by_db.get(db_name);
+                // Filter to only included tables
+                let included = included_tables_by_db.get(db_name);
                 let available_tables: Vec<(usize, String)> = cached
                     .table_display_names
                     .iter()
                     .enumerate()
                     .filter(|(_, name)| {
                         let full_name = format!("{}.{}", db_name, name);
-                        !excluded.is_some_and(|ex| ex.contains(&full_name))
+                        included.is_some_and(|inc| inc.contains(&full_name))
                     })
                     .map(|(idx, name)| (idx, name.clone()))
                     .collect();
 
                 if available_tables.is_empty() {
-                    println!("  All tables excluded from '{}'", db_name);
+                    println!("  No tables included from '{}'", db_name);
                     if db_idx + 1 < selected_db_indices.len() {
                         current_step = WizardStep::SelectSchemaOnlyForDb(db_idx + 1);
                     } else {
@@ -380,8 +389,8 @@ pub async fn select_databases_and_tables(
                     continue;
                 }
 
-                // Filter out excluded and schema-only tables
-                let excluded = excluded_tables_by_db.get(db_name);
+                // Filter to included tables, excluding schema-only ones
+                let included = included_tables_by_db.get(db_name);
                 let schema_only = schema_only_by_db.get(db_name);
                 let available_tables: Vec<(usize, String)> = cached
                     .table_display_names
@@ -389,12 +398,12 @@ pub async fn select_databases_and_tables(
                     .enumerate()
                     .filter(|(idx, name)| {
                         let full_name = format!("{}.{}", db_name, name);
-                        let is_excluded = excluded.is_some_and(|ex| ex.contains(&full_name));
+                        let is_included = included.is_some_and(|inc| inc.contains(&full_name));
                         let t = &cached.all_tables[*idx];
                         let is_schema_only = schema_only.is_some_and(|so| {
                             so.iter().any(|(s, n)| s == &t.schema && n == &t.name)
                         });
-                        !is_excluded && !is_schema_only
+                        is_included && !is_schema_only
                     })
                     .map(|(idx, name)| (idx, name.clone()))
                     .collect();
@@ -550,9 +559,9 @@ pub async fn select_databases_and_tables(
             WizardStep::Review => {
                 print_header("Step 5 of 5: Review Configuration");
 
-                // Collect all exclusions
-                let excluded_tables: Vec<String> =
-                    excluded_tables_by_db.values().flatten().cloned().collect();
+                // Collect all inclusions
+                let included_tables: Vec<String> =
+                    included_tables_by_db.values().flatten().cloned().collect();
 
                 let selected_databases: Vec<String> = selected_db_indices
                     .iter()
@@ -566,16 +575,22 @@ pub async fn select_databases_and_tables(
                 }
                 println!();
 
-                if !excluded_tables.is_empty() {
-                    println!("Tables to exclude: {}", excluded_tables.len());
-                    for table in &excluded_tables {
-                        println!("  ✗ {}", table);
+                println!("Tables to replicate: {}", included_tables.len());
+                if included_tables.len() <= 20 {
+                    for table in &included_tables {
+                        println!("  ✓ {}", table);
                     }
-                    println!();
                 } else {
-                    println!("Tables to exclude: none");
-                    println!();
+                    // Show first 10 and last 5 with ellipsis
+                    for table in included_tables.iter().take(10) {
+                        println!("  ✓ {}", table);
+                    }
+                    println!("  ... ({} more tables)", included_tables.len() - 15);
+                    for table in included_tables.iter().skip(included_tables.len() - 5) {
+                        println!("  ✓ {}", table);
+                    }
                 }
+                println!();
 
                 // Show schema-only tables
                 let schema_only_count: usize = schema_only_by_db.values().map(|v| v.len()).sum();
@@ -647,16 +662,17 @@ pub async fn select_databases_and_tables(
         .map(|&i| db_names[i].clone())
         .collect();
 
-    let excluded_tables: Vec<String> = excluded_tables_by_db.values().flatten().cloned().collect();
+    let included_tables: Vec<String> = included_tables_by_db.values().flatten().cloned().collect();
 
     tracing::info!("");
     tracing::info!("✓ Configuration confirmed");
     tracing::info!("");
 
-    let filter = if excluded_tables.is_empty() {
+    // Use include_tables filter (3rd parameter)
+    let filter = if included_tables.is_empty() {
         ReplicationFilter::new(Some(selected_databases), None, None, None)?
     } else {
-        ReplicationFilter::new(Some(selected_databases), None, None, Some(excluded_tables))?
+        ReplicationFilter::new(Some(selected_databases), None, Some(included_tables), None)?
     };
 
     // Build TableRules from selections
