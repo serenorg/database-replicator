@@ -114,19 +114,69 @@ pub fn remove_superuser_from_globals(path: &str) -> Result<()> {
         .with_context(|| format!("Failed to read globals dump at {}", path))?;
 
     let mut updated = String::with_capacity(content.len());
+    let mut modified = false;
     for line in content.lines() {
         if line.contains("ALTER ROLE") && line.contains("SUPERUSER") {
             updated.push_str("-- ");
             updated.push_str(line);
             updated.push('\n');
+            modified = true;
         } else {
             updated.push_str(line);
             updated.push('\n');
         }
     }
 
-    fs::write(path, updated)
-        .with_context(|| format!("Failed to write sanitized globals dump to {}", path))?;
+    if modified {
+        fs::write(path, updated)
+            .with_context(|| format!("Failed to write sanitized globals dump to {}", path))?;
+    }
+
+    Ok(())
+}
+
+/// Removes parameter settings that require superuser privileges (e.g. `log_statement`).
+///
+/// AWS RDS prevents standard replication roles from altering certain GUCs via
+/// `ALTER ROLE ... SET`. Each offending line is commented out so `psql` skips
+/// them without aborting the rest of the globals restore.
+pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
+    const BLOCKED_PATTERNS: &[&str] = &["set log_statement"];
+
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read globals dump at {}", path))?;
+
+    let mut updated = String::with_capacity(content.len());
+    let mut modified = false;
+
+    for line in content.lines() {
+        let trimmed = line.trim_start();
+        if trimmed.starts_with("--") {
+            updated.push_str(line);
+            updated.push('\n');
+            continue;
+        }
+
+        let lower = line.to_ascii_lowercase();
+        let is_blocked = BLOCKED_PATTERNS
+            .iter()
+            .any(|pattern| lower.contains(pattern));
+
+        if is_blocked {
+            updated.push_str("-- ");
+            updated.push_str(line);
+            updated.push('\n');
+            modified = true;
+        } else {
+            updated.push_str(line);
+            updated.push('\n');
+        }
+    }
+
+    if modified {
+        fs::write(path, updated)
+            .with_context(|| format!("Failed to write sanitized globals dump to {}", path))?;
+    }
 
     Ok(())
 }

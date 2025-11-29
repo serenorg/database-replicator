@@ -227,6 +227,8 @@ pub async fn init(
         .context("Failed to update globals dump so duplicate roles are ignored during restore")?;
     migration::remove_superuser_from_globals(globals_file.to_str().unwrap())
         .context("Failed to remove SUPERUSER from globals dump")?;
+    migration::remove_restricted_guc_settings(globals_file.to_str().unwrap())
+        .context("Failed to remove restricted parameter settings from globals dump")?;
 
     // Step 2: Restore global objects
     tracing::info!("Step 2/4: Restoring global objects to target...");
