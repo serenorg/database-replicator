@@ -41,6 +41,7 @@ For local execution (non-SerenDB targets), use the `--local` flag. See [Remote E
 `database-replicator` is a command-line tool that replicates databases from multiple sources to PostgreSQL (including Seren Cloud). It automatically detects your source database type and handles the replication accordingly:
 
 - **PostgreSQL**: Zero-downtime replication with continuous sync via logical replication
+- **AWS RDS for PostgreSQL**: Managed Postgres replication with built-in checks for `rds_replication`/`rds_superuser` requirements
 - **SQLite**: One-time replication using JSONB storage
 - **MongoDB**: One-time replication with JSONB storage and periodic refresh support
 - **MySQL/MariaDB**: One-time replication with JSONB storage and periodic refresh support
@@ -60,6 +61,7 @@ For local execution (non-SerenDB targets), use the `--local` flag. See [Remote E
 | Source Database | Replication Type | Continuous Sync | Periodic Refresh | Remote Execution |
 |----------------|------------------|-----------------|------------------|------------------|
 | **PostgreSQL** | Native replication | ✅ Logical replication | N/A | ✅ Yes |
+| **AWS RDS (PostgreSQL)** | Native replication | ✅ Logical replication | N/A | ✅ Yes — validates `rds_replication` permissions |
 | **SQLite** | JSONB storage | ❌ One-time | ❌ No | ❌ Local only |
 | **MongoDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
 | **MySQL/MariaDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
@@ -81,6 +83,22 @@ database-replicator init \
 ```
 
 **[📖 Full PostgreSQL Guide →](README-PostgreSQL.md)**
+
+---
+
+### AWS RDS (PostgreSQL) → PostgreSQL/SerenDB
+
+Managed PostgreSQL instances on AWS RDS require the `rds_replication` role (or `rds_superuser`) plus a parameter group with `rds.logical_replication=1`. Once those prerequisites are met, run:
+
+```bash
+database-replicator init \
+  --source "postgresql://replicator@your-rds-instance.abc123.us-east-1.rds.amazonaws.com:5432/db" \
+  --target "postgresql://user:pass@target-host:5432/db"
+```
+
+The CLI will surface missing RDS privileges and suggest the AWS commands needed to grant `rds_replication` so reruns stay idempotent.
+
+**[📖 Full PostgreSQL Guide →](README-PostgreSQL.md#aws-rds)**
 
 ---
 
