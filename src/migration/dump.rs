@@ -104,6 +104,33 @@ pub fn sanitize_globals_dump(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Comments out `ALTER ROLE ... SUPERUSER` statements in a globals dump file.
+///
+/// Managed Postgres services (e.g., AWS RDS) often prevent the restore user
+/// from granting SUPERUSER. Commenting out those lines keeps the restore
+/// moving without permission errors.
+pub fn remove_superuser_from_globals(path: &str) -> Result<()> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read globals dump at {}", path))?;
+
+    let mut updated = String::with_capacity(content.len());
+    for line in content.lines() {
+        if line.contains("ALTER ROLE") && line.contains("SUPERUSER") {
+            updated.push_str("-- ");
+            updated.push_str(line);
+            updated.push('\n');
+        } else {
+            updated.push_str(line);
+            updated.push('\n');
+        }
+    }
+
+    fs::write(path, updated)
+        .with_context(|| format!("Failed to write sanitized globals dump to {}", path))?;
+
+    Ok(())
+}
+
 fn rewrite_create_role_statements(sql: &str) -> Option<String> {
     if sql.is_empty() {
         return None;
