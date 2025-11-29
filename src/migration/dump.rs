@@ -4,6 +4,7 @@
 use crate::filters::ReplicationFilter;
 use anyhow::{Context, Result};
 use std::collections::BTreeSet;
+use std::fs;
 use std::process::{Command, Stdio};
 use std::time::Duration;
 
@@ -79,6 +80,167 @@ pub async fn dump_globals(source_url: &str, output_path: &str) -> Result<()> {
 
     tracing::info!("✓ Global objects dumped successfully");
     Ok(())
+}
+
+/// Update a globals dump so duplicate role creation errors become harmless notices.
+///
+/// `pg_dumpall --globals-only` emits `CREATE ROLE` statements that fail if the
+/// role already exists on the target cluster. When an operator reruns
+/// replication against the same target, those statements cause `psql` to exit
+/// with status 3 which previously triggered noisy retries and prevented the rest
+/// of the globals from being applied. By wrapping each `CREATE ROLE` statement
+/// in a `DO $$ ... EXCEPTION WHEN duplicate_object` block, we allow Postgres to
+/// skip recreating existing roles while still applying subsequent `ALTER ROLE`
+/// and `GRANT` statements.
+pub fn sanitize_globals_dump(path: &str) -> Result<()> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read globals dump at {}", path))?;
+
+    if let Some(updated) = rewrite_create_role_statements(&content) {
+        fs::write(path, updated)
+            .with_context(|| format!("Failed to update globals dump at {}", path))?;
+    }
+
+    Ok(())
+}
+
+fn rewrite_create_role_statements(sql: &str) -> Option<String> {
+    if sql.is_empty() {
+        return None;
+    }
+
+    let mut output = String::with_capacity(sql.len() + 1024);
+    let mut modified = false;
+    let mut cursor = 0;
+
+    while cursor < sql.len() {
+        if let Some(rel_pos) = sql[cursor..].find('\n') {
+            let end = cursor + rel_pos + 1;
+            let chunk = &sql[cursor..end];
+            if let Some(transformed) = wrap_create_role_line(chunk) {
+                output.push_str(&transformed);
+                modified = true;
+            } else {
+                output.push_str(chunk);
+            }
+            cursor = end;
+        } else {
+            let chunk = &sql[cursor..];
+            if let Some(transformed) = wrap_create_role_line(chunk) {
+                output.push_str(&transformed);
+                modified = true;
+            } else {
+                output.push_str(chunk);
+            }
+            break;
+        }
+    }
+
+    if modified {
+        Some(output)
+    } else {
+        None
+    }
+}
+
+fn wrap_create_role_line(chunk: &str) -> Option<String> {
+    let trimmed = chunk.trim_start();
+    if !trimmed.starts_with("CREATE ROLE ") {
+        return None;
+    }
+
+    let statement = trimmed.trim_end();
+    let statement_body = statement.trim_end_matches(';').trim_end();
+    let leading_ws_len = chunk.len() - trimmed.len();
+    let leading_ws = &chunk[..leading_ws_len];
+    let newline = if chunk.ends_with("\r\n") {
+        "\r\n"
+    } else if chunk.ends_with('\n') {
+        "\n"
+    } else {
+        ""
+    };
+
+    let role_token = extract_role_token(statement_body)?;
+
+    let notice_name = escape_single_quotes(&unquote_role_name(&role_token));
+
+    let mut block = String::with_capacity(chunk.len() + 128);
+    block.push_str(leading_ws);
+    block.push_str("DO $$\n");
+    block.push_str(leading_ws);
+    block.push_str("BEGIN\n");
+    block.push_str(leading_ws);
+    block.push_str("    ");
+    block.push_str(statement_body);
+    block.push_str(";\n");
+    block.push_str(leading_ws);
+    block.push_str("EXCEPTION\n");
+    block.push_str(leading_ws);
+    block.push_str("    WHEN duplicate_object THEN\n");
+    block.push_str(leading_ws);
+    block.push_str("        RAISE NOTICE 'Role ");
+    block.push_str(&notice_name);
+    block.push_str(" already exists on target, skipping CREATE ROLE';\n");
+    block.push_str(leading_ws);
+    block.push_str("END $$;");
+
+    if !newline.is_empty() {
+        block.push_str(newline);
+    }
+
+    Some(block)
+}
+
+fn extract_role_token(statement: &str) -> Option<String> {
+    let remainder = statement.strip_prefix("CREATE ROLE")?.trim_start();
+
+    if remainder.starts_with('"') {
+        let mut idx = 1;
+        let bytes = remainder.as_bytes();
+        while idx < bytes.len() {
+            if bytes[idx] == b'"' {
+                if idx + 1 < bytes.len() && bytes[idx + 1] == b'"' {
+                    idx += 2;
+                    continue;
+                } else {
+                    idx += 1;
+                    break;
+                }
+            }
+            idx += 1;
+        }
+        if idx <= remainder.len() {
+            return Some(remainder[..idx].to_string());
+        }
+        None
+    } else {
+        let mut end = remainder.len();
+        for (i, ch) in remainder.char_indices() {
+            if ch.is_whitespace() || ch == ';' {
+                end = i;
+                break;
+            }
+        }
+        if end == 0 {
+            None
+        } else {
+            Some(remainder[..end].to_string())
+        }
+    }
+}
+
+fn unquote_role_name(token: &str) -> String {
+    if token.starts_with('"') && token.ends_with('"') && token.len() >= 2 {
+        let inner = &token[1..token.len() - 1];
+        inner.replace("\"\"", "\"")
+    } else {
+        token.to_string()
+    }
+}
+
+fn escape_single_quotes(value: &str) -> String {
+    value.replace('\'', "''")
 }
 
 /// Dump schema (DDL) for a specific database
@@ -555,5 +717,33 @@ mod tests {
         let filter = crate::filters::ReplicationFilter::empty();
         let tables = get_included_tables_for_db(&filter, "db1");
         assert!(tables.is_none());
+    }
+
+    #[test]
+    fn test_rewrite_create_role_statements_wraps_unquoted_role() {
+        let sql = "CREATE ROLE replicator WITH LOGIN;\nALTER ROLE replicator WITH LOGIN;\n";
+        let rewritten = rewrite_create_role_statements(sql).expect("rewrite expected");
+
+        assert!(rewritten.contains("DO $$"));
+        assert!(rewritten.contains("Role replicator already exists"));
+        assert!(rewritten.contains("CREATE ROLE replicator WITH LOGIN;"));
+        assert!(rewritten.contains("ALTER ROLE replicator WITH LOGIN;"));
+    }
+
+    #[test]
+    fn test_rewrite_create_role_statements_wraps_quoted_role() {
+        let sql = "    CREATE ROLE \"Andre Admin\";\n";
+        let rewritten = rewrite_create_role_statements(sql).expect("rewrite expected");
+
+        assert!(rewritten.contains("DO $$"));
+        assert!(rewritten.contains("Andre Admin already exists"));
+        assert!(rewritten.contains("CREATE ROLE \"Andre Admin\""));
+        assert!(rewritten.starts_with("    DO $$"));
+    }
+
+    #[test]
+    fn test_rewrite_create_role_statements_noop_when_absent() {
+        let sql = "ALTER ROLE existing WITH LOGIN;\n";
+        assert!(rewrite_create_role_statements(sql).is_none());
     }
 }

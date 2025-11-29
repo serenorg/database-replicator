@@ -223,6 +223,8 @@ pub async fn init(
     tracing::info!("Step 1/4: Dumping global objects (roles, tablespaces)...");
     let globals_file = temp_path.join("globals.sql");
     migration::dump_globals(source_url, globals_file.to_str().unwrap()).await?;
+    migration::sanitize_globals_dump(globals_file.to_str().unwrap())
+        .context("Failed to update globals dump so duplicate roles are ignored during restore")?;
 
     // Step 2: Restore global objects
     tracing::info!("Step 2/4: Restoring global objects to target...");
