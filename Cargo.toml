@@ -1,6 +1,6 @@
 [package]
 name = "database-replicator"
-version = "5.2.3"
+version = "5.2.4"
 edition = "2021"
 license = "Apache-2.0"
 description = "Universal database-to-PostgreSQL replication CLI. Supports PostgreSQL, SQLite, MongoDB, and MySQL."
