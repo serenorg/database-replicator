@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.4] - 2025-11-29
+
+### Fixed
+
+- **AWS RDS globals restores no longer fail on `log_statement`**: globals sanitization now comments out `ALTER ROLE ... SET log_statement` (and similar privileged parameters) so `database-replicator init` can rerun cleanly against managed Postgres targets that restrict GUC changes.
+
 ## [5.2.3] - 2025-11-29
 
 ### Fixed
