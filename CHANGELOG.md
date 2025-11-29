@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.2.3] - 2025-11-29
+
+### Fixed
+
+- **Globals restore SUPERUSER errors**: replicate `pg_dumpall` globals now have any `ALTER ROLE ... SUPERUSER` statements commented out, preventing AWS RDS and other managed targets from failing during `database-replicator init`.
+
 ## [3.0.1] - 2025-11-23
 
 ### Fixed
