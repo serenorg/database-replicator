@@ -16,6 +16,9 @@ struct Cli {
         default_value_t = false
     )]
     allow_self_signed_certs: bool,
+    /// Set the log level (error, warn, info, debug, trace)
+    #[arg(long, global = true, default_value = "info")]
+    log: String,
     #[command(subcommand)]
     command: Commands,
 }
@@ -174,13 +177,17 @@ enum Commands {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Initialize logging - default to INFO level if RUST_LOG not set
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    // We need to parse CLI args early to get the log level
+    let cli = Cli::parse();
+
+    // Initialize logging
+    // 1. RUST_LOG environment variable has highest precedence
+    // 2. --log flag is used if RUST_LOG is not set
+    // 3. Default to "info" if neither are provided
+    let env_filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new(cli.log.clone()));
+
+    tracing_subscriber::fmt().with_env_filter(env_filter).init();
 
     // Clean up stale temp directories from previous runs (older than 24 hours)
     // This handles temp files left behind by processes killed with SIGKILL
@@ -188,8 +195,6 @@ async fn main() -> anyhow::Result<()> {
         tracing::warn!("Failed to clean up stale temp directories: {}", e);
         // Don't fail startup if cleanup fails
     }
-
-    let cli = Cli::parse();
 
     // Initialize TLS policy using thread-safe OnceLock
     database_replicator::postgres::connection::init_tls_policy(cli.allow_self_signed_certs);
