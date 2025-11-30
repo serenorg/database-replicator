@@ -309,6 +309,7 @@ async fn main() -> anyhow::Result<()> {
                     no_sync,
                     seren_api,
                     job_timeout,
+                    cli.log,
                 )
                 .await;
             }
@@ -359,6 +360,7 @@ async fn main() -> anyhow::Result<()> {
                         no_sync,
                         seren_api,
                         job_timeout,
+                        cli.log,
                     )
                     .await
                 }
@@ -473,6 +475,7 @@ async fn init_remote(
     no_sync: bool,
     seren_api: String,
     job_timeout: u64,
+    log_level: String,
 ) -> anyhow::Result<()> {
     use database_replicator::migration;
     use database_replicator::postgres;
@@ -550,6 +553,10 @@ async fn init_remote(
     );
     options.insert("enable_sync".to_string(), serde_json::Value::Bool(!no_sync));
     options.insert(
+        "log_level".to_string(),
+        serde_json::Value::String(log_level),
+    );
+    options.insert(
         "estimated_size_bytes".to_string(),
         serde_json::Value::Number(serde_json::Number::from(estimated_size_bytes)),
     );
@@ -572,6 +579,7 @@ async fn init_remote(
     // Submit job
     let client = RemoteClient::new(seren_api, Some(api_key))?;
     println!("Submitting replication job...");
+    tracing::debug!("Job spec: {:?}", job_spec);
 
     let response = client.submit_job(&job_spec).await?;
     println!("✓ Job submitted");
