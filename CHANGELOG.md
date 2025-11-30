@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.0] - 2025-11-29
+
+### Added
+
+- **CLI log level control**: a new global `--log` flag allows users to set the log level (error, warn, info, debug, trace) for both local and remote executions, providing more detailed output for debugging.
+
 ## [5.2.5] - 2025-11-29
 
 ### Fixed
