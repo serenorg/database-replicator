@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.1] - 2025-12-01
+
+### Fixed
+
+- **PostgreSQL globals restores no longer fail on `log_min_messages`**: globals sanitization now comments out `ALTER ROLE ... SET log_min_messages` (and similar privileged parameters) so `database-replicator init` can rerun cleanly against managed Postgres targets that restrict GUC changes.
+
 ## [5.3.0] - 2025-11-29
 
 ### Added
