@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.3] - 2025-12-02
+
+### Fixed
+
+- **PostgreSQL globals restores no longer fail due to GUC case sensitivity**: `ALTER ROLE ... SET` commands in `pg_dumpall` output are now sanitized with a case-insensitive check, preventing replication failures on managed PostgreSQL services that restrict GUC changes.
+
 ## [5.3.2] - 2025-12-02
 
 ### Fixed
