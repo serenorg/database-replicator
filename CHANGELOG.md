@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.5] - 2025-12-02
+
+### Fixed
+
+- **Extended restricted role grant handling**: Expanded the list of restricted PostgreSQL roles that are automatically skipped during globals restore to include `pg_checkpoint`, `pg_read_all_data`, `pg_write_all_data`, `pg_read_all_settings`, `pg_read_all_stats`, `pg_stat_scan_tables`, `pg_monitor`, `pg_signal_backend`, `pg_read_server_files`, `pg_write_server_files`, `pg_execute_server_program`, `pg_create_subscription`, `pg_maintain`, and `pg_use_reserved_connections`. Also fixed quote handling so quoted role names (e.g., `"pg_checkpoint"`) are properly matched.
+
 ## [5.3.4] - 2025-12-02
 
 ### Fixed
