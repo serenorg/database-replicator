@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.8] - 2025-12-02
+
+### Fixed
+
+- **Skip all RDS tablespace references during globals restore**: Any statement referencing AWS RDS-specific tablespaces (`rds_*`) is now automatically commented out. This catches `ALTER ROLE ... SET default_tablespace = 'rds_temp_tablespace'` and similar statements that fail on non-RDS targets.
+
 ## [5.3.7] - 2025-12-02
 
 ### Fixed
