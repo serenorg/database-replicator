@@ -1,6 +1,7 @@
 // ABOUTME: Initial replication command for snapshot schema and data copy
 // ABOUTME: Performs full database dump and restore from source to target
 
+use crate::migration::dump::remove_restricted_role_grants;
 use crate::{checkpoint, migration, postgres};
 use anyhow::{bail, Context, Result};
 use std::io::{self, Write};
@@ -229,7 +230,7 @@ pub async fn init(
         .context("Failed to remove SUPERUSER from globals dump")?;
     migration::remove_restricted_guc_settings(globals_file.to_str().unwrap())
         .context("Failed to remove restricted parameter settings from globals dump")?;
-    migration::remove_restricted_role_grants(globals_file.to_str().unwrap())
+    remove_restricted_role_grants(globals_file.to_str().unwrap())
         .context("Failed to remove restricted role grants from globals dump")?;
 
     // Step 2: Restore global objects
