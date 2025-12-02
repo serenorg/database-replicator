@@ -174,7 +174,23 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
 /// like `pg_checkpoint`. This function comments out those statements to allow
 /// the globals restore to proceed without permission errors.
 pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
-    const RESTRICTED_ROLES: &[&str] = &["pg_checkpoint"];
+    // Roles that cannot be granted on managed PostgreSQL services (AWS RDS, etc.)
+    const RESTRICTED_ROLES: &[&str] = &[
+        "pg_checkpoint",
+        "pg_read_all_data",
+        "pg_write_all_data",
+        "pg_read_all_settings",
+        "pg_read_all_stats",
+        "pg_stat_scan_tables",
+        "pg_monitor",
+        "pg_signal_backend",
+        "pg_read_server_files",
+        "pg_write_server_files",
+        "pg_execute_server_program",
+        "pg_create_subscription",
+        "pg_maintain",
+        "pg_use_reserved_connections",
+    ];
 
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read globals dump at {}", path))?;
@@ -186,8 +202,13 @@ pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
         let lower_trimmed = line.trim().to_ascii_lowercase();
         if lower_trimmed.starts_with("grant ") {
             let is_restricted = RESTRICTED_ROLES.iter().any(|role| {
-                // e.g. "grant pg_checkpoint to some_user"
-                lower_trimmed.split_whitespace().nth(1) == Some(*role)
+                // Get the role being granted (2nd word), stripping any quotes
+                // e.g. "grant pg_checkpoint to some_user" or "grant \"pg_checkpoint\" to some_user"
+                lower_trimmed
+                    .split_whitespace()
+                    .nth(1)
+                    .map(|r| r.trim_matches('"') == *role)
+                    .unwrap_or(false)
             });
 
             if is_restricted {
@@ -852,5 +873,41 @@ mod tests {
     fn test_rewrite_create_role_statements_noop_when_absent() {
         let sql = "ALTER ROLE existing WITH LOGIN;\n";
         assert!(rewrite_create_role_statements(sql).is_none());
+    }
+
+    #[test]
+    fn test_remove_restricted_role_grants() {
+        let dir = tempdir().unwrap();
+        let globals_file = dir.path().join("globals.sql");
+
+        // Write a sample globals dump with restricted role grants
+        let content = r#"CREATE ROLE myuser;
+ALTER ROLE myuser WITH LOGIN;
+GRANT pg_checkpoint TO myuser;
+GRANT "pg_read_all_stats" TO myuser;
+GRANT pg_monitor TO myuser;
+GRANT myrole TO myuser;
+GRANT SELECT ON TABLE users TO myuser;
+"#;
+        std::fs::write(&globals_file, content).unwrap();
+
+        // Run the sanitization
+        remove_restricted_role_grants(globals_file.to_str().unwrap()).unwrap();
+
+        // Verify restricted grants are commented out
+        let result = std::fs::read_to_string(&globals_file).unwrap();
+
+        // Restricted role grants should be commented out
+        assert!(result.contains("-- GRANT pg_checkpoint TO myuser;"));
+        assert!(result.contains("-- GRANT \"pg_read_all_stats\" TO myuser;"));
+        assert!(result.contains("-- GRANT pg_monitor TO myuser;"));
+
+        // Non-restricted grants should remain
+        assert!(result.contains("\nGRANT myrole TO myuser;\n"));
+        assert!(result.contains("\nGRANT SELECT ON TABLE users TO myuser;\n"));
+
+        // Other statements should remain unchanged
+        assert!(result.contains("CREATE ROLE myuser;"));
+        assert!(result.contains("ALTER ROLE myuser WITH LOGIN;"));
     }
 }
