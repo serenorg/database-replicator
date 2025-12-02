@@ -174,6 +174,7 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
 /// This function filters out:
 /// - `CREATE TABLESPACE` statements
 /// - Any statement referencing RDS-specific tablespaces (any `rds_*` tablespace)
+///   including quoted ('rds_*', "rds_*") and unquoted (TABLESPACE rds_*) forms
 pub fn remove_tablespace_statements(path: &str) -> Result<()> {
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read globals dump at {}", path))?;
@@ -188,9 +189,14 @@ pub fn remove_tablespace_statements(path: &str) -> Result<()> {
         let is_create_tablespace = lower_trimmed.starts_with("create tablespace");
 
         // Filter any statement referencing RDS tablespaces (rds_* pattern)
-        // Matches 'rds_something' or "rds_something" in SQL statements
-        let references_rds_tablespace =
-            lower_trimmed.contains("'rds_") || lower_trimmed.contains("\"rds_");
+        // Matches:
+        // - 'rds_something' (single quoted)
+        // - "rds_something" (double quoted)
+        // - TABLESPACE rds_something (unquoted, e.g., SECURITY LABEL ON TABLESPACE rds_temp_tablespace)
+        // - GRANT/REVOKE ON TABLESPACE rds_something
+        let references_rds_tablespace = lower_trimmed.contains("'rds_")
+            || lower_trimmed.contains("\"rds_")
+            || lower_trimmed.contains("tablespace rds_");
 
         if is_create_tablespace || references_rds_tablespace {
             updated.push_str("-- ");

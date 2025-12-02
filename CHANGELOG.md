@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.9] - 2025-12-02
+
+### Fixed
+
+- **Handle unquoted RDS tablespace references**: Extended tablespace filtering to also catch unquoted references like `SECURITY LABEL ON TABLESPACE rds_temp_tablespace` and `GRANT ON TABLESPACE rds_temp_tablespace`. Previously only quoted forms (`'rds_*'` and `"rds_*"`) were filtered.
+
 ## [5.3.8] - 2025-12-02
 
 ### Fixed
