@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.10] - 2025-12-02
+
+### Improved
+
+- **Better connection error diagnostics**: When database connections fail with generic "db error" messages, the tool now extracts detailed error information including PostgreSQL error codes, underlying causes, and debug representations. This helps diagnose connection issues more quickly, especially with AWS RDS and other managed PostgreSQL services.
+
 ## [5.3.9] - 2025-12-02
 
 ### Fixed

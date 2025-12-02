@@ -169,6 +169,33 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
             // Parse error and provide helpful context
             let error_msg = e.to_string();
 
+            // Try to extract more details from the error for better diagnostics
+            let detailed_msg = if let Some(db_error) = e.as_db_error() {
+                // PostgreSQL returned a specific error
+                let mut details = format!(
+                    "PostgreSQL error {}: {}",
+                    db_error.code().code(),
+                    db_error.message()
+                );
+                if let Some(detail) = db_error.detail() {
+                    details.push_str(&format!("\nDetail: {}", detail));
+                }
+                if let Some(hint) = db_error.hint() {
+                    details.push_str(&format!("\nHint: {}", hint));
+                }
+                details
+            } else if let Some(source) = std::error::Error::source(&e) {
+                // Check for underlying IO or TLS errors
+                format!("{} (caused by: {})", error_msg, source)
+            } else {
+                // Use debug format for more information when to_string() is unhelpful
+                if error_msg == "db error" || error_msg.len() < 20 {
+                    format!("{:?}", e)
+                } else {
+                    error_msg.clone()
+                }
+            };
+
             if error_msg.contains("password authentication failed") {
                 anyhow::anyhow!(
                     "Authentication failed: Invalid username or password.\n\
@@ -190,14 +217,14 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
                      - The database server is running\n\
                      - Firewall rules allow connections\n\
                      Error: {}",
-                    error_msg
+                    detailed_msg
                 )
             } else if error_msg.contains("timeout") || error_msg.contains("timed out") {
                 anyhow::anyhow!(
                     "Connection timeout: Database server did not respond in time.\n\
                      This could indicate network issues or server overload.\n\
                      Error: {}",
-                    error_msg
+                    detailed_msg
                 )
             } else if error_msg.contains("SSL") || error_msg.contains("TLS") {
                 // Log full error for debugging TLS issues
@@ -219,7 +246,8 @@ pub async fn connect(connection_string: &str) -> Result<Client> {
                     error_msg
                 )
             } else {
-                anyhow::anyhow!("Failed to connect to database: {}", error_msg)
+                // For generic "db error" or other unhelpful messages, use detailed format
+                anyhow::anyhow!("Failed to connect to database: {}", detailed_msg)
             }
         })?;
 
