@@ -168,6 +168,49 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Comments out `GRANT` statements for roles that are restricted on managed services.
+///
+/// AWS RDS and other managed services may prevent granting certain default roles
+/// like `pg_checkpoint`. This function comments out those statements to allow
+/// the globals restore to proceed without permission errors.
+pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
+    const RESTRICTED_ROLES: &[&str] = &["pg_checkpoint"];
+
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read globals dump at {}", path))?;
+
+    let mut updated = String::with_capacity(content.len());
+    let mut modified = false;
+
+    for line in content.lines() {
+        let lower_trimmed = line.trim().to_ascii_lowercase();
+        if lower_trimmed.starts_with("grant ") {
+            let is_restricted = RESTRICTED_ROLES.iter().any(|role| {
+                // e.g. "grant pg_checkpoint to some_user"
+                lower_trimmed.split_whitespace().nth(1) == Some(*role)
+            });
+
+            if is_restricted {
+                updated.push_str("-- ");
+                updated.push_str(line);
+                updated.push('\n');
+                modified = true;
+                continue;
+            }
+        }
+
+        updated.push_str(line);
+        updated.push('\n');
+    }
+
+    if modified {
+        fs::write(path, updated)
+            .with_context(|| format!("Failed to write sanitized globals dump to {}", path))?;
+    }
+
+    Ok(())
+}
+
 fn rewrite_create_role_statements(sql: &str) -> Option<String> {
     if sql.is_empty() {
         return None;
