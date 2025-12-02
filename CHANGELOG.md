@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.2] - 2025-12-02
+
+### Fixed
+
+- **PostgreSQL globals restores no longer fail on `auto_explain.log_min_duration`**: globals sanitization now comments out `ALTER ROLE ... SET auto_explain.log_min_duration` (and similar privileged parameters) so `database-replicator init` can rerun cleanly against managed Postgres targets that restrict GUC changes.
+
 ## [5.3.1] - 2025-12-01
 
 ### Fixed
