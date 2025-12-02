@@ -720,10 +720,14 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
     tracing::info!("  Dropping existing database '{}'...", db_name);
 
     // Terminate existing connections to the database
+    // Skip connections owned by SUPERUSER roles (we can't terminate those on managed PostgreSQL)
     let terminate_query = "
-        SELECT pg_terminate_backend(pid)
-        FROM pg_stat_activity
-        WHERE datname = $1 AND pid <> pg_backend_pid()
+        SELECT pg_terminate_backend(sa.pid)
+        FROM pg_stat_activity sa
+        JOIN pg_roles r ON sa.usename = r.rolname
+        WHERE sa.datname = $1
+          AND sa.pid <> pg_backend_pid()
+          AND NOT r.rolsuper
     ";
     target_conn.execute(terminate_query, &[&db_name]).await?;
 

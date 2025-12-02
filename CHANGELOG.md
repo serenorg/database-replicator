@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.12] - 2025-12-02
+
+### Fixed
+
+- **Skip SUPERUSER connections when dropping databases**: When dropping an existing database with `--drop-existing`, the tool now skips terminating connections owned by SUPERUSER roles. This prevents "permission denied to terminate process" errors on managed PostgreSQL services like AWS RDS and SerenDB where regular users cannot terminate superuser sessions.
+
 ## [5.3.11] - 2025-12-02
 
 ### Fixed
