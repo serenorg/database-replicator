@@ -104,7 +104,8 @@ pub async fn init(
             // Run pre-flight checks before any destructive operations
             tracing::info!("Running pre-flight checks...");
 
-            let databases = filter.include_databases().map(|v| v.to_vec());
+            // Get explicit database list from filters (include_databases or extracted from include_tables)
+            let databases = filter.databases_to_check();
             let preflight_result = crate::preflight::run_preflight_checks(
                 source_url,
                 target_url,

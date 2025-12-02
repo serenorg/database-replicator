@@ -25,13 +25,18 @@ pub struct ColumnInfo {
 }
 
 /// List all non-system databases in the cluster
+///
+/// Excludes:
+/// - PostgreSQL template databases (template0, template1)
+/// - PostgreSQL default database (postgres)
+/// - AWS RDS internal database (rdsadmin)
 pub async fn list_databases(client: &Client) -> Result<Vec<DatabaseInfo>> {
     let rows = client
         .query(
             "SELECT datname, pg_catalog.pg_get_userbyid(datdba) as owner
              FROM pg_catalog.pg_database
              WHERE datistemplate = false
-               AND datname NOT IN ('postgres', 'template0', 'template1')
+               AND datname NOT IN ('postgres', 'template0', 'template1', 'rdsadmin')
              ORDER BY datname",
             &[],
         )

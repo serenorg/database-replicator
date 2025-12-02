@@ -144,11 +144,56 @@ impl ReplicationFilter {
         self.exclude_tables.as_ref()
     }
 
+    /// Gets the explicit list of databases to check/replicate
+    ///
+    /// Returns databases from:
+    /// 1. include_databases if specified, OR
+    /// 2. database names extracted from include_tables if specified
+    ///
+    /// Returns None if no explicit database list can be determined
+    /// (meaning all databases should be enumerated).
+    pub fn databases_to_check(&self) -> Option<Vec<String>> {
+        if let Some(ref include) = self.include_databases {
+            return Some(include.clone());
+        }
+
+        if let Some(ref include_tables) = self.include_tables {
+            // Extract unique database names from "database.table" format
+            let mut databases: Vec<String> = include_tables
+                .iter()
+                .filter_map(|table| table.split('.').next().map(String::from))
+                .collect();
+            databases.sort();
+            databases.dedup();
+            if !databases.is_empty() {
+                return Some(databases);
+            }
+        }
+
+        None
+    }
+
     /// Determines if a database should be replicated
+    ///
+    /// A database is replicated if:
+    /// 1. It's in the include_databases list (if specified), OR
+    /// 2. It's referenced in include_tables (if specified and no include_databases), OR
+    /// 3. No include filters are specified (replicate all)
+    ///
+    /// AND it's not in the exclude_databases list.
     pub fn should_replicate_database(&self, db_name: &str) -> bool {
-        // If include list exists, database must be in it
+        // If include_databases list exists, database must be in it
         if let Some(ref include) = self.include_databases {
             if !include.contains(&db_name.to_string()) {
+                return false;
+            }
+        } else if let Some(ref include_tables) = self.include_tables {
+            // If include_tables is specified but include_databases is not,
+            // only replicate databases referenced in include_tables
+            let db_referenced = include_tables
+                .iter()
+                .any(|table| table.split('.').next() == Some(db_name));
+            if !db_referenced {
                 return false;
             }
         }

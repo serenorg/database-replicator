@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.11] - 2025-12-02
+
+### Fixed
+
+- **Skip AWS RDS internal database during discovery**: The `rdsadmin` database (AWS RDS's internal administration database) is now automatically excluded from database discovery, preventing "pg_hba.conf rejects connection" errors when replicating from AWS RDS sources.
+
+- **Infer database list from `--include-tables`**: When using `--include-tables` without `--include-databases`, the tool now automatically extracts database names from the table specifications (e.g., `--include-tables "mydb.table1,mydb.table2"` will only replicate the `mydb` database). Previously, all databases were enumerated even when only specific tables were requested.
+
 ## [5.3.10] - 2025-12-02
 
 ### Improved
