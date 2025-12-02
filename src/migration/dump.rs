@@ -141,13 +141,6 @@ pub fn remove_superuser_from_globals(path: &str) -> Result<()> {
 /// `ALTER ROLE ... SET`. Each offending line is commented out so `psql` skips
 /// them without aborting the rest of the globals restore.
 pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
-    const BLOCKED_PATTERNS: &[&str] = &[
-        "set log_statement",
-        "set log_min_error_statement",
-        "set log_min_messages",
-        "set auto_explain.log_min_duration",
-    ];
-
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read globals dump at {}", path))?;
 
@@ -155,19 +148,8 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
     let mut modified = false;
 
     for line in content.lines() {
-        let trimmed = line.trim_start();
-        if trimmed.starts_with("--") {
-            updated.push_str(line);
-            updated.push('\n');
-            continue;
-        }
-
-        let lower = line.to_ascii_lowercase();
-        let is_blocked = BLOCKED_PATTERNS
-            .iter()
-            .any(|pattern| lower.contains(pattern));
-
-        if is_blocked {
+        let lower_line = line.to_ascii_lowercase();
+        if lower_line.contains("alter role") && lower_line.contains("set") {
             updated.push_str("-- ");
             updated.push_str(line);
             updated.push('\n');
