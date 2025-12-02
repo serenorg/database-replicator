@@ -232,6 +232,8 @@ pub async fn init(
         .context("Failed to remove restricted parameter settings from globals dump")?;
     remove_restricted_role_grants(globals_file.to_str().unwrap())
         .context("Failed to remove restricted role grants from globals dump")?;
+    migration::remove_tablespace_statements(globals_file.to_str().unwrap())
+        .context("Failed to remove CREATE TABLESPACE statements from globals dump")?;
 
     // Step 2: Restore global objects
     tracing::info!("Step 2/4: Restoring global objects to target...");

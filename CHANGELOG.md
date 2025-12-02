@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.7] - 2025-12-02
+
+### Fixed
+
+- **Skip CREATE TABLESPACE statements during globals restore**: `CREATE TABLESPACE` statements are now automatically commented out when restoring to managed PostgreSQL targets like SerenDB that do not support custom tablespaces.
+
 ## [5.3.6] - 2025-12-02
 
 ### Fixed

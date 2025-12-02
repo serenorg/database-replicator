@@ -168,6 +168,39 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Comments out `CREATE TABLESPACE` statements in a globals dump file.
+///
+/// Some managed PostgreSQL targets (e.g., SerenDB) do not support custom tablespaces.
+/// When replicating from a source that has tablespaces defined, this function
+/// comments out those statements to allow the globals restore to proceed.
+pub fn remove_tablespace_statements(path: &str) -> Result<()> {
+    let content = fs::read_to_string(path)
+        .with_context(|| format!("Failed to read globals dump at {}", path))?;
+
+    let mut updated = String::with_capacity(content.len());
+    let mut modified = false;
+
+    for line in content.lines() {
+        let lower_trimmed = line.trim().to_ascii_lowercase();
+        if lower_trimmed.starts_with("create tablespace") {
+            updated.push_str("-- ");
+            updated.push_str(line);
+            updated.push('\n');
+            modified = true;
+        } else {
+            updated.push_str(line);
+            updated.push('\n');
+        }
+    }
+
+    if modified {
+        fs::write(path, updated)
+            .with_context(|| format!("Failed to write sanitized globals dump to {}", path))?;
+    }
+
+    Ok(())
+}
+
 /// Comments out `GRANT` statements for roles that are restricted on managed services.
 ///
 /// AWS RDS and other managed services may prevent granting certain default roles

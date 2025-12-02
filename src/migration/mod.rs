@@ -11,7 +11,7 @@ pub mod schema;
 pub use checksum::{compare_tables, compute_table_checksum, ChecksumResult};
 pub use dump::{
     dump_data, dump_globals, dump_schema, remove_restricted_guc_settings,
-    remove_superuser_from_globals, sanitize_globals_dump,
+    remove_superuser_from_globals, remove_tablespace_statements, sanitize_globals_dump,
 };
 pub use estimation::{estimate_database_sizes, format_bytes, format_duration, DatabaseSizeInfo};
 pub use filtered::copy_filtered_tables;
