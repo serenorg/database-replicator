@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.6] - 2025-12-02
+
+### Fixed
+
+- **Skip GRANT statements with restricted GRANTED BY clauses**: `GRANT` statements that include `GRANTED BY rdsadmin`, `GRANTED BY rds_superuser`, or similar RDS admin roles are now automatically commented out during globals restore, preventing "permission denied to grant privileges as role" errors on AWS RDS targets.
+
 ## [5.3.5] - 2025-12-02
 
 ### Fixed

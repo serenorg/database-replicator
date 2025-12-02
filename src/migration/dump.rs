@@ -171,8 +171,8 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
 /// Comments out `GRANT` statements for roles that are restricted on managed services.
 ///
 /// AWS RDS and other managed services may prevent granting certain default roles
-/// like `pg_checkpoint`. This function comments out those statements to allow
-/// the globals restore to proceed without permission errors.
+/// like `pg_checkpoint`. This function also filters out GRANT statements that use
+/// `GRANTED BY` clauses referencing RDS admin roles (e.g., `rdsadmin`).
 pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
     // Roles that cannot be granted on managed PostgreSQL services (AWS RDS, etc.)
     const RESTRICTED_ROLES: &[&str] = &[
@@ -192,6 +192,14 @@ pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
         "pg_use_reserved_connections",
     ];
 
+    // Roles that cannot be used as grantors in GRANTED BY clauses
+    const RESTRICTED_GRANTORS: &[&str] = &[
+        "rdsadmin",
+        "rds_superuser",
+        "rdsrepladmin",
+        "rds_replication",
+    ];
+
     let content = fs::read_to_string(path)
         .with_context(|| format!("Failed to read globals dump at {}", path))?;
 
@@ -201,7 +209,8 @@ pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
     for line in content.lines() {
         let lower_trimmed = line.trim().to_ascii_lowercase();
         if lower_trimmed.starts_with("grant ") {
-            let is_restricted = RESTRICTED_ROLES.iter().any(|role| {
+            // Check if granting a restricted role
+            let is_restricted_role = RESTRICTED_ROLES.iter().any(|role| {
                 // Get the role being granted (2nd word), stripping any quotes
                 // e.g. "grant pg_checkpoint to some_user" or "grant \"pg_checkpoint\" to some_user"
                 lower_trimmed
@@ -211,7 +220,14 @@ pub fn remove_restricted_role_grants(path: &str) -> Result<()> {
                     .unwrap_or(false)
             });
 
-            if is_restricted {
+            // Check if using a restricted grantor in GRANTED BY clause
+            let has_restricted_grantor = RESTRICTED_GRANTORS.iter().any(|grantor| {
+                // Look for "granted by rdsadmin" or "granted by \"rdsadmin\""
+                lower_trimmed.contains(&format!("granted by {}", grantor))
+                    || lower_trimmed.contains(&format!("granted by \"{}\"", grantor))
+            });
+
+            if is_restricted_role || has_restricted_grantor {
                 updated.push_str("-- ");
                 updated.push_str(line);
                 updated.push('\n');
@@ -888,6 +904,9 @@ GRANT "pg_read_all_stats" TO myuser;
 GRANT pg_monitor TO myuser;
 GRANT myrole TO myuser;
 GRANT SELECT ON TABLE users TO myuser;
+GRANT rds_superuser TO myuser GRANTED BY rdsadmin;
+GRANT ALL ON SCHEMA public TO myuser GRANTED BY "rdsadmin";
+GRANT SELECT ON TABLE orders TO myuser GRANTED BY postgres;
 "#;
         std::fs::write(&globals_file, content).unwrap();
 
@@ -902,9 +921,14 @@ GRANT SELECT ON TABLE users TO myuser;
         assert!(result.contains("-- GRANT \"pg_read_all_stats\" TO myuser;"));
         assert!(result.contains("-- GRANT pg_monitor TO myuser;"));
 
+        // GRANTED BY rdsadmin clauses should be commented out
+        assert!(result.contains("-- GRANT rds_superuser TO myuser GRANTED BY rdsadmin;"));
+        assert!(result.contains("-- GRANT ALL ON SCHEMA public TO myuser GRANTED BY \"rdsadmin\";"));
+
         // Non-restricted grants should remain
         assert!(result.contains("\nGRANT myrole TO myuser;\n"));
         assert!(result.contains("\nGRANT SELECT ON TABLE users TO myuser;\n"));
+        assert!(result.contains("\nGRANT SELECT ON TABLE orders TO myuser GRANTED BY postgres;\n"));
 
         // Other statements should remain unchanged
         assert!(result.contains("CREATE ROLE myuser;"));
