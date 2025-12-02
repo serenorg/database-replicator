@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.4] - 2025-12-02
+
+### Fixed
+
+- **PostgreSQL globals restores no longer fail on `GRANT pg_checkpoint`**: `GRANT` statements for the `pg_checkpoint` role are now commented out, preventing permission denied errors on managed PostgreSQL services like AWS RDS.
+
 ## [5.3.3] - 2025-12-02
 
 ### Fixed
