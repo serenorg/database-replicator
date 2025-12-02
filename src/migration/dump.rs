@@ -145,6 +145,7 @@ pub fn remove_restricted_guc_settings(path: &str) -> Result<()> {
         "set log_statement",
         "set log_min_error_statement",
         "set log_min_messages",
+        "set auto_explain.log_min_duration",
     ];
 
     let content = fs::read_to_string(path)
