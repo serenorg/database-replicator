@@ -92,6 +92,8 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
 
+          gh release create "${VERSION}" --notes-file release-notes.md
+
           ls -l release-artifacts/**/*
 
           # Upload assets to existing release
