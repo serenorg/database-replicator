@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.16] - 2025-12-03
+
+### Fixed
+
+- **Silent failure during globals restore**: The `restore_globals` function now captures `stderr` from `psql` to provide clear error messages when the restore process fails. Previously, `stderr` was inherited, causing the application to hang silently without displaying the underlying error. Non-fatal notices (e.g., "role already exists") are now logged as warnings, and the process continues. ([706e81d](https://github.com/serenorg/database-replicator/commit/706e81df2215c7e090a21051512a5241e3d748f5))
+
 ## [5.3.15] - 2025-12-03
 
 ### Fixed
