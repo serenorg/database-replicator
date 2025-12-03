@@ -405,8 +405,8 @@ pub async fn init(
                                 db_info.name
                             );
 
-                            // Check if empty
-                            if database_is_empty(target_url, &db_info.name).await? {
+                            // Check if empty (reuse existing connection to avoid pool exhaustion)
+                            if database_is_empty(&target_client).await? {
                                 tracing::info!(
                                     "  Database '{}' is empty, proceeding with restore",
                                     db_info.name
@@ -677,11 +677,10 @@ fn confirm_replication(sizes: &[migration::DatabaseSizeInfo]) -> Result<bool> {
 }
 
 /// Checks if a database is empty (no user tables)
-async fn database_is_empty(target_url: &str, db_name: &str) -> Result<bool> {
-    // Need to connect to the specific database to check tables
-    let db_url = replace_database_in_url(target_url, db_name)?;
-    let client = postgres::connect_with_retry(&db_url).await?;
-
+///
+/// Uses the existing connection to avoid connection pool exhaustion on
+/// serverless PostgreSQL providers (SerenDB, Neon) that have strict limits.
+async fn database_is_empty(client: &tokio_postgres::Client) -> Result<bool> {
     let query = "
         SELECT COUNT(*)
         FROM information_schema.tables
@@ -1223,9 +1222,14 @@ mod tests {
     async fn test_database_is_empty() {
         let url = std::env::var("TEST_TARGET_URL").expect("TEST_TARGET_URL not set");
 
+        // Connect to the database first
+        let client = crate::postgres::connect_with_retry(&url)
+            .await
+            .expect("Failed to connect");
+
         // postgres database might be empty of user tables
         // This test just verifies the function doesn't crash
-        let result = database_is_empty(&url, "postgres").await;
+        let result = database_is_empty(&client).await;
         assert!(result.is_ok());
     }
 }
