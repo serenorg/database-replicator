@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.14] - 2025-12-03
+
+### Fixed
+
+- **Fix connection hang in `database_is_empty()` for SerenDB/Neon targets**: The `database_is_empty()` function now reuses the existing database connection instead of creating a new one. This prevents indefinite hangs when connecting to serverless PostgreSQL providers (SerenDB, Neon) that have strict connection pool limits, where attempting to create a second connection while the first is active would exhaust the pool and cause `tokio_postgres::connect` to hang forever (no built-in timeout).
+
 ## [5.3.13] - 2025-12-03
 
 ### Fixed
