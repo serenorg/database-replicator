@@ -96,6 +96,4 @@ jobs:
           gh release create "${VERSION}" \
             --title "Release ${VERSION}" \
             --notes-file release-notes.md \
-            release-artifacts/database-replicator-linux-x64-binary/database-replicator-linux-x64-binary \
-            release-artifacts/database-replicator-macos-x64-binary/database-replicator-macos-x64-binary \
-            release-artifacts/database-replicator-macos-arm64-binary/database-replicator-macos-arm64-binary
+            release-artifacts/**/*
