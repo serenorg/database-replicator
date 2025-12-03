@@ -4,6 +4,7 @@
 use anyhow::{Context, Result};
 use std::process::{Command, Stdio};
 use std::time::Duration;
+use tokio::process::Command as TokioCommand;
 
 /// Restore global objects using psql
 pub async fn restore_globals(target_url: &str, input_path: &str) -> Result<()> {
@@ -16,65 +17,75 @@ pub async fn restore_globals(target_url: &str, input_path: &str) -> Result<()> {
         .context("Failed to create .pgpass file for authentication")?;
 
     let env_vars = parts.to_pg_env_vars();
-    let input_path_owned = input_path.to_string();
 
-    // Wrap subprocess execution with retry logic
-    let result = crate::utils::retry_subprocess_with_backoff(
-        || {
-            let mut cmd = Command::new("psql");
-            cmd.arg("--host")
-                .arg(&parts.host)
-                .arg("--port")
-                .arg(parts.port.to_string())
-                .arg("--dbname")
-                .arg(&parts.database)
-                .arg(format!("--file={}", input_path_owned))
-                .arg("--quiet")
-                .arg("-v")
-                .arg("ON_ERROR_STOP=1") // Stop on first error for better visibility
-                .env("PGPASSFILE", pgpass.path())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
+    let mut cmd = TokioCommand::new("psql");
+    cmd.arg("--host")
+        .arg(&parts.host)
+        .arg("--port")
+        .arg(parts.port.to_string())
+        .arg("--dbname")
+        .arg(&parts.database)
+        .arg(format!("--file={}", input_path))
+        .arg("--quiet")
+        .arg("-v")
+        .arg("ON_ERROR_STOP=1") // Stop on first error for better visibility
+        .env("PGPASSFILE", pgpass.path())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-            // Add username if specified
-            if let Some(user) = &parts.user {
-                cmd.arg("--username").arg(user);
-            }
+    // Add username if specified
+    if let Some(user) = &parts.user {
+        cmd.arg("--username").arg(user);
+    }
 
-            // Apply query parameters as environment variables (SSL, channel_binding, etc.)
-            for (env_var, value) in &env_vars {
-                cmd.env(env_var, value);
-            }
+    // Apply query parameters as environment variables (SSL, channel_binding, etc.)
+    for (env_var, value) in &env_vars {
+        cmd.env(env_var, value);
+    }
 
-            // Apply TCP keepalive parameters to prevent idle connection timeouts
-            for (env_var, value) in crate::utils::get_keepalive_env_vars() {
-                cmd.env(env_var, value);
-            }
+    // Apply TCP keepalive parameters to prevent idle connection timeouts
+    for (env_var, value) in crate::utils::get_keepalive_env_vars() {
+        cmd.env(env_var, value);
+    }
 
-            cmd.status().context(
-                "Failed to execute psql. Is PostgreSQL client installed?\n\
-                 Install with:\n\
-                 - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
-                 - macOS: brew install postgresql\n\
-                 - RHEL/CentOS: sudo yum install postgresql",
-            )
-        },
-        3,                      // Max 3 retries
-        Duration::from_secs(1), // Start with 1 second delay
-        "psql (restore globals)",
-    )
-    .await;
+    let output = cmd.output().await.context(
+        "Failed to execute psql. Is PostgreSQL client installed?\n\
+         Install with:\n\
+         - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
+         - macOS: brew install postgresql\n\
+         - RHEL/CentOS: sudo yum install postgresql",
+    )?;
 
-    // Handle result - don't fail on warnings for global objects
-    match result {
-        Ok(()) => {
-            tracing::info!("✓ Global objects restored");
-            Ok(())
+    if output.status.success() {
+        tracing::info!("✓ Global objects restored");
+        // Even on success, there might be NOTICES or WARNINGS on stderr
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if !stderr.trim().is_empty() {
+            tracing::debug!("psql stderr output:\n{}", stderr);
         }
-        Err(e) => {
-            tracing::warn!("⚠ Some global object restoration warnings occurred: {}", e);
-            // Don't fail - some errors are expected (roles may already exist)
-            Ok(())
+        Ok(())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stdout = String::from_utf8_lossy(&output.stdout);
+
+        // Check for common, non-fatal warnings
+        if stderr.contains("already exists") && stderr.contains("skipping") {
+            tracing::warn!(
+                "⚠ Some global objects already exist, which is usually safe. Full output:\n{}",
+                stderr
+            );
+            Ok(()) // Treat as success
+        } else {
+            // A real error occurred
+            anyhow::bail!(
+                "Failed to restore global objects.\n\
+                 Exit Code: {}\n\
+                 Stderr:\n{}\n\
+                 Stdout:\n{}",
+                output.status,
+                stderr,
+                stdout
+            );
         }
     }
 }
