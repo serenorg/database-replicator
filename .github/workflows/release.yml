@@ -92,6 +92,8 @@ jobs:
         run: |
           VERSION=${GITHUB_REF#refs/tags/}
 
+          ls -l release-artifacts/**/*
+
           # Create release with all binaries
           gh release create "${VERSION}" \
             --title "Release ${VERSION}" \
