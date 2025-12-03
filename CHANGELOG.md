@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.13] - 2025-12-03
+
+### Fixed
+
+- **Clear error message when SUPERUSER connections block DROP DATABASE**: Before attempting to drop a database, the tool now checks if any connections remain after terminating regular user sessions. If SUPERUSER connections cannot be terminated (common on AWS RDS and SerenDB), the tool now fails early with a clear error message explaining the issue and providing resolution steps, instead of letting `DROP DATABASE` fail with an obscure "database is being accessed by other users" error.
+
 ## [5.3.12] - 2025-12-02
 
 ### Fixed

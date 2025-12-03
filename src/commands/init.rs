@@ -731,6 +731,39 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
     ";
     target_conn.execute(terminate_query, &[&db_name]).await?;
 
+    // Check if any connections remain (including SUPERUSER connections we couldn't terminate)
+    let remaining_query = "
+        SELECT COUNT(*), STRING_AGG(DISTINCT sa.usename, ', ')
+        FROM pg_stat_activity sa
+        WHERE sa.datname = $1
+          AND sa.pid <> pg_backend_pid()
+    ";
+    let row = target_conn
+        .query_one(remaining_query, &[&db_name])
+        .await
+        .context("Failed to check remaining connections")?;
+    let remaining_count: i64 = row.get(0);
+    let remaining_users: Option<String> = row.get(1);
+
+    if remaining_count > 0 {
+        let users = remaining_users.unwrap_or_else(|| "unknown".to_string());
+        bail!(
+            "Cannot drop database '{}': {} active connection(s) from user(s): {}\n\n\
+             These are likely SUPERUSER sessions that cannot be terminated by regular users.\n\
+             This is common on managed PostgreSQL services (AWS RDS, SerenDB) where system\n\
+             processes maintain superuser connections.\n\n\
+             To resolve this:\n\
+             1. Wait a few minutes and retry (system connections may be temporary)\n\
+             2. Ask your database administrator to terminate the blocking sessions:\n\
+                SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '{}';\n\
+             3. If using AWS RDS, check for RDS-managed connections in the RDS console",
+            db_name,
+            remaining_count,
+            users,
+            db_name
+        );
+    }
+
     // Drop the database
     let drop_query = format!(
         "DROP DATABASE IF EXISTS {}",
