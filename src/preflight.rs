@@ -169,22 +169,55 @@ pub async fn run_preflight_checks(
     // 1. Check local environment (pg_dump, pg_restore, etc.)
     check_local_environment(&mut result);
 
-    // 2. Check network connectivity
-    let clients = check_network_connectivity(&mut result, source_url, target_url).await;
+    // 2. Check network connectivity and get server versions. Connections are short-lived.
+    let source_client_url = check_network_connectivity(&mut result, source_url, "source").await?;
+    let target_client_url = check_network_connectivity(&mut result, target_url, "target").await?;
 
     // 3. Check version compatibility (only if we could connect and have local version)
     if result.local_pg_version.is_some() && result.source_pg_version.is_some() {
         check_version_compatibility(&mut result);
     }
 
-    // 4. Check source permissions
-    if let Some(ref client) = clients.source {
-        check_source_permissions(&mut result, client).await;
+    // 4. Check source permissions using a new, short-lived connection
+    if let Some(url) = source_client_url {
+        match crate::postgres::connect_with_retry(&url).await {
+            Ok(client) => {
+                check_source_permissions(&mut result, &client).await;
+                // client is dropped here, closing the connection
+            }
+            Err(e) => {
+                result.source_permissions.push(CheckResult::fail(
+                    "connection",
+                    format!("Failed to re-establish connection to source for permission checks: {}", e),
+                ));
+                result.issues.push(PreflightIssue {
+                    title: "Source connection for permissions failed".to_string(),
+                    explanation: e.to_string(),
+                    fixes: vec!["Ensure source database is accessible".to_string()],
+                });
+            }
+        }
     }
 
-    // 5. Check target permissions
-    if let Some(ref client) = clients.target {
-        check_target_permissions(&mut result, client).await;
+    // 5. Check target permissions using a new, short-lived connection
+    if let Some(url) = target_client_url {
+        match crate::postgres::connect_with_retry(&url).await {
+            Ok(client) => {
+                check_target_permissions(&mut result, &client).await;
+                // client is dropped here, closing the connection
+            }
+            Err(e) => {
+                result.target_permissions.push(CheckResult::fail(
+                    "connection",
+                    format!("Failed to re-establish connection to target for permission checks: {}", e),
+                ));
+                result.issues.push(PreflightIssue {
+                    title: "Target connection for permissions failed".to_string(),
+                    explanation: e.to_string(),
+                    fixes: vec!["Ensure target database is accessible".to_string()],
+                });
+            }
+        }
     }
 
     Ok(result)
@@ -239,41 +272,34 @@ fn check_local_environment(result: &mut PreflightResult) {
     }
 }
 
-#[derive(Default)]
-struct ConnectivityClients {
-    source: Option<Client>,
-    target: Option<Client>,
-}
-
 async fn check_network_connectivity(
     result: &mut PreflightResult,
-    source_url: &str,
-    target_url: &str,
-) -> ConnectivityClients {
-    let mut clients = ConnectivityClients::default();
-
-    // Check source
-    match crate::postgres::connect_with_retry(source_url).await {
+    db_url: &str,
+    db_type: &str, // "source" or "target"
+) -> Result<Option<String>> {
+    match crate::postgres::connect_with_retry(db_url).await {
         Ok(client) => {
-            // Also get server version while connected
-            if let Ok(row) = client.query_one("SHOW server_version", &[]).await {
-                let version_str: String = row.get(0);
-                if let Ok(version) = crate::utils::parse_pg_version_string(&version_str) {
-                    result.source_pg_version = Some(version);
+            // Also get server version while connected (only for source)
+            if db_type == "source" {
+                if let Ok(row) = client.query_one("SHOW server_version", &[]).await {
+                    let version_str: String = row.get(0);
+                    if let Ok(version) = crate::utils::parse_pg_version_string(&version_str) {
+                        result.source_pg_version = Some(version);
+                    }
                 }
             }
             result
                 .network
-                .push(CheckResult::pass("source", "Source database reachable"));
-            clients.source = Some(client);
+                .push(CheckResult::pass(db_type, format!("{} database reachable", db_type)));
+            Ok(Some(db_url.to_string())) // Return the URL if connection was successful
         }
         Err(e) => {
             result.network.push(CheckResult::fail(
-                "source",
-                format!("Cannot connect to source: {}", e),
+                db_type,
+                format!("Cannot connect to {}: {}", db_type, e),
             ));
             result.issues.push(PreflightIssue {
-                title: "Source database unreachable".to_string(),
+                title: format!("{} database unreachable", db_type),
                 explanation: e.to_string(),
                 fixes: vec![
                     "Verify connection string is correct".to_string(),
@@ -281,34 +307,9 @@ async fn check_network_connectivity(
                     "Ensure firewall allows PostgreSQL port (5432)".to_string(),
                 ],
             });
+            Ok(None) // Return None if connection failed
         }
     }
-
-    // Check target
-    match crate::postgres::connect_with_retry(target_url).await {
-        Ok(client) => {
-            result
-                .network
-                .push(CheckResult::pass("target", "Target database reachable"));
-            clients.target = Some(client);
-        }
-        Err(e) => {
-            result.network.push(CheckResult::fail(
-                "target",
-                format!("Cannot connect to target: {}", e),
-            ));
-            result.issues.push(PreflightIssue {
-                title: "Target database unreachable".to_string(),
-                explanation: e.to_string(),
-                fixes: vec![
-                    "Verify connection string is correct".to_string(),
-                    "Check network connectivity to database host".to_string(),
-                ],
-            });
-        }
-    }
-
-    clients
 }
 
 fn check_version_compatibility(result: &mut PreflightResult) {

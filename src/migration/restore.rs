@@ -48,6 +48,9 @@ pub async fn restore_globals(target_url: &str, input_path: &str) -> Result<()> {
         cmd.env(env_var, value);
     }
 
+    // Mitigate hangs on serverless DBs with strict connection limits
+    cmd.env("PGCONNECT_TIMEOUT", "30");
+
     let output = cmd.output().await.context(
         "Failed to execute psql. Is PostgreSQL client installed?\n\
          Install with:\n\
