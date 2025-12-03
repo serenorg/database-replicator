@@ -6,7 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
-- **Fix connection hang during preflight checks for SerenDB/Neon targets**: A 500ms delay was added after preflight checks and before any `pg_dump` operations. This allows the connection pool to clean up connections opened during preflight, preventing connection exhaustion that would cause `pg_dumpall` to hang indefinitely on serverless PostgreSQL providers with strict connection limits.
+- **Fix connection hang during preflight checks for SerenDB/Neon targets**: Preflight now opens at most one source and one target connection, reusing them across all connectivity and permission checks. Dropping those clients before running `pg_dump*` eliminates the connection pool exhaustion that previously caused `pg_dumpall` to hang indefinitely on serverless PostgreSQL providers with strict connection limits.
 - **Mitigate connection pool exhaustion hangs with timeout**: All `pg_dump` and `pg_dumpall` commands now execute with a 30-second connection timeout (`PGCONNECT_TIMEOUT=30`). This prevents indefinite hangs if the connection pool is exhausted and makes failures detectable instead of causing silent hangs.
 
 ## [5.3.14] - 2025-12-03

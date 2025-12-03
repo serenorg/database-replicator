@@ -2,6 +2,7 @@
 // ABOUTME: Validates local environment, network connectivity, and database permissions
 
 use anyhow::Result;
+use tokio_postgres::Client;
 
 /// Individual check result
 #[derive(Debug, Clone)]
@@ -169,7 +170,7 @@ pub async fn run_preflight_checks(
     check_local_environment(&mut result);
 
     // 2. Check network connectivity
-    check_network_connectivity(&mut result, source_url, target_url).await;
+    let clients = check_network_connectivity(&mut result, source_url, target_url).await;
 
     // 3. Check version compatibility (only if we could connect and have local version)
     if result.local_pg_version.is_some() && result.source_pg_version.is_some() {
@@ -177,21 +178,13 @@ pub async fn run_preflight_checks(
     }
 
     // 4. Check source permissions
-    if result
-        .network
-        .iter()
-        .any(|c| c.name == "source" && c.passed)
-    {
-        check_source_permissions(&mut result, source_url).await;
+    if let Some(ref client) = clients.source {
+        check_source_permissions(&mut result, client).await;
     }
 
     // 5. Check target permissions
-    if result
-        .network
-        .iter()
-        .any(|c| c.name == "target" && c.passed)
-    {
-        check_target_permissions(&mut result, target_url).await;
+    if let Some(ref client) = clients.target {
+        check_target_permissions(&mut result, client).await;
     }
 
     Ok(result)
@@ -246,11 +239,19 @@ fn check_local_environment(result: &mut PreflightResult) {
     }
 }
 
+#[derive(Default)]
+struct ConnectivityClients {
+    source: Option<Client>,
+    target: Option<Client>,
+}
+
 async fn check_network_connectivity(
     result: &mut PreflightResult,
     source_url: &str,
     target_url: &str,
-) {
+) -> ConnectivityClients {
+    let mut clients = ConnectivityClients::default();
+
     // Check source
     match crate::postgres::connect_with_retry(source_url).await {
         Ok(client) => {
@@ -264,6 +265,7 @@ async fn check_network_connectivity(
             result
                 .network
                 .push(CheckResult::pass("source", "Source database reachable"));
+            clients.source = Some(client);
         }
         Err(e) => {
             result.network.push(CheckResult::fail(
@@ -284,10 +286,11 @@ async fn check_network_connectivity(
 
     // Check target
     match crate::postgres::connect_with_retry(target_url).await {
-        Ok(_) => {
+        Ok(client) => {
             result
                 .network
                 .push(CheckResult::pass("target", "Target database reachable"));
+            clients.target = Some(client);
         }
         Err(e) => {
             result.network.push(CheckResult::fail(
@@ -304,6 +307,8 @@ async fn check_network_connectivity(
             });
         }
     }
+
+    clients
 }
 
 fn check_version_compatibility(result: &mut PreflightResult) {
@@ -337,126 +342,120 @@ fn check_version_compatibility(result: &mut PreflightResult) {
     }
 }
 
-async fn check_source_permissions(result: &mut PreflightResult, source_url: &str) {
-    if let Ok(client) = crate::postgres::connect_with_retry(source_url).await {
-        // Check REPLICATION privilege (or AWS RDS rds_replication role)
-        match crate::postgres::check_source_privileges(&client).await {
-            Ok(privs) => {
-                if privs.can_replicate() {
-                    let method = if privs.has_rds_replication {
-                        "Has rds_replication role (AWS RDS)"
-                    } else if privs.is_superuser {
-                        "Has superuser privilege"
-                    } else {
-                        "Has REPLICATION privilege"
-                    };
-                    result
-                        .source_permissions
-                        .push(CheckResult::pass("replication", method));
+async fn check_source_permissions(result: &mut PreflightResult, client: &Client) {
+    // Check REPLICATION privilege (or AWS RDS rds_replication role)
+    match crate::postgres::check_source_privileges(client).await {
+        Ok(privs) => {
+            if privs.can_replicate() {
+                let method = if privs.has_rds_replication {
+                    "Has rds_replication role (AWS RDS)"
+                } else if privs.is_superuser {
+                    "Has superuser privilege"
                 } else {
-                    result.source_permissions.push(CheckResult::fail(
-                        "replication",
-                        "Missing REPLICATION privilege",
-                    ));
-                    result.issues.push(PreflightIssue {
-                        title: "Missing REPLICATION privilege".to_string(),
-                        explanation: "Required for continuous sync".to_string(),
-                        fixes: vec![
-                            "Standard PostgreSQL: ALTER USER <username> WITH REPLICATION;"
-                                .to_string(),
-                            "AWS RDS: GRANT rds_replication TO <username>;".to_string(),
-                        ],
-                    });
-                }
-            }
-            Err(e) => {
+                    "Has REPLICATION privilege"
+                };
+                result
+                    .source_permissions
+                    .push(CheckResult::pass("replication", method));
+            } else {
                 result.source_permissions.push(CheckResult::fail(
-                    "privileges",
-                    format!("Failed to check: {}", e),
+                    "replication",
+                    "Missing REPLICATION privilege",
                 ));
+                result.issues.push(PreflightIssue {
+                    title: "Missing REPLICATION privilege".to_string(),
+                    explanation: "Required for continuous sync".to_string(),
+                    fixes: vec![
+                        "Standard PostgreSQL: ALTER USER <username> WITH REPLICATION;".to_string(),
+                        "AWS RDS: GRANT rds_replication TO <username>;".to_string(),
+                    ],
+                });
             }
         }
+        Err(e) => {
+            result.source_permissions.push(CheckResult::fail(
+                "privileges",
+                format!("Failed to check: {}", e),
+            ));
+        }
+    }
 
-        // Check table SELECT permissions
-        match crate::postgres::check_table_select_permissions(&client).await {
-            Ok(perms) => {
-                if perms.all_accessible() {
-                    result.source_permissions.push(CheckResult::pass(
-                        "select",
-                        format!("Has SELECT on all {} tables", perms.accessible_tables.len()),
-                    ));
-                } else {
-                    let inaccessible = &perms.inaccessible_tables;
-                    let count = inaccessible.len();
-                    let preview: Vec<&str> =
-                        inaccessible.iter().take(5).map(|s| s.as_str()).collect();
-                    let details = if count > 5 {
-                        format!("{}, ... ({} more)", preview.join(", "), count - 5)
-                    } else {
-                        preview.join(", ")
-                    };
-
-                    result.source_permissions.push(
-                        CheckResult::fail("select", format!("Missing SELECT on {} tables", count))
-                            .with_details(details),
-                    );
-                    result.issues.push(PreflightIssue {
-                        title: "Missing table permissions".to_string(),
-                        explanation: format!("User needs SELECT on {} tables", count),
-                        fixes: vec![
-                            "Run: GRANT SELECT ON ALL TABLES IN SCHEMA public TO <username>;"
-                                .to_string(),
-                        ],
-                    });
-                }
-            }
-            Err(e) => {
-                result.source_permissions.push(CheckResult::fail(
+    // Check table SELECT permissions
+    match crate::postgres::check_table_select_permissions(client).await {
+        Ok(perms) => {
+            if perms.all_accessible() {
+                result.source_permissions.push(CheckResult::pass(
                     "select",
-                    format!("Failed to check table permissions: {}", e),
+                    format!("Has SELECT on all {} tables", perms.accessible_tables.len()),
                 ));
+            } else {
+                let inaccessible = &perms.inaccessible_tables;
+                let count = inaccessible.len();
+                let preview: Vec<&str> = inaccessible.iter().take(5).map(|s| s.as_str()).collect();
+                let details = if count > 5 {
+                    format!("{}, ... ({} more)", preview.join(", "), count - 5)
+                } else {
+                    preview.join(", ")
+                };
+
+                result.source_permissions.push(
+                    CheckResult::fail("select", format!("Missing SELECT on {} tables", count))
+                        .with_details(details),
+                );
+                result.issues.push(PreflightIssue {
+                    title: "Missing table permissions".to_string(),
+                    explanation: format!("User needs SELECT on {} tables", count),
+                    fixes: vec![
+                        "Run: GRANT SELECT ON ALL TABLES IN SCHEMA public TO <username>;"
+                            .to_string(),
+                    ],
+                });
             }
+        }
+        Err(e) => {
+            result.source_permissions.push(CheckResult::fail(
+                "select",
+                format!("Failed to check table permissions: {}", e),
+            ));
         }
     }
 }
 
-async fn check_target_permissions(result: &mut PreflightResult, target_url: &str) {
-    if let Ok(client) = crate::postgres::connect_with_retry(target_url).await {
-        match crate::postgres::check_target_privileges(&client).await {
-            Ok(privs) => {
-                if privs.has_create_db || privs.is_superuser {
-                    result
-                        .target_permissions
-                        .push(CheckResult::pass("createdb", "Can create databases"));
-                } else {
-                    result
-                        .target_permissions
-                        .push(CheckResult::fail("createdb", "Cannot create databases"));
-                    result.issues.push(PreflightIssue {
-                        title: "Missing CREATEDB privilege".to_string(),
-                        explanation: "Cannot create databases on target".to_string(),
-                        fixes: vec!["Run: ALTER USER <username> CREATEDB;".to_string()],
-                    });
-                }
-
-                if privs.can_replicate() {
-                    result.target_permissions.push(CheckResult::pass(
-                        "subscription",
-                        "Can create subscriptions",
-                    ));
-                } else {
-                    result.target_permissions.push(CheckResult::fail(
-                        "subscription",
-                        "Cannot create subscriptions",
-                    ));
-                }
+async fn check_target_permissions(result: &mut PreflightResult, client: &Client) {
+    match crate::postgres::check_target_privileges(client).await {
+        Ok(privs) => {
+            if privs.has_create_db || privs.is_superuser {
+                result
+                    .target_permissions
+                    .push(CheckResult::pass("createdb", "Can create databases"));
+            } else {
+                result
+                    .target_permissions
+                    .push(CheckResult::fail("createdb", "Cannot create databases"));
+                result.issues.push(PreflightIssue {
+                    title: "Missing CREATEDB privilege".to_string(),
+                    explanation: "Cannot create databases on target".to_string(),
+                    fixes: vec!["Run: ALTER USER <username> CREATEDB;".to_string()],
+                });
             }
-            Err(e) => {
+
+            if privs.can_replicate() {
+                result.target_permissions.push(CheckResult::pass(
+                    "subscription",
+                    "Can create subscriptions",
+                ));
+            } else {
                 result.target_permissions.push(CheckResult::fail(
-                    "privileges",
-                    format!("Failed to check: {}", e),
+                    "subscription",
+                    "Cannot create subscriptions",
                 ));
             }
+        }
+        Err(e) => {
+            result.target_permissions.push(CheckResult::fail(
+                "privileges",
+                format!("Failed to check: {}", e),
+            ));
         }
     }
 }
