@@ -54,6 +54,9 @@ pub async fn dump_globals(source_url: &str, output_path: &str) -> Result<()> {
                 cmd.env(env_var, value);
             }
 
+            // Set connection timeout to prevent hangs on pool exhaustion
+            cmd.env("PGCONNECT_TIMEOUT", "30"); // Fail after 30 seconds
+
             cmd.status().context(
                 "Failed to execute pg_dumpall. Is PostgreSQL client installed?\n\
                  Install with:\n\
@@ -516,6 +519,9 @@ pub async fn dump_schema(
                 cmd.env(env_var, value);
             }
 
+            // Set connection timeout to prevent hangs on pool exhaustion
+            cmd.env("PGCONNECT_TIMEOUT", "30"); // Fail after 30 seconds
+
             cmd.status().context(
                 "Failed to execute pg_dump. Is PostgreSQL client installed?\n\
                  Install with:\n\
@@ -643,6 +649,9 @@ pub async fn dump_data(
             for (env_var, value) in crate::utils::get_keepalive_env_vars() {
                 cmd.env(env_var, value);
             }
+
+            // Set connection timeout to prevent hangs on pool exhaustion
+            cmd.env("PGCONNECT_TIMEOUT", "30"); // Fail after 30 seconds
 
             cmd.status().context(
                 "Failed to execute pg_dump. Is PostgreSQL client installed?\n\

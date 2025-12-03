@@ -212,6 +212,11 @@ pub async fn init(
         .context("Source and target validation failed")?;
     tracing::info!("✓ Verified source and target are different databases");
 
+    // Force connection cleanup before subprocess operations
+    // Preflight connections should be out of scope, but ensure pool is released
+    tracing::debug!("Waiting for connection pool cleanup...");
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+
     // Create managed temporary directory for dump files
     // Unlike TempDir, this survives SIGKILL and is cleaned up on next startup
     let temp_path =
