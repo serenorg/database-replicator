@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.17] - 2025-12-03
+
+### Fixed
+
+- **Connection hangs on serverless databases**: The replication process no longer hangs when connecting to serverless PostgreSQL providers like Neon or SerenDB. The fix involves two changes:
+  1.  **Short-lived connections**: Pre-flight checks now use short-lived connections that are immediately closed, preventing connection pool exhaustion.
+  2.  **Connection timeout**: A 30-second connection timeout has been added to the `psql` restore command to prevent indefinite hangs. ([70b4395](https://github.com/serenorg/database-replicator/commit/70b439585908b9e5f015e19d6554200013cb0053))
+
 ## [5.3.16] - 2025-12-03
 
 ### Fixed
