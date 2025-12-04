@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.19] - 2025-12-04
+
+### Fixed
+
+- **Fix `database_is_empty()` checking wrong database**: When checking if an existing target database is empty, the function now connects to the specific target database (target_db_url) instead of the default connection database (target_url). Previously, this bug caused the check to always return true because it was querying tables in the wrong database, potentially leading to data loss when the target was not actually empty.
+
+- **Add 30-second timeout to `database_is_empty()` query**: Prevents indefinite hangs on stale serverless connections (SerenDB, Neon) by wrapping the information_schema query in a tokio timeout. If the query doesn't complete within 30 seconds, it fails with a clear timeout error instead of hanging forever.
+
+## [5.3.18] - 2025-12-04
+
+### Changed
+
+- Internal version bump for CI testing (no functional changes).
+
 ## [5.3.17] - 2025-12-03
 
 ### Fixed
