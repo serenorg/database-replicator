@@ -139,6 +139,9 @@ pub async fn restore_schema(target_url: &str, input_path: &str) -> Result<()> {
                 cmd.env(env_var, value);
             }
 
+            // Mitigate hangs on serverless DBs with strict connection limits
+            cmd.env("PGCONNECT_TIMEOUT", "30");
+
             cmd.status().context(
                 "Failed to execute psql. Is PostgreSQL client installed?\n\
                  Install with:\n\
@@ -231,6 +234,9 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
             for (env_var, value) in crate::utils::get_keepalive_env_vars() {
                 cmd.env(env_var, value);
             }
+
+            // Mitigate hangs on serverless DBs with strict connection limits
+            cmd.env("PGCONNECT_TIMEOUT", "30");
 
             cmd.status().context(
                 "Failed to execute pg_restore. Is PostgreSQL client installed?\n\
