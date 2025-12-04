@@ -405,8 +405,15 @@ pub async fn init(
                                 db_info.name
                             );
 
-                            // Check if empty (reuse existing connection to avoid pool exhaustion)
-                            if database_is_empty(&target_client).await? {
+                            // Check if empty by connecting to the SPECIFIC database
+                            // (target_client is connected to default db, not the target db)
+                            let is_empty = {
+                                let db_client =
+                                    postgres::connect_with_retry(&target_db_url).await?;
+                                database_is_empty(&db_client).await?
+                            }; // db_client dropped here
+
+                            if is_empty {
                                 tracing::info!(
                                     "  Database '{}' is empty, proceeding with restore",
                                     db_info.name
@@ -676,10 +683,9 @@ fn confirm_replication(sizes: &[migration::DatabaseSizeInfo]) -> Result<bool> {
     Ok(input.trim().to_lowercase() == "y")
 }
 
-/// Checks if a database is empty (no user tables)
+/// Checks if the currently connected database is empty (has no user tables).
 ///
-/// Uses the existing connection to avoid connection pool exhaustion on
-/// serverless PostgreSQL providers (SerenDB, Neon) that have strict limits.
+/// Includes a 30-second timeout to prevent hanging on stale serverless connections.
 async fn database_is_empty(client: &tokio_postgres::Client) -> Result<bool> {
     let query = "
         SELECT COUNT(*)
@@ -687,7 +693,15 @@ async fn database_is_empty(client: &tokio_postgres::Client) -> Result<bool> {
         WHERE table_schema NOT IN ('pg_catalog', 'information_schema')
     ";
 
-    let row = client.query_one(query, &[]).await?;
+    // Add timeout to prevent indefinite hang on stale serverless connections
+    let row = tokio::time::timeout(
+        std::time::Duration::from_secs(30),
+        client.query_one(query, &[]),
+    )
+    .await
+    .context("database_is_empty query timed out after 30 seconds")?
+    .context("Failed to query information_schema.tables")?;
+
     let count: i64 = row.get(0);
 
     Ok(count == 0)
