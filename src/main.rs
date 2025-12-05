@@ -140,6 +140,12 @@ enum Commands {
         /// Force recreate subscriptions even if they already exist
         #[arg(long)]
         force: bool,
+        /// SerenDB project ID (for auto-enabling logical replication)
+        #[arg(long)]
+        project_id: Option<String>,
+        /// SerenDB Console API URL (defaults to https://console.serendb.com)
+        #[arg(long, default_value = "https://console.serendb.com")]
+        console_api: String,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -377,6 +383,8 @@ async fn main() -> anyhow::Result<()> {
             no_interactive,
             table_rules,
             force,
+            project_id,
+            console_api,
         } => {
             let filter = if !no_interactive {
                 // Interactive mode (default) - prompt user to select databases and tables
@@ -394,6 +402,14 @@ async fn main() -> anyhow::Result<()> {
                 let table_rule_data = build_table_rules(&table_rules)?;
                 filter.with_table_rules(table_rule_data)
             };
+
+            // If project_id is provided and target is SerenDB, check/enable logical replication
+            if let Some(ref project_id) = project_id {
+                if database_replicator::utils::is_serendb_target(&target) {
+                    check_and_enable_logical_replication(project_id, &console_api).await?;
+                }
+            }
+
             commands::sync(&source, &target, Some(filter), None, None, None, force).await
         }
         Commands::Status {
@@ -460,6 +476,90 @@ fn get_api_key() -> anyhow::Result<String> {
     }
 
     Ok(key.trim().to_string())
+}
+
+/// Check if logical replication is enabled on SerenDB project and offer to enable it
+async fn check_and_enable_logical_replication(
+    project_id: &str,
+    console_api: &str,
+) -> anyhow::Result<()> {
+    use database_replicator::serendb::ConsoleClient;
+    use dialoguer::{theme::ColorfulTheme, Confirm};
+
+    tracing::info!("Checking logical replication status for SerenDB project...");
+
+    // Get API key
+    let api_key = get_api_key()?;
+
+    // Create Console API client
+    let client = ConsoleClient::new(Some(console_api), api_key);
+
+    // Check if logical replication is already enabled
+    let project = client.get_project(project_id).await?;
+
+    if project.enable_logical_replication {
+        tracing::info!(
+            "✓ Logical replication is already enabled for project '{}'",
+            project.name
+        );
+        return Ok(());
+    }
+
+    // Logical replication is not enabled - prompt user
+    println!();
+    println!("╔══════════════════════════════════════════════════════════════╗");
+    println!("║  Logical Replication Required                                ║");
+    println!("╚══════════════════════════════════════════════════════════════╝");
+    println!();
+    println!("Project '{}' does not have logical replication enabled.", project.name);
+    println!();
+    println!("Logical replication is required for the 'sync' command to set up");
+    println!("continuous replication between your source and target databases.");
+    println!();
+    println!("⚠️  Important:");
+    println!("   • Enabling logical replication will briefly suspend all active endpoints");
+    println!("   • Once enabled, logical replication CANNOT be disabled");
+    println!();
+
+    let confirm = Confirm::with_theme(&ColorfulTheme::default())
+        .with_prompt("Enable logical replication for this project?")
+        .default(true)
+        .interact()?;
+
+    if !confirm {
+        anyhow::bail!(
+            "Logical replication is required for the sync command.\n\
+             \n\
+             You can enable it manually at:\n\
+             https://console.serendb.com/projects/{}/settings",
+            project_id
+        );
+    }
+
+    // Enable logical replication
+    tracing::info!("Enabling logical replication...");
+    let updated_project = client.enable_logical_replication(project_id).await?;
+
+    if updated_project.enable_logical_replication {
+        println!();
+        println!("✓ Logical replication enabled successfully!");
+        println!();
+        println!("⏳ Waiting for endpoints to restart (this may take up to 30 seconds)...");
+
+        // Wait for endpoints to restart - the wal_level change requires endpoint restart
+        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
+
+        tracing::info!("✓ Endpoints should now be ready with wal_level=logical");
+    } else {
+        anyhow::bail!(
+            "Failed to enable logical replication. The API call succeeded but the setting was not updated.\n\
+             Please try enabling it manually at:\n\
+             https://console.serendb.com/projects/{}/settings",
+            project_id
+        );
+    }
+
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]

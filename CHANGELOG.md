@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [5.3.20] - 2025-12-05
+
+### Added
+
+- **SerenDB Console API integration for `sync` command**: When using `--project-id` flag with a SerenDB target, the tool now automatically checks if logical replication is enabled on the project. If not enabled, it prompts the user to enable it via the SerenDB Console API before proceeding. This prevents the common error where `sync` fails because `wal_level` is set to `replica` instead of `logical`. ([#27](https://github.com/serenorg/database-replicator/issues/27))
+
 ## [5.3.19] - 2025-12-04
 
 ### Fixed

@@ -14,6 +14,7 @@ pub mod postgres;
 pub mod preflight;
 pub mod remote;
 pub mod replication;
+pub mod serendb;
 pub mod sqlite;
 pub mod table_rules;
 pub mod utils;
