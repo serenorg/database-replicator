@@ -22,7 +22,7 @@ LABEL org.opencontainers.image.title="database-replicator" \
       org.opencontainers.image.source="https://github.com/serenorg/database-replicator"
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates libssl3 libpq5 && \
+    apt-get install -y --no-install-recommends ca-certificates libssl3 libpq5 postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m replicator
 

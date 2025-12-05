@@ -19,6 +19,7 @@ Replicate any database to PostgreSQL with zero downtime. Supports PostgreSQL, SQ
 SerenAI provides managed PostgreSQL databases optimized for AI workloads. When replicating to SerenDB targets, this tool can run your replication jobs on SerenAI's cloud infrastructure - no local resources required.
 
 **Benefits of SerenAI Cloud Execution:**
+
 - No local compute resources needed
 - Automatic retry and error handling
 - Job monitoring and logging
@@ -32,8 +33,7 @@ With just your API key set, the tool will interactively guide you through select
 export SEREN_API_KEY="your-api-key"  # Get from console.serendb.com
 
 database-replicator init \
-  --source "postgresql://user:pass@source:5432/db" \
-  --local
+  --source "postgresql://user:pass@source:5432/db"
 ```
 
 The tool will:
@@ -54,7 +54,7 @@ database-replicator init \
   --target "postgresql://user:pass@your-db.serendb.com:5432/db"
 ```
 
-For local execution (non-SerenDB targets), use the `--local` flag. See [Remote Execution](#remote-execution-serendb-only) for details.
+For local execution (non-SerenDB targets), use the `--local` flag. See [Remote Execution](#remote-execution-aws) for details.
 
 ---
 
