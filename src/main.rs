@@ -658,13 +658,7 @@ async fn init_remote(
             Some(target.clone()),
         )
     } else {
-        (
-            None,
-            None,
-            None,
-            SerenTargetMode::Url,
-            Some(target.clone()),
-        )
+        (None, None, None, SerenTargetMode::Url, Some(target.clone()))
     };
 
     // Estimate database size for automatic instance selection
