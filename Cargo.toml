@@ -26,6 +26,7 @@ inquire = "0.7"
 futures = "0.3"
 indicatif = "0.18"
 which = "6.0"
+home = ">=0.5.4, <0.5.12"  # Pin to avoid v0.5.12 which requires unstable edition2024
 rand = "0.8"
 reqwest = { version = "0.11", features = ["json"] }
 serde = { version = "1.0", features = ["derive"] }
