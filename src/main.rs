@@ -1,6 +1,7 @@
 // ABOUTME: CLI entry point for database-replicator
 // ABOUTME: Parses commands and routes to appropriate handlers
 
+use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
 use database_replicator::commands;
 
@@ -19,6 +20,9 @@ struct Cli {
     /// Set the log level (error, warn, info, debug, trace)
     #[arg(long, global = true, default_value = "info")]
     log: String,
+    /// SerenDB API key for interactive target selection (falls back to SEREN_API_KEY env)
+    #[arg(long = "api-key", env = "SEREN_API_KEY", global = true)]
+    api_key: Option<String>,
     #[command(subcommand)]
     command: Commands,
 }
@@ -46,7 +50,7 @@ enum Commands {
         #[arg(long)]
         source: String,
         #[arg(long)]
-        target: String,
+        target: Option<String>,
         /// Include only these databases (comma-separated)
         #[arg(long, value_delimiter = ',')]
         include_databases: Option<Vec<String>>,
@@ -68,7 +72,7 @@ enum Commands {
         #[arg(long)]
         source: String,
         #[arg(long)]
-        target: String,
+        target: Option<String>,
         /// Skip confirmation prompt
         #[arg(short = 'y', long)]
         yes: bool,
@@ -119,7 +123,7 @@ enum Commands {
         #[arg(long)]
         source: String,
         #[arg(long)]
-        target: String,
+        target: Option<String>,
         /// Include only these databases (comma-separated)
         #[arg(long, value_delimiter = ',')]
         include_databases: Option<Vec<String>>,
@@ -152,7 +156,7 @@ enum Commands {
         #[arg(long)]
         source: String,
         #[arg(long)]
-        target: String,
+        target: Option<String>,
         /// Include only these databases (comma-separated)
         #[arg(long, value_delimiter = ',')]
         include_databases: Option<Vec<String>>,
@@ -165,7 +169,7 @@ enum Commands {
         #[arg(long)]
         source: String,
         #[arg(long)]
-        target: String,
+        target: Option<String>,
         /// Include only these databases (comma-separated)
         #[arg(long, value_delimiter = ',')]
         include_databases: Option<Vec<String>>,
@@ -179,12 +183,18 @@ enum Commands {
         #[arg(long, value_delimiter = ',')]
         exclude_tables: Option<Vec<String>>,
     },
+    /// Manage the target database URL
+    Target {
+        #[command(flatten)]
+        args: commands::target::TargetArgs,
+    },
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     // We need to parse CLI args early to get the log level
     let cli = Cli::parse();
+    let global_api_key = cli.api_key.clone();
 
     // Initialize logging
     // 1. RUST_LOG environment variable has highest precedence
@@ -215,6 +225,11 @@ async fn main() -> anyhow::Result<()> {
             exclude_tables,
             no_interactive,
         } => {
+            let state = database_replicator::state::load()?;
+            let target = target.or(state.target_url).ok_or_else(|| {
+                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
+            })?;
+
             let filter = if !no_interactive {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, rules) =
@@ -250,6 +265,23 @@ async fn main() -> anyhow::Result<()> {
             seren_api,
             job_timeout,
         } => {
+            let mut state = database_replicator::state::load()?;
+            let mut target = target.or(state.target_url);
+
+            if seren {
+                if let Some(t) = &target {
+                    if !database_replicator::utils::is_serendb_target(t) {
+                        anyhow::bail!("--seren flag is only compatible with SerenDB targets.");
+                    }
+                } else {
+                    target = Some(database_replicator::interactive::select_seren_database().await?);
+                }
+            }
+
+            let target = target.ok_or_else(|| {
+                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
+            })?;
+
             // Check if CLI filter flags were provided (skip interactive if so)
             let has_cli_filters = include_databases.is_some()
                 || exclude_databases.is_some()
@@ -303,9 +335,10 @@ async fn main() -> anyhow::Result<()> {
 
             if use_remote {
                 tracing::info!("Using SerenAI cloud execution");
-                return init_remote(
+                init_remote(
                     source,
-                    target,
+                    target.clone(),
+                    None,
                     yes,
                     final_include_databases,
                     final_exclude_databases,
@@ -317,61 +350,65 @@ async fn main() -> anyhow::Result<()> {
                     job_timeout,
                     cli.log,
                 )
-                .await;
-            }
+                .await?;
+            } else {
+                // Local execution path
+                // Clone filter values for potential fallback to remote
+                let fallback_include_dbs = final_include_databases.clone();
+                let fallback_exclude_dbs = final_exclude_databases.clone();
+                let fallback_include_tables = final_include_tables.clone();
+                let fallback_exclude_tables = final_exclude_tables.clone();
 
-            // Local execution path
-            // Clone filter values for potential fallback to remote
-            let fallback_include_dbs = final_include_databases.clone();
-            let fallback_exclude_dbs = final_exclude_databases.clone();
-            let fallback_include_tables = final_include_tables.clone();
-            let fallback_exclude_tables = final_exclude_tables.clone();
+                let filter = database_replicator::filters::ReplicationFilter::new(
+                    final_include_databases,
+                    final_exclude_databases,
+                    final_include_tables,
+                    final_exclude_tables,
+                )?;
+                let table_rule_data = build_table_rules(&table_rules)?;
+                let filter = filter.with_table_rules(table_rule_data);
 
-            let filter = database_replicator::filters::ReplicationFilter::new(
-                final_include_databases,
-                final_exclude_databases,
-                final_include_tables,
-                final_exclude_tables,
-            )?;
-            let table_rule_data = build_table_rules(&table_rules)?;
-            let filter = filter.with_table_rules(table_rule_data);
+                let enable_sync = !no_sync; // Invert the flag: by default sync is enabled
 
-            let enable_sync = !no_sync; // Invert the flag: by default sync is enabled
-
-            // Run init with pre-flight checks, handle fallback to remote
-            match commands::init(
-                &source,
-                &target,
-                yes,
-                filter,
-                drop_existing,
-                enable_sync,
-                !no_resume,
-                local, // Pass whether --local was explicit
-            )
-            .await
-            {
-                Ok(_) => Ok(()),
-                Err(e) if e.to_string().contains("PREFLIGHT_FALLBACK_TO_REMOTE") => {
-                    // Auto-fallback to remote execution
-                    init_remote(
-                        source,
-                        target,
-                        yes,
-                        fallback_include_dbs,
-                        fallback_exclude_dbs,
-                        fallback_include_tables,
-                        fallback_exclude_tables,
-                        drop_existing,
-                        no_sync,
-                        seren_api,
-                        job_timeout,
-                        cli.log,
-                    )
-                    .await
+                // Run init with pre-flight checks, handle fallback to remote
+                match commands::init(
+                    &source,
+                    &target,
+                    yes,
+                    filter,
+                    drop_existing,
+                    enable_sync,
+                    !no_resume,
+                    local, // Pass whether --local was explicit
+                )
+                .await
+                {
+                    Ok(_) => {}
+                    Err(e) if e.to_string().contains("PREFLIGHT_FALLBACK_TO_REMOTE") => {
+                        // Auto-fallback to remote execution
+                        init_remote(
+                            source,
+                            target.clone(),
+                            None, // No saved target state in fallback path
+                            yes,
+                            fallback_include_dbs,
+                            fallback_exclude_dbs,
+                            fallback_include_tables,
+                            fallback_exclude_tables,
+                            drop_existing,
+                            no_sync,
+                            seren_api,
+                            job_timeout,
+                            cli.log,
+                        )
+                        .await?;
+                    }
+                    Err(e) => return Err(e),
                 }
-                Err(e) => Err(e),
             }
+            state.target_url = Some(target);
+            database_replicator::state::save(&state)?;
+            Ok(())
         }
         Commands::Sync {
             source,
@@ -386,6 +423,17 @@ async fn main() -> anyhow::Result<()> {
             project_id,
             console_api,
         } => {
+            let mut app_state = database_replicator::state::load()?;
+            let target_candidate = target.or(app_state.target_url.clone());
+            let resolved_target = database_replicator::commands::sync::resolve_target_for_sync(
+                target_candidate,
+                global_api_key.clone(),
+                &source,
+            )
+            .await?;
+            app_state.target_url = Some(resolved_target.clone());
+            database_replicator::state::save(&app_state)?;
+
             let filter = if !no_interactive {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, rules) =
@@ -405,12 +453,21 @@ async fn main() -> anyhow::Result<()> {
 
             // If project_id is provided and target is SerenDB, check/enable logical replication
             if let Some(ref project_id) = project_id {
-                if database_replicator::utils::is_serendb_target(&target) {
+                if database_replicator::utils::is_serendb_target(&resolved_target) {
                     check_and_enable_logical_replication(project_id, &console_api).await?;
                 }
             }
 
-            commands::sync(&source, &target, Some(filter), None, None, None, force).await
+            commands::sync(
+                &source,
+                &resolved_target,
+                Some(filter),
+                None,
+                None,
+                None,
+                force,
+            )
+            .await
         }
         Commands::Status {
             source,
@@ -418,6 +475,11 @@ async fn main() -> anyhow::Result<()> {
             include_databases,
             exclude_databases,
         } => {
+            let state = database_replicator::state::load()?;
+            let target = target.or(state.target_url).ok_or_else(|| {
+                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
+            })?;
+
             let filter = database_replicator::filters::ReplicationFilter::new(
                 include_databases,
                 exclude_databases,
@@ -434,6 +496,11 @@ async fn main() -> anyhow::Result<()> {
             include_tables,
             exclude_tables,
         } => {
+            let state = database_replicator::state::load()?;
+            let target = target.or(state.target_url).ok_or_else(|| {
+                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
+            })?;
+
             let filter = database_replicator::filters::ReplicationFilter::new(
                 include_databases,
                 exclude_databases,
@@ -442,40 +509,8 @@ async fn main() -> anyhow::Result<()> {
             )?;
             commands::verify(&source, &target, Some(filter)).await
         }
+        Commands::Target { args } => commands::target(args).await,
     }
-}
-
-#[allow(clippy::too_many_arguments)]
-fn get_api_key() -> anyhow::Result<String> {
-    use dialoguer::{theme::ColorfulTheme, Input};
-
-    // Try environment variable first
-    if let Ok(key) = std::env::var("SEREN_API_KEY") {
-        if !key.trim().is_empty() {
-            return Ok(key.trim().to_string());
-        }
-    }
-
-    // Prompt user interactively
-    println!("\nRemote execution requires a SerenDB API key for authentication.");
-    println!("\nYou can generate an API key at:");
-    println!("  https://console.serendb.com/api-keys\n");
-
-    let key: String = Input::with_theme(&ColorfulTheme::default())
-        .with_prompt("Enter your SerenDB API key")
-        .allow_empty(false)
-        .interact_text()?;
-
-    if key.trim().is_empty() {
-        anyhow::bail!(
-            "API key is required for remote execution.\n\
-            Set the SEREN_API_KEY environment variable or run interactively.\n\
-            Get your API key at: https://console.serendb.com/api-keys\n\
-            Or use --local to run replication on your machine instead"
-        );
-    }
-
-    Ok(key.trim().to_string())
 }
 
 /// Check if logical replication is enabled on SerenDB project and offer to enable it
@@ -488,8 +523,8 @@ async fn check_and_enable_logical_replication(
 
     tracing::info!("Checking logical replication status for SerenDB project...");
 
-    // Get API key
-    let api_key = get_api_key()?;
+    // Get API key from interactive module (handles env var or prompt)
+    let api_key = database_replicator::interactive::get_api_key()?;
 
     // Create Console API client
     let client = ConsoleClient::new(Some(console_api), api_key);
@@ -569,6 +604,7 @@ async fn check_and_enable_logical_replication(
 async fn init_remote(
     source: String,
     target: String,
+    target_state: Option<database_replicator::serendb::TargetState>,
     _yes: bool,
     include_databases: Option<Vec<String>>,
     exclude_databases: Option<Vec<String>>,
@@ -588,8 +624,48 @@ async fn init_remote(
     println!("🌐 SerenAI cloud execution enabled");
     println!("API endpoint: {}", seren_api);
 
-    // Get API key (from env or prompt user)
-    let api_key = get_api_key()?;
+    // Get API key from interactive module (handles env var or prompt)
+    let api_key = database_replicator::interactive::get_api_key()?;
+    let remote_api_key = api_key.clone();
+
+    // Extract SerenDB IDs either from saved state (API-key flow) or the target URL
+    let (
+        target_project_id,
+        target_branch_id,
+        target_databases,
+        connection_string_mode,
+        resolved_target_url,
+    ) = if let Some(state) = target_state {
+        let databases = state.databases;
+        if databases.is_empty() {
+            anyhow::bail!("Saved target is missing database entries");
+        }
+        (
+            Some(state.project_id),
+            Some(state.branch_id),
+            Some(databases),
+            SerenTargetMode::Project,
+            None,
+        )
+    } else if database_replicator::utils::is_serendb_target(&target) {
+        let (p_id, b_id, _) = database_replicator::utils::parse_serendb_url_for_ids(&target)
+            .context("Failed to parse SerenDB target URL for project, branch, and database IDs.")?;
+        (
+            Some(p_id),
+            Some(b_id),
+            None,
+            SerenTargetMode::Url,
+            Some(target.clone()),
+        )
+    } else {
+        (
+            None,
+            None,
+            None,
+            SerenTargetMode::Url,
+            Some(target.clone()),
+        )
+    };
 
     // Estimate database size for automatic instance selection
     println!("Analyzing database size...");
@@ -670,17 +746,38 @@ async fn init_remote(
     );
     // Note: "yes" is client-side only, not sent to server
 
-    let job_spec = JobSpec {
-        version: "1.0".to_string(),
-        command: "init".to_string(),
-        source_url: source,
-        target_url: target,
-        filter,
-        options,
+    let job_spec = match connection_string_mode {
+        SerenTargetMode::Project => JobSpec {
+            version: "1.0".to_string(),
+            command: "init".to_string(),
+            source_url: source,
+            target_url: None,
+            target_project_id,
+            target_branch_id,
+            target_databases,
+            seren_api_key: Some(api_key.clone()),
+            filter,
+            options,
+        },
+        SerenTargetMode::Url => JobSpec {
+            version: "1.0".to_string(),
+            command: "init".to_string(),
+            source_url: source,
+            target_url: Some(
+                resolved_target_url
+                    .expect("Seren target URL must exist when using connection string mode"),
+            ),
+            target_project_id: None,
+            target_branch_id: None,
+            target_databases: None,
+            seren_api_key: None,
+            filter,
+            options,
+        },
     };
 
     // Submit job
-    let client = RemoteClient::new(seren_api, Some(api_key))?;
+    let client = RemoteClient::new(seren_api, Some(remote_api_key))?;
     println!("Submitting replication job...");
     tracing::debug!("Job spec: {:?}", job_spec);
 
@@ -745,4 +842,10 @@ fn build_table_rules(
     rules.apply_table_filter_cli(&args.table_filters)?;
     rules.apply_time_filter_cli(&args.time_filters)?;
     Ok(rules)
+}
+
+/// Internal mode to track whether we're using project-based or URL-based target
+enum SerenTargetMode {
+    Project,
+    Url,
 }

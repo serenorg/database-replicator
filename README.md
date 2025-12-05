@@ -24,9 +24,31 @@ SerenAI provides managed PostgreSQL databases optimized for AI workloads. When r
 - Job monitoring and logging
 - Optimized for large database transfers
 
-To replicate to SerenDB, simply run:
+### Option 1: Interactive Project Selection (Recommended)
+
+With just your API key set, the tool will interactively guide you through selecting your target project and database:
+
 ```bash
 export SEREN_API_KEY="your-api-key"  # Get from console.serendb.com
+
+database-replicator init \
+  --source "postgresql://user:pass@source:5432/db" \
+  --local
+```
+
+The tool will:
+
+1. Show a picker to select your SerenDB project
+2. Automatically enable logical replication if needed
+3. Create missing databases on the target
+4. Save your selection for future `sync` commands
+
+### Option 2: Explicit Connection String
+
+If you already have your connection string, you can provide it directly:
+
+```bash
+export SEREN_API_KEY="your-api-key"
 database-replicator init \
   --source "postgresql://user:pass@source:5432/db" \
   --target "postgresql://user:pass@your-db.serendb.com:5432/db"

@@ -33,12 +33,15 @@ async fn test_remote_job_submission() {
     let api_key = std::env::var("SEREN_API_KEY").ok();
     let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
-    // Create a job spec for validation (safe, read-only)
     let job_spec = JobSpec {
         version: "1.0".to_string(),
         command: "validate".to_string(),
         source_url,
-        target_url,
+        target_url: Some(target_url),
+        target_project_id: None,
+        target_branch_id: None,
+        target_databases: None,
+        seren_api_key: None,
         filter: None,
         options: HashMap::new(),
     };
@@ -84,18 +87,22 @@ async fn test_remote_job_polling() {
     let api_key = std::env::var("SEREN_API_KEY").ok();
     let client = RemoteClient::new(api_url, api_key).expect("Failed to create remote client");
 
-    // Create and submit a job spec for validation (safe, read-only)
     let job_spec = JobSpec {
         version: "1.0".to_string(),
         command: "validate".to_string(),
         source_url,
-        target_url,
+        target_url: Some(target_url),
+        target_project_id: None,
+        target_branch_id: None,
+        target_databases: None,
+        seren_api_key: None,
         filter: None,
         options: HashMap::new(),
     };
 
     // Submit the job
     let job_response = client
+        .clone()
         .submit_job(&job_spec)
         .await
         .expect("Failed to submit job");
@@ -106,6 +113,7 @@ async fn test_remote_job_polling() {
     // Poll for initial status
     println!("Polling for job status...");
     let status = client
+        .clone()
         .get_job_status(&job_response.job_id)
         .await
         .expect("Failed to get job status");
@@ -135,6 +143,7 @@ async fn test_remote_job_polling() {
             tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
             let updated_status = client
+                .clone()
                 .get_job_status(&job_response.job_id)
                 .await
                 .expect("Failed to get job status");
@@ -185,13 +194,18 @@ async fn test_remote_job_poll_until_complete() {
         version: "1.0".to_string(),
         command: "validate".to_string(),
         source_url,
-        target_url,
+        target_url: Some(target_url),
+        target_project_id: None,
+        target_branch_id: None,
+        target_databases: None,
+        seren_api_key: None,
         filter: None,
         options: HashMap::new(),
     };
 
     // Submit the job
     let job_response = client
+        .clone()
         .submit_job(&job_spec)
         .await
         .expect("Failed to submit job");
@@ -202,6 +216,7 @@ async fn test_remote_job_poll_until_complete() {
 
     // Poll until completion with a callback
     let final_status = client
+        .clone()
         .poll_until_complete(&job_response.job_id, |status| {
             println!("  Status update: {}", status.status);
             if let Some(progress) = &status.progress {
@@ -275,13 +290,17 @@ async fn test_remote_job_submission_with_filters() {
         version: "1.0".to_string(),
         command: "validate".to_string(),
         source_url,
-        target_url,
+        target_url: Some(target_url),
+        target_project_id: None,
+        target_branch_id: None,
+        target_databases: None,
+        seren_api_key: None,
         filter: Some(filter),
         options: HashMap::new(),
     };
 
     // Submit the job
-    let result = client.submit_job(&job_spec).await;
+    let result = client.clone().submit_job(&job_spec).await;
 
     match &result {
         Ok(job_response) => {
@@ -323,13 +342,17 @@ async fn test_remote_job_submission_with_options() {
         version: "1.0".to_string(),
         command: "validate".to_string(),
         source_url,
-        target_url,
+        target_url: Some(target_url),
+        target_project_id: None,
+        target_branch_id: None,
+        target_databases: None,
+        seren_api_key: None,
         filter: None,
         options,
     };
 
     // Submit the job
-    let result = client.submit_job(&job_spec).await;
+    let result = client.clone().submit_job(&job_spec).await;
 
     match &result {
         Ok(job_response) => {

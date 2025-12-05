@@ -7,7 +7,8 @@ use crate::replication::{
     create_publication, create_subscription, detect_subscription_state, drop_subscription,
     wait_for_sync, SubscriptionState,
 };
-use anyhow::{Context, Result};
+use crate::serendb::{resolve_target_mode, ConsoleClient, TargetMode};
+use anyhow::{anyhow, Context, Result};
 
 /// Set up logical replication between source and target databases
 ///
@@ -379,6 +380,63 @@ pub async fn sync(
     tracing::info!("  3. When ready, cutover to the target database");
 
     Ok(())
+}
+
+/// Resolve the effective target URL for sync, honoring saved SerenDB state when using API keys.
+pub async fn resolve_target_for_sync(
+    target: Option<String>,
+    api_key: Option<String>,
+    source_url: &str,
+) -> Result<String> {
+    let mode = resolve_target_mode(target, api_key.clone())?;
+
+    match mode {
+        TargetMode::ConnectionString(url) => Ok(url),
+        TargetMode::SavedState(state) => {
+            println!(
+                "\n\u{1F4C1} Using saved target: {}/{}",
+                state.project_name, state.branch_name
+            );
+            println!("   Databases: {:?}\n", state.databases);
+
+            if !state.source_matches(source_url) {
+                eprintln!("\u{26A0}  Warning: Source database has changed since the last init run");
+                eprintln!("   Saved for: {}", state.source_url_hash);
+                eprintln!("   Current:   {}", source_url);
+                eprintln!();
+            }
+
+            let api_key = api_key
+                .or_else(|| std::env::var("SEREN_API_KEY").ok())
+                .ok_or_else(|| {
+                    anyhow!(
+                        "SEREN_API_KEY required to refresh saved SerenDB credentials. Provide --api-key or set SEREN_API_KEY."
+                    )
+                })?;
+
+            let primary_db = state
+                .databases
+                .first()
+                .cloned()
+                .ok_or_else(|| anyhow!("Saved target has no databases recorded. Re-run init."))?;
+
+            let client = ConsoleClient::new(None, api_key);
+            let conn_str = client
+                .get_connection_string(
+                    &state.project_id,
+                    &state.branch_id,
+                    &primary_db,
+                    false,
+                )
+                .await
+                .context("Failed to fetch connection string for saved SerenDB target")?;
+
+            Ok(conn_str)
+        }
+        TargetMode::ApiKey(_) => anyhow::bail!(
+            "No saved SerenDB target found. Run 'database-replicator init' first or provide --target."
+        ),
+    }
 }
 
 /// Replace the database name in a PostgreSQL connection URL

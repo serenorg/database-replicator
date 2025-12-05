@@ -4,10 +4,71 @@
 use crate::{
     filters::ReplicationFilter,
     migration, postgres,
+    serendb::ConsoleClient,
     table_rules::{QualifiedTable, TableRules},
 };
 use anyhow::{Context, Result};
 use inquire::{Confirm, MultiSelect, Select, Text};
+
+/// Prompts the user to select a SerenDB project and database interactively.
+///
+/// This function will:
+/// 1. Get the SerenDB API key (from environment or prompt).
+/// 2. Fetch and display a list of projects for the user to select.
+/// 3. Fetch the default branch for the selected project.
+/// 4. Fetch and display a list of databases for the user to select.
+/// 5. Return the connection string for the selected database.
+///
+/// # Returns
+///
+/// A `Result` containing the connection string of the selected database.
+pub async fn select_seren_database() -> Result<String> {
+    print_header("Select SerenDB Target");
+
+    let api_key = get_api_key()?;
+    let client = ConsoleClient::new(None, api_key);
+
+    // 1. Select a project
+    let projects = client.list_projects().await?;
+    if projects.is_empty() {
+        anyhow::bail!("No projects found for your account.");
+    }
+    let project_names: Vec<String> = projects.iter().map(|p| p.name.clone()).collect();
+    let selected_project_name = Select::new("Select a project:", project_names).prompt()?;
+    let selected_project = projects
+        .into_iter()
+        .find(|p| p.name == selected_project_name)
+        .unwrap();
+
+    // 2. Select a database
+    let branch = client.get_default_branch(&selected_project.id).await?;
+    let databases = client
+        .list_databases(&selected_project.id, &branch.id)
+        .await?;
+    if databases.is_empty() {
+        anyhow::bail!(
+            "Project '{}' has no databases in its default branch.",
+            selected_project.name
+        );
+    }
+    let database_names: Vec<String> = databases.iter().map(|db| db.name.clone()).collect();
+    let selected_database_name = Select::new("Select a database:", database_names).prompt()?;
+    let selected_database = databases
+        .into_iter()
+        .find(|db| db.name == selected_database_name)
+        .unwrap();
+
+    // 3. Get connection string
+    let conn_str = client
+        .get_connection_string(
+            &selected_project.id,
+            &branch.id,
+            &selected_database.name,
+            false,
+        )
+        .await?;
+    Ok(conn_str)
+}
 
 /// Wizard step state machine
 enum WizardStep {
@@ -776,6 +837,38 @@ fn replace_database_in_url(url: &str, new_db_name: &str) -> Result<String> {
     };
 
     Ok(new_url)
+}
+
+pub fn get_api_key() -> anyhow::Result<String> {
+    use dialoguer::{theme::ColorfulTheme, Input};
+
+    // Try environment variable first
+    if let Ok(key) = std::env::var("SEREN_API_KEY") {
+        if !key.trim().is_empty() {
+            return Ok(key.trim().to_string());
+        }
+    }
+
+    // Prompt user interactively
+    println!("\nRemote execution requires a SerenDB API key for authentication.");
+    println!("\nYou can generate an API key at:");
+    println!("  https://console.serendb.com/api-keys\n");
+
+    let key: String = Input::with_theme(&ColorfulTheme::default())
+        .with_prompt("Enter your SerenDB API key")
+        .allow_empty(false)
+        .interact_text()?;
+
+    if key.trim().is_empty() {
+        anyhow::bail!(
+            "API key is required for remote execution.\n\
+            Set the SEREN_API_KEY environment variable or run interactively.\n\
+            Get your API key at: https://console.serendb.com/api-keys\n\
+            Or use --local to run replication on your machine instead"
+        );
+    }
+
+    Ok(key.trim().to_string())
 }
 
 #[cfg(test)]

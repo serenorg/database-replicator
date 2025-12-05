@@ -16,6 +16,7 @@ pub mod remote;
 pub mod replication;
 pub mod serendb;
 pub mod sqlite;
+pub mod state;
 pub mod table_rules;
 pub mod utils;
 
