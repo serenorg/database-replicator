@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use super::models::{JobResponse, JobSpec, JobStatus};
 
+#[derive(Clone)]
 pub struct RemoteClient {
     client: Client,
     api_base_url: String,

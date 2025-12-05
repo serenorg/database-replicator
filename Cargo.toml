@@ -14,7 +14,7 @@ categories = ["command-line-utilities", "database"]
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
 tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
-clap = { version = "4.4", features = ["derive"] }
+clap = { version = "4.4", features = ["derive", "env"] }
 anyhow = "1.0"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -37,3 +37,21 @@ base64 = "0.21"
 mongodb = "3.4"
 bson = "2.9"
 mysql_async = "0.34"
+dirs = "5.0"
+url = "2.5"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+
+[[test]]
+name = "fallback_test"
+path = "tests/fallback_test.rs"
+doc = false
+
+[[test]]
+name = "state_test"
+path = "tests/state_test.rs"
+doc = false
+
+[[test]]
+name = "interactive_serendb_test"
+path = "tests/interactive_serendb_test.rs"
+doc = false

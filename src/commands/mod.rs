@@ -4,11 +4,13 @@
 pub mod init;
 pub mod status;
 pub mod sync;
+pub mod target;
 pub mod validate;
 pub mod verify;
 
 pub use init::init;
 pub use status::status;
 pub use sync::sync;
+pub use target::command as target;
 pub use validate::validate;
 pub use verify::verify;

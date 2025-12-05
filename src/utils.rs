@@ -3,6 +3,7 @@
 
 use anyhow::{bail, Context, Result};
 use std::time::Duration;
+use url::Url;
 use which::which;
 
 /// Get TCP keepalive environment variables for PostgreSQL client tools
@@ -1095,6 +1096,49 @@ pub fn cleanup_stale_temp_dirs(max_age_secs: u64) -> Result<usize> {
     Ok(cleaned_count)
 }
 
+/// Parse a SerenDB URL to extract project, branch, and database IDs
+///
+/// SerenDB URLs have the format: postgresql://user:pass@<database-id>.<branch-id>.<project-id>.serendb.com:5432/db
+/// This function extracts the three UUIDs from the hostname.
+///
+/// # Arguments
+///
+/// * `url` - The SerenDB PostgreSQL connection string
+///
+/// # Returns
+///
+/// An `Option` containing a tuple of `(project_id, branch_id, database_id)` if the
+/// URL is a valid SerenDB target and contains the expected ID format, otherwise `None`.
+pub fn parse_serendb_url_for_ids(url: &str) -> Option<(String, String, String)> {
+    let parts = parse_postgres_url(url).ok()?;
+
+    if !is_serendb_target(url) {
+        return None;
+    }
+
+    // Hostname format: <database-id>.<branch-id>.<project-id>.serendb.com
+    // Or with custom subdomains: <database-id>.<branch-id>.<project-id>.<custom>.serendb.com
+    // We want the last three parts before .serendb.com
+    let host_parts: Vec<&str> = parts.host.split('.').collect();
+
+    if host_parts.len() < 4 {
+        return None; // Not enough parts for SerenDB ID format
+    }
+
+    let num_host_parts = host_parts.len();
+    let database_id = host_parts[num_host_parts - 4].to_string();
+    let branch_id = host_parts[num_host_parts - 3].to_string();
+    let project_id = host_parts[num_host_parts - 2].to_string();
+
+    // Basic UUID format validation (optional but good for robustness)
+    // A real UUID check would be more extensive, but string length is a good start
+    if database_id.len() == 36 && branch_id.len() == 36 && project_id.len() == 36 {
+        Some((project_id, branch_id, database_id))
+    } else {
+        None
+    }
+}
+
 /// Remove a managed temporary directory
 ///
 /// Explicitly removes a temporary directory created by `create_managed_temp_dir()`.
@@ -1141,6 +1185,30 @@ pub fn remove_managed_temp_dir(path: &std::path::Path) -> Result<()> {
         .with_context(|| format!("Failed to remove temp directory at {}", path.display()))?;
 
     Ok(())
+}
+
+/// Replace the database name in a connection string URL
+///
+/// This is used internally by SerenDB to provide a generic connection string
+/// which then needs to be specialized for a particular database.
+///
+/// # Arguments
+///
+/// * `url` - The connection string URL (e.g., postgresql://host/template_db)
+/// * `new_db` - The new database name to insert into the URL
+///
+/// # Returns
+///
+/// A new URL string with the database name replaced.
+///
+/// # Errors
+///
+/// Returns an error if the URL is invalid and cannot be parsed.
+pub fn replace_database_in_connection_string(url: &str, new_db: &str) -> Result<String> {
+    let mut parsed = Url::parse(url).context("Invalid connection string URL")?;
+    parsed.set_path(&format!("/{}", new_db));
+
+    Ok(parsed.to_string())
 }
 
 /// Check if a PostgreSQL URL points to a SerenDB instance
