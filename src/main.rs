@@ -511,7 +511,10 @@ async fn check_and_enable_logical_replication(
     println!("║  Logical Replication Required                                ║");
     println!("╚══════════════════════════════════════════════════════════════╝");
     println!();
-    println!("Project '{}' does not have logical replication enabled.", project.name);
+    println!(
+        "Project '{}' does not have logical replication enabled.",
+        project.name
+    );
     println!();
     println!("Logical replication is required for the 'sync' command to set up");
     println!("continuous replication between your source and target databases.");

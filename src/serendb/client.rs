@@ -95,11 +95,7 @@ impl ConsoleClient {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!(
-                "SerenDB Console API returned error {}: {}",
-                status,
-                body
-            );
+            anyhow::bail!("SerenDB Console API returned error {}: {}", status, body);
         }
 
         let data: DataResponse<Project> = response

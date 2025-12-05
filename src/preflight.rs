@@ -188,7 +188,10 @@ pub async fn run_preflight_checks(
             Err(e) => {
                 result.source_permissions.push(CheckResult::fail(
                     "connection",
-                    format!("Failed to re-establish connection to source for permission checks: {}", e),
+                    format!(
+                        "Failed to re-establish connection to source for permission checks: {}",
+                        e
+                    ),
                 ));
                 result.issues.push(PreflightIssue {
                     title: "Source connection for permissions failed".to_string(),
@@ -209,7 +212,10 @@ pub async fn run_preflight_checks(
             Err(e) => {
                 result.target_permissions.push(CheckResult::fail(
                     "connection",
-                    format!("Failed to re-establish connection to target for permission checks: {}", e),
+                    format!(
+                        "Failed to re-establish connection to target for permission checks: {}",
+                        e
+                    ),
                 ));
                 result.issues.push(PreflightIssue {
                     title: "Target connection for permissions failed".to_string(),
@@ -288,9 +294,10 @@ async fn check_network_connectivity(
                     }
                 }
             }
-            result
-                .network
-                .push(CheckResult::pass(db_type, format!("{} database reachable", db_type)));
+            result.network.push(CheckResult::pass(
+                db_type,
+                format!("{} database reachable", db_type),
+            ));
             Ok(Some(db_url.to_string())) // Return the URL if connection was successful
         }
         Err(e) => {
