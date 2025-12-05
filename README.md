@@ -231,6 +231,31 @@ cargo build --release
 
 The binary will be available at `target/release/database-replicator`.
 
+### Docker Image
+
+Build a container image with the latest source:
+
+```bash
+docker build -t serenorg/database-replicator:latest .
+```
+
+Run the CLI inside the container (pass connection strings via arguments or environment variables):
+
+```bash
+docker run --rm -it \
+  serenorg/database-replicator:latest \
+  validate --source "postgresql://user:pass@source/db" --target "postgresql://user:pass@target/db"
+```
+
+Mount local config files if needed:
+
+```bash
+docker run --rm -it \
+  -v "$PWD:/work" \
+  serenorg/database-replicator:latest \
+  init --source @/work/source.txt --target @/work/target.txt
+```
+
 ### Prerequisites
 
 - **PostgreSQL client tools** (pg_dump, pg_dumpall, psql) - Required for all database types
