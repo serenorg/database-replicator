@@ -233,18 +233,22 @@ The binary will be available at `target/release/database-replicator`.
 
 ### Docker Image
 
-Build a container image with the latest source:
+Build an image from the latest GitHub release (default) or a specific tag:
 
 ```bash
+# latest release asset
 docker build -t serenorg/database-replicator:latest .
+
+# specific version
+docker build --build-arg VERSION=v5.3.20 -t serenorg/database-replicator:v5.3.20 .
 ```
 
 Run the CLI inside the container (pass connection strings via arguments or environment variables):
 
 ```bash
-docker run --rm -it \
-  serenorg/database-replicator:latest \
-  validate --source "postgresql://user:pass@source/db" --target "postgresql://user:pass@target/db"
+docker run --rm -it serenorg/database-replicator:latest \
+  validate --source "postgresql://user:pass@source/db" \
+           --target "postgresql://user:pass@target/db"
 ```
 
 Mount local config files if needed:
@@ -253,7 +257,7 @@ Mount local config files if needed:
 docker run --rm -it \
   -v "$PWD:/work" \
   serenorg/database-replicator:latest \
-  init --source @/work/source.txt --target @/work/target.txt
+  init --source "$(cat /work/source.txt)" --target "$(cat /work/target.txt)"
 ```
 
 ### Prerequisites
