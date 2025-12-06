@@ -31,6 +31,10 @@ jobs:
             target: aarch64-apple-darwin
             artifact_name: database-replicator
             asset_name: database-replicator-macos-arm64-binary
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: database-replicator.exe
+            asset_name: database-replicator-windows-x64.exe
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -51,10 +55,17 @@ jobs:
         if: matrix.os == 'macos-latest'
         run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
-      - name: Rename binary
+      - name: Rename binary (Unix)
+        if: matrix.os != 'windows-latest'
         run: |
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
           chmod +x ${{ matrix.asset_name }}
+
+      - name: Rename binary (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          copy target\${{ matrix.target }}\release\${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+        shell: cmd
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

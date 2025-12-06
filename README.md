@@ -205,12 +205,19 @@ Download the latest release for your platform from [GitHub Releases](https://git
 - **Linux (x64)**: `database-replicator-linux-x64-binary`
 - **macOS (Intel)**: `database-replicator-macos-x64-binary`
 - **macOS (Apple Silicon)**: `database-replicator-macos-arm64-binary`
+- **Windows (x64)**: `database-replicator-windows-x64.exe`
 
-Make the binary executable:
+Make the binary executable (Linux/macOS):
 
 ```bash
 chmod +x database-replicator-*-binary
 ./database-replicator-*-binary --help
+```
+
+On Windows, run directly:
+
+```cmd
+database-replicator-windows-x64.exe --help
 ```
 
 ### Install from crates.io
