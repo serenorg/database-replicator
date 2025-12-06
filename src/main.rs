@@ -268,18 +268,23 @@ async fn main() -> anyhow::Result<()> {
             let mut state = database_replicator::state::load()?;
             let mut target = target.or(state.target_url);
 
+            // If no target and not forcing local execution, trigger interactive project selection
+            // This is the default behavior - remote execution with SerenDB target picker
+            if target.is_none() && !local {
+                target = Some(database_replicator::interactive::select_seren_database().await?);
+            }
+
+            // If --seren flag explicitly set, validate target is SerenDB
             if seren {
                 if let Some(t) = &target {
                     if !database_replicator::utils::is_serendb_target(t) {
                         anyhow::bail!("--seren flag is only compatible with SerenDB targets.");
                     }
-                } else {
-                    target = Some(database_replicator::interactive::select_seren_database().await?);
                 }
             }
 
             let target = target.ok_or_else(|| {
-                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
+                anyhow::anyhow!("Target database URL not provided. Use `--target` to specify a target database, or remove `--local` to use interactive SerenDB project selection.")
             })?;
 
             // Check if CLI filter flags were provided (skip interactive if so)

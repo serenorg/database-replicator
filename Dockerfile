@@ -1,18 +1,20 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.82-slim AS builder
-WORKDIR /app
+FROM debian:bookworm-slim AS downloader
+ARG VERSION=latest
+ENV BINARY_NAME=database-replicator-linux-x64-binary
+ENV RELEASE_ROOT=https://github.com/serenorg/database-replicator/releases
 
-# Install build dependencies for OpenSSL / libpq bindings
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends pkg-config libssl-dev libpq-dev && \
-    rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*
 
-# Cache dependencies
-COPY Cargo.toml Cargo.lock ./
-COPY src ./src
-COPY README.md .
-RUN cargo build --release --bin database-replicator
+RUN set -eux; \
+    if [ "$VERSION" = "latest" ]; then \
+        URL="$RELEASE_ROOT/latest/download/$BINARY_NAME"; \
+    else \
+        URL="$RELEASE_ROOT/download/$VERSION/$BINARY_NAME"; \
+    fi; \
+    curl -fL "$URL" -o /tmp/database-replicator && \
+    chmod +x /tmp/database-replicator
 
 FROM debian:bookworm-slim
 LABEL org.opencontainers.image.title="database-replicator" \
@@ -20,11 +22,11 @@ LABEL org.opencontainers.image.title="database-replicator" \
       org.opencontainers.image.source="https://github.com/serenorg/database-replicator"
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates libssl3 libpq5 && \
+    apt-get install -y --no-install-recommends ca-certificates libssl3 libpq5 postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m replicator
 
-COPY --from=builder /app/target/release/database-replicator /usr/local/bin/database-replicator
+COPY --from=downloader /tmp/database-replicator /usr/local/bin/database-replicator
 USER replicator
 ENTRYPOINT ["database-replicator"]
 CMD ["--help"]

@@ -19,6 +19,7 @@ Replicate any database to PostgreSQL with zero downtime. Supports PostgreSQL, SQ
 SerenAI provides managed PostgreSQL databases optimized for AI workloads. When replicating to SerenDB targets, this tool can run your replication jobs on SerenAI's cloud infrastructure - no local resources required.
 
 **Benefits of SerenAI Cloud Execution:**
+
 - No local compute resources needed
 - Automatic retry and error handling
 - Job monitoring and logging
@@ -32,8 +33,7 @@ With just your API key set, the tool will interactively guide you through select
 export SEREN_API_KEY="your-api-key"  # Get from console.serendb.com
 
 database-replicator init \
-  --source "postgresql://user:pass@source:5432/db" \
-  --local
+  --source "postgresql://user:pass@source:5432/db"
 ```
 
 The tool will:
@@ -54,7 +54,7 @@ database-replicator init \
   --target "postgresql://user:pass@your-db.serendb.com:5432/db"
 ```
 
-For local execution (non-SerenDB targets), use the `--local` flag. See [Remote Execution](#remote-execution-serendb-only) for details.
+For local execution (non-SerenDB targets), use the `--local` flag. See [Remote Execution](#remote-execution-aws) for details.
 
 ---
 
@@ -205,12 +205,19 @@ Download the latest release for your platform from [GitHub Releases](https://git
 - **Linux (x64)**: `database-replicator-linux-x64-binary`
 - **macOS (Intel)**: `database-replicator-macos-x64-binary`
 - **macOS (Apple Silicon)**: `database-replicator-macos-arm64-binary`
+- **Windows (x64)**: `database-replicator-windows-x64.exe`
 
-Make the binary executable:
+Make the binary executable (Linux/macOS):
 
 ```bash
 chmod +x database-replicator-*-binary
 ./database-replicator-*-binary --help
+```
+
+On Windows, run directly:
+
+```cmd
+database-replicator-windows-x64.exe --help
 ```
 
 ### Install from crates.io
@@ -233,18 +240,22 @@ The binary will be available at `target/release/database-replicator`.
 
 ### Docker Image
 
-Build a container image with the latest source:
+Build an image from the latest GitHub release (default) or a specific tag:
 
 ```bash
+# latest release asset
 docker build -t serenorg/database-replicator:latest .
+
+# specific version
+docker build --build-arg VERSION=v5.3.20 -t serenorg/database-replicator:v5.3.20 .
 ```
 
 Run the CLI inside the container (pass connection strings via arguments or environment variables):
 
 ```bash
-docker run --rm -it \
-  serenorg/database-replicator:latest \
-  validate --source "postgresql://user:pass@source/db" --target "postgresql://user:pass@target/db"
+docker run --rm -it serenorg/database-replicator:latest \
+  validate --source "postgresql://user:pass@source/db" \
+           --target "postgresql://user:pass@target/db"
 ```
 
 Mount local config files if needed:
@@ -253,7 +264,7 @@ Mount local config files if needed:
 docker run --rm -it \
   -v "$PWD:/work" \
   serenorg/database-replicator:latest \
-  init --source @/work/source.txt --target @/work/target.txt
+  init --source "$(cat /work/source.txt)" --target "$(cat /work/target.txt)"
 ```
 
 ### Prerequisites
