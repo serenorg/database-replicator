@@ -29,6 +29,21 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
+      - name: Patch Cargo.toml for home crate compatibility
+        run: |
+          # The home crate v0.5.12 requires unstable edition2024
+          # Patch Cargo.toml to constrain home version for older tags
+          $content = Get-Content Cargo.toml -Raw
+          if ($content -notmatch 'home\s*=') {
+            # Add home constraint to [dependencies] section
+            $content = $content -replace '(\[dependencies\])', "`$1`nhome = `">=0.5.4, <0.5.12`"  # Pin to avoid v0.5.12 which requires unstable edition2024"
+            Set-Content Cargo.toml $content
+            Write-Host "Added home crate constraint to Cargo.toml"
+          } else {
+            Write-Host "home crate already specified in Cargo.toml"
+          }
+        shell: pwsh
+
       - name: Build release binary
         run: cargo build --release --target x86_64-pc-windows-msvc --verbose
 
