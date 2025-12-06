@@ -29,19 +29,30 @@ jobs:
         with:
           targets: x86_64-pc-windows-msvc
 
-      - name: Patch Cargo.toml for home crate compatibility
+      - name: Patch Cargo.toml for Windows compatibility
         run: |
+          $content = Get-Content Cargo.toml -Raw
+
           # The home crate v0.5.12 requires unstable edition2024
           # Patch Cargo.toml to constrain home version for older tags
-          $content = Get-Content Cargo.toml -Raw
           if ($content -notmatch 'home\s*=') {
-            # Add home constraint to [dependencies] section
             $content = $content -replace '(\[dependencies\])', "`$1`nhome = `">=0.5.4, <0.5.12`"  # Pin to avoid v0.5.12 which requires unstable edition2024"
-            Set-Content Cargo.toml $content
             Write-Host "Added home crate constraint to Cargo.toml"
           } else {
             Write-Host "home crate already specified in Cargo.toml"
           }
+
+          # Enable bundled feature for rusqlite on Windows to avoid needing sqlite3.lib
+          if ($content -match 'rusqlite\s*=\s*"[^"]+"\s*$' -and $content -notmatch 'rusqlite.*bundled') {
+            $content = $content -replace 'rusqlite\s*=\s*"([^"]+)"', 'rusqlite = { version = "$1", features = ["bundled"] }'
+            Write-Host "Enabled bundled feature for rusqlite"
+          } else {
+            Write-Host "rusqlite already has features configured or bundled is enabled"
+          }
+
+          Set-Content Cargo.toml $content
+          Write-Host "Final Cargo.toml dependencies section:"
+          Get-Content Cargo.toml | Select-String -Pattern "rusqlite|home" -Context 0,0
         shell: pwsh
 
       - name: Build release binary
