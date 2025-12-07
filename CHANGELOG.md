@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.1] - 2025-12-07
+
+### Fixed
+
+- **Windows release build fix**: Fixed the automated release workflow to properly build Windows binaries by adding Cargo.toml patching for rusqlite bundled feature and home crate constraints.
+
+## [6.0.0] - 2025-12-07
+
+### Added
+
+- **Windows x64 binary support**: Pre-built Windows binaries are now included in releases. The build uses bundled SQLite to avoid external dependencies. ([#51](https://github.com/serenorg/database-replicator/issues/51))
+
+- **Docker support**: Official Docker images are now available for containerized deployments. Includes multi-stage build for minimal image size and support for running replication jobs in containers. ([#49](https://github.com/serenorg/database-replicator/issues/49), [#50](https://github.com/serenorg/database-replicator/issues/50), [#52](https://github.com/serenorg/database-replicator/issues/52))
+
+- **SerenDB API key authentication**: Added `--api-key` flag for authenticating with SerenDB Console API when enabling logical replication via `--project-id`. ([#48](https://github.com/serenorg/database-replicator/issues/48))
+
+### Fixed
+
+- **Interactive selection defaults**: Fixed interactive database/table selection to default to all items selected instead of none, improving the user experience for common use cases.
+
 ## [5.3.20] - 2025-12-05
 
 ### Added
