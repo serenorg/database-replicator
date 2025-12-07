@@ -21,6 +21,43 @@ For non-SerenDB targets, use the `--local` flag to run replication locally.
 
 ---
 
+## Installation
+
+Install the CLI before running the AWS-specific workflow below.
+
+### Option 1: Download a Pre-built Binary
+
+1. Visit the [latest GitHub Release](https://github.com/serenorg/database-replicator/releases/latest).
+2. Download the asset for your operating system and CPU (Linux x86_64/arm64, macOS Intel/Apple Silicon, or Windows x86_64).
+3. Extract the archive. On Linux/macOS run:
+
+```bash
+chmod +x database-replicator*
+sudo mv database-replicator* /usr/local/bin/database-replicator
+database-replicator --help
+```
+
+4. On Windows, run the `.exe` directly or add it to the `PATH`.
+
+### Option 2: Build from Source
+
+Requires Rust 1.70 or later.
+
+```bash
+# Install from crates.io
+cargo install database-replicator
+
+# Or build from the repository
+git clone https://github.com/serenorg/database-replicator.git
+cd database-replicator
+cargo build --release
+./target/release/database-replicator --help
+```
+
+Building locally lets you pin to a specific commit or customize the binary for regulated environments.
+
+---
+
 ## AWS RDS-Specific Prerequisites
 
 ### 1. Enable Logical Replication

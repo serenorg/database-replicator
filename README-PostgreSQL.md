@@ -45,6 +45,43 @@ The tool uses PostgreSQL's logical replication (publications and subscriptions) 
 
 ---
 
+## Installation
+
+Install the CLI before following the rest of this guide.
+
+### Option 1: Download a Pre-built Binary
+
+1. Visit the [latest GitHub Release](https://github.com/serenorg/database-replicator/releases/latest).
+2. Download the asset that matches your operating system and CPU (Linux x86_64/arm64, macOS Intel/Apple Silicon, or Windows x86_64).
+3. Extract the archive, then on Linux/macOS run:
+
+```bash
+chmod +x database-replicator*
+sudo mv database-replicator* /usr/local/bin/database-replicator
+database-replicator --help
+```
+
+4. On Windows, run the `.exe` directly or add it to your `PATH`.
+
+### Option 2: Build from Source
+
+Requires Rust 1.70 or later.
+
+```bash
+# Install from crates.io
+cargo install database-replicator
+
+# Or build from the repository
+git clone https://github.com/serenorg/database-replicator.git
+cd database-replicator
+cargo build --release
+./target/release/database-replicator --help
+```
+
+Use this option if you prefer to pin to a commit, apply local patches, or cross-compile for a custom environment.
+
+---
+
 ## Prerequisites
 
 ### Source Database

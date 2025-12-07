@@ -21,6 +21,43 @@ For non-SerenDB targets, use the `--local` flag to run replication locally.
 
 ---
 
+## Installation
+
+Install the CLI before working through the MySQL/MariaDB steps.
+
+### Option 1: Download a Pre-built Binary
+
+1. Visit the [latest GitHub Release](https://github.com/serenorg/database-replicator/releases/latest).
+2. Download the asset that matches your operating system and CPU (Linux x86_64/arm64, macOS Intel/Apple Silicon, or Windows x86_64).
+3. Extract the archive. On Linux/macOS run:
+
+```bash
+chmod +x database-replicator*
+sudo mv database-replicator* /usr/local/bin/database-replicator
+database-replicator --help
+```
+
+4. On Windows, run the `.exe` directly or place it in a directory referenced by the `PATH` environment variable.
+
+### Option 2: Build from Source
+
+Requires Rust 1.70 or later.
+
+```bash
+# Install from crates.io
+cargo install database-replicator
+
+# Or build from the repository
+git clone https://github.com/serenorg/database-replicator.git
+cd database-replicator
+cargo build --release
+./target/release/database-replicator --help
+```
+
+Building locally lets you pin to a commit, audit the code path, or cross-compile for managed runners.
+
+---
+
 ## Overview
 
 The tool automatically detects MySQL/MariaDB connection strings and replicates data to PostgreSQL using a JSONB storage model. All MySQL data is preserved with full type fidelity, including DECIMAL precision, DATETIME microseconds, and BLOB data.

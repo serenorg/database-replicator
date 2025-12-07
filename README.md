@@ -198,47 +198,53 @@ database-replicator init \
 
 ## Installation
 
-### Download Pre-built Binaries
+Choose whichever approach best fits your environment.
 
-Download the latest release for your platform from [GitHub Releases](https://github.com/serenorg/database-replicator/releases/latest):
+### Option 1: Download a Pre-built Binary
 
-- **Linux (x64)**: `database-replicator-linux-x64-binary`
-- **macOS (Intel)**: `database-replicator-macos-x64-binary`
-- **macOS (Apple Silicon)**: `database-replicator-macos-arm64-binary`
-- **Windows (x64)**: `database-replicator-windows-x64.exe`
+1. Visit the [latest GitHub Release](https://github.com/serenorg/database-replicator/releases/latest).
+2. Download the asset that matches your operating system and CPU:
 
-Make the binary executable (Linux/macOS):
+| OS | Architectures |
+| --- | --- |
+| Linux | x86_64, arm64 |
+| macOS | Apple Silicon (arm64), Intel (x86_64) |
+| Windows | x86_64 |
+
+3. Extract the archive if needed and optionally rename the binary to `database-replicator`.
+4. On Linux/macOS, make it executable and move it somewhere on your `PATH`:
 
 ```bash
-chmod +x database-replicator-*-binary
-./database-replicator-*-binary --help
+chmod +x database-replicator*
+sudo mv database-replicator* /usr/local/bin/database-replicator
+database-replicator --help
 ```
 
-On Windows, run directly:
+On Windows, run the `.exe` directly or place it in a directory referenced by the `PATH` environment variable.
 
-```cmd
-database-replicator-windows-x64.exe --help
-```
+### Option 2: Build from Source
 
-### Install from crates.io
+Requires Rust 1.70 or later.
+
+**Install via crates.io:**
 
 ```bash
 cargo install database-replicator
+database-replicator --help
 ```
 
-### Build from Source
-
-Requires Rust 1.70 or later:
+**Build from this repository:**
 
 ```bash
 git clone https://github.com/serenorg/database-replicator.git
 cd database-replicator
 cargo build --release
+./target/release/database-replicator --help
 ```
 
-The binary will be available at `target/release/database-replicator`.
+This approach is useful if you want to pin to a specific commit, apply local patches, or build for custom targets.
 
-### Docker Image
+### Docker Image (Optional)
 
 Build an image from the latest GitHub release (default) or a specific tag:
 
