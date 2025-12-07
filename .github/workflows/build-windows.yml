@@ -43,8 +43,9 @@ jobs:
           }
 
           # Enable bundled feature for rusqlite on Windows to avoid needing sqlite3.lib
-          if ($content -match '(?m)^rusqlite\s*=\s*"[^"]+"$' -and $content -notmatch 'rusqlite.*bundled') {
-            $content = $content -replace '(?m)^rusqlite\s*=\s*"([^"]+)"$', 'rusqlite = { version = "$1", features = ["bundled"] }'
+          # Use literal replacement - regex anchors don't work with CRLF line endings in PowerShell
+          if ($content -match 'rusqlite\s*=\s*"0\.30"' -and $content -notmatch 'rusqlite.*bundled') {
+            $content = $content -replace 'rusqlite\s*=\s*"0\.30"', 'rusqlite = { version = "0.30", features = ["bundled"] }'
             Write-Host "Enabled bundled feature for rusqlite"
           } else {
             Write-Host "rusqlite already has features configured or bundled is enabled"
