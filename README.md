@@ -246,20 +246,29 @@ This approach is useful if you want to pin to a specific commit, apply local pat
 
 ### Docker Image (Optional)
 
-Build an image from the latest GitHub release (default) or a specific tag:
+You can pull the published Docker image from Docker Hub (`palomachain/database-replicator`) or build your own from the release assets.
+
+**Pull a prebuilt image:**
+
+```bash
+docker pull palomachain/database-replicator:v6.0.5
+docker tag palomachain/database-replicator:v6.0.5 palomachain/database-replicator:latest
+```
+
+**Build from GitHub release assets:**
 
 ```bash
 # latest release asset
-docker build -t serenorg/database-replicator:latest .
+docker build -t palomachain/database-replicator:latest .
 
 # specific version
-docker build --build-arg VERSION=v6.0.5 -t serenorg/database-replicator:v6.0.5 .
+docker build --build-arg VERSION=v6.0.5 -t palomachain/database-replicator:v6.0.5 .
 ```
 
 Run the CLI inside the container (pass connection strings via arguments or environment variables):
 
 ```bash
-docker run --rm -it serenorg/database-replicator:latest \
+docker run --rm -it palomachain/database-replicator:latest \
   validate --source "postgresql://user:pass@source/db" \
            --target "postgresql://user:pass@target/db"
 ```
@@ -269,7 +278,7 @@ Mount local config files if needed:
 ```bash
 docker run --rm -it \
   -v "$PWD:/work" \
-  serenorg/database-replicator:latest \
+  palomachain/database-replicator:latest \
   init --source "$(cat /work/source.txt)" --target "$(cat /work/target.txt)"
 ```
 
