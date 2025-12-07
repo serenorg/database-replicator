@@ -253,7 +253,7 @@ Build an image from the latest GitHub release (default) or a specific tag:
 docker build -t serenorg/database-replicator:latest .
 
 # specific version
-docker build --build-arg VERSION=v5.3.20 -t serenorg/database-replicator:v5.3.20 .
+docker build --build-arg VERSION=v6.0.5 -t serenorg/database-replicator:v6.0.5 .
 ```
 
 Run the CLI inside the container (pass connection strings via arguments or environment variables):
