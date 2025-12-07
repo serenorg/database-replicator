@@ -147,8 +147,8 @@ enum Commands {
         /// SerenDB project ID (for auto-enabling logical replication)
         #[arg(long)]
         project_id: Option<String>,
-        /// SerenDB Console API URL (defaults to https://console.serendb.com)
-        #[arg(long, default_value = "https://console.serendb.com")]
+        /// SerenDB Console API URL (defaults to https://api.serendb.com)
+        #[arg(long, default_value = "https://api.serendb.com")]
         console_api: String,
     },
     /// Check replication status and lag in real-time

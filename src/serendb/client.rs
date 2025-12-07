@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::utils::replace_database_in_connection_string;
 
 /// Default SerenDB Console API base URL
-pub const DEFAULT_CONSOLE_API_URL: &str = "https://console.serendb.com";
+pub const DEFAULT_CONSOLE_API_URL: &str = "https://api.serendb.com";
 
 /// SerenDB Console API client
 pub struct ConsoleClient {
@@ -97,7 +97,7 @@ impl ConsoleClient {
     ///
     /// # Arguments
     ///
-    /// * `api_base_url` - Optional base URL (defaults to https://console.serendb.com)
+    /// * `api_base_url` - Optional base URL (defaults to https://api.serendb.com)
     /// * `api_key` - SerenDB API key (format: seren_<key_id>_<secret>)
     pub fn new(api_base_url: Option<&str>, api_key: String) -> Self {
         Self {
