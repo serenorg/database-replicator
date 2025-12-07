@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.3] - 2025-12-07
+
+### Fixed
+
+- **SerenDB API base URL**: Fixed the API base URL from `console.serendb.com` to `api.serendb.com`. This resolves the "Resource not found" error when using the interactive project selector with a SerenDB API key.
+
 ## [6.0.2] - 2025-12-07
 
 ### Fixed
