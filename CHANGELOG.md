@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.5] - 2025-12-07
+
+### Fixed
+
+- **SerenDB interactive target selection**: Fixed multiple issues with the interactive project/database selector:
+  - Fixed API response parsing for connection strings (wrapped in `data` object)
+  - Fixed target state passing to remote execution (no longer fails with "Missing required field: target_url")
+  - Added branch selection when multiple branches exist in a project
+  - Cached API key after first prompt to avoid duplicate prompts
+
 ## [6.0.4] - 2025-12-07
 
 ### Fixed

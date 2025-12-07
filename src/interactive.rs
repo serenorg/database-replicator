@@ -4,7 +4,7 @@
 use crate::{
     filters::ReplicationFilter,
     migration, postgres,
-    serendb::ConsoleClient,
+    serendb::{ConsoleClient, TargetState},
     table_rules::{QualifiedTable, TableRules},
 };
 use anyhow::{Context, Result};
@@ -17,12 +17,13 @@ use inquire::{Confirm, MultiSelect, Select, Text};
 /// 2. Fetch and display a list of projects for the user to select.
 /// 3. Fetch the default branch for the selected project.
 /// 4. Fetch and display a list of databases for the user to select.
-/// 5. Return the connection string for the selected database.
+/// 5. Return the connection string and target state for the selected database.
 ///
 /// # Returns
 ///
-/// A `Result` containing the connection string of the selected database.
-pub async fn select_seren_database() -> Result<String> {
+/// A `Result` containing a tuple of (connection_string, TargetState) for the selected database.
+/// The TargetState contains the project_id, branch_id, and database name needed for remote execution.
+pub async fn select_seren_database() -> Result<(String, TargetState)> {
     print_header("Select SerenDB Target");
 
     let api_key = get_api_key()?;
@@ -91,7 +92,7 @@ pub async fn select_seren_database() -> Result<String> {
         }
     };
 
-    // 3. Get connection string
+    // 4. Get connection string
     let conn_str = client
         .get_connection_string(
             &selected_project.id,
@@ -100,7 +101,18 @@ pub async fn select_seren_database() -> Result<String> {
             false,
         )
         .await?;
-    Ok(conn_str)
+
+    // 5. Build target state with placeholder source_url (will be updated later)
+    let target_state = TargetState::new(
+        selected_project.id.clone(),
+        selected_project.name.clone(),
+        branch.id.clone(),
+        branch.name.clone(),
+        vec![selected_database_name],
+        "", // Source URL not known yet, hash will be empty
+    );
+
+    Ok((conn_str, target_state))
 }
 
 /// Wizard step state machine
@@ -901,7 +913,12 @@ pub fn get_api_key() -> anyhow::Result<String> {
         );
     }
 
-    Ok(key.trim().to_string())
+    let trimmed_key = key.trim().to_string();
+
+    // Cache the key in env var so subsequent calls don't prompt again
+    std::env::set_var("SEREN_API_KEY", &trimmed_key);
+
+    Ok(trimmed_key)
 }
 
 #[cfg(test)]

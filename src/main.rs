@@ -267,11 +267,15 @@ async fn main() -> anyhow::Result<()> {
         } => {
             let mut state = database_replicator::state::load()?;
             let mut target = target.or(state.target_url);
+            let mut seren_target_state: Option<database_replicator::serendb::TargetState> = None;
 
             // If no target and not forcing local execution, trigger interactive project selection
             // This is the default behavior - remote execution with SerenDB target picker
             if target.is_none() && !local {
-                target = Some(database_replicator::interactive::select_seren_database().await?);
+                let (conn_str, target_state) =
+                    database_replicator::interactive::select_seren_database().await?;
+                target = Some(conn_str);
+                seren_target_state = Some(target_state);
             }
 
             // If --seren flag explicitly set, validate target is SerenDB
@@ -343,7 +347,7 @@ async fn main() -> anyhow::Result<()> {
                 init_remote(
                     source,
                     target.clone(),
-                    None,
+                    seren_target_state,
                     yes,
                     final_include_databases,
                     final_exclude_databases,
@@ -650,7 +654,7 @@ async fn init_remote(
             Some(state.branch_id),
             Some(databases),
             SerenTargetMode::Project,
-            None,
+            Some(target.clone()), // Pass the connection string for remote API
         )
     } else if database_replicator::utils::is_serendb_target(&target) {
         let (p_id, b_id, _) = database_replicator::utils::parse_serendb_url_for_ids(&target)
@@ -750,7 +754,7 @@ async fn init_remote(
             version: "1.0".to_string(),
             command: "init".to_string(),
             source_url: source,
-            target_url: None,
+            target_url: resolved_target_url.clone(),
             target_project_id,
             target_branch_id,
             target_databases,

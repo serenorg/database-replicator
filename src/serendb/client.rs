@@ -305,12 +305,12 @@ impl ConsoleClient {
             anyhow::bail!("SerenDB Console API returned error {}: {}", status, body);
         }
 
-        let data: ConnectionStringResponse = response
+        let data: DataResponse<ConnectionStringResponse> = response
             .json()
             .await
             .context("Failed to parse connection string response from SerenDB Console API")?;
 
-        replace_database_in_connection_string(&data.connection_string, database)
+        replace_database_in_connection_string(&data.data.connection_string, database)
     }
 
     /// Get project information by ID
