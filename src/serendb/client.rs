@@ -72,10 +72,13 @@ pub struct PaginatedResponse<T> {
 
 /// Pagination metadata returned by the Console API
 #[allow(dead_code)]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 pub struct Pagination {
+    #[serde(default)]
     pub total: i64,
+    #[serde(default)]
     pub page: i64,
+    #[serde(default)]
     pub per_page: i64,
 }
 
