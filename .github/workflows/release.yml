@@ -44,6 +44,34 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Patch Cargo.toml for Windows compatibility
+        if: matrix.os == 'windows-latest'
+        run: |
+          $content = Get-Content Cargo.toml -Raw
+
+          # The home crate v0.5.12 requires unstable edition2024
+          # Patch Cargo.toml to constrain home version for older tags
+          if ($content -notmatch 'home\s*=') {
+            $content = $content -replace '(\[dependencies\])', "`$1`nhome = `">=0.5.4, <0.5.12`"  # Pin to avoid v0.5.12 which requires unstable edition2024"
+            Write-Host "Added home crate constraint to Cargo.toml"
+          } else {
+            Write-Host "home crate already specified in Cargo.toml"
+          }
+
+          # Enable bundled feature for rusqlite on Windows to avoid needing sqlite3.lib
+          # Use literal replacement - regex anchors don't work with CRLF line endings in PowerShell
+          if ($content -match 'rusqlite\s*=\s*"0\.30"' -and $content -notmatch 'rusqlite.*bundled') {
+            $content = $content -replace 'rusqlite\s*=\s*"0\.30"', 'rusqlite = { version = "0.30", features = ["bundled"] }'
+            Write-Host "Enabled bundled feature for rusqlite"
+          } else {
+            Write-Host "rusqlite already has features configured or bundled is enabled"
+          }
+
+          Set-Content Cargo.toml $content
+          Write-Host "Final Cargo.toml dependencies section:"
+          Get-Content Cargo.toml | Select-String -Pattern "rusqlite|home" -Context 0,0
+        shell: pwsh
+
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} --verbose
 
