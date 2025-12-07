@@ -293,7 +293,11 @@ impl ConsoleClient {
             .await
             .context("Failed to send request to SerenDB Console API")?;
 
-        self.handle_common_errors(&response).await?;
+        self.handle_common_errors_with_context(
+            &response,
+            Some("Branch has no compute endpoint. Select a different branch or create an endpoint at console.serendb.com.".to_string()),
+        )
+        .await?;
 
         if !response.status().is_success() {
             let status = response.status();

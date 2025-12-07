@@ -40,30 +40,63 @@ pub async fn select_seren_database() -> Result<String> {
         .find(|p| p.name == selected_project_name)
         .unwrap();
 
-    // 2. Select a database
-    let branch = client.get_default_branch(&selected_project.id).await?;
-    let databases = client
-        .list_databases(&selected_project.id, &branch.id)
-        .await?;
-    if databases.is_empty() {
+    // 2. Select a branch
+    let branches = client.list_branches(&selected_project.id).await?;
+    if branches.is_empty() {
         anyhow::bail!(
-            "Project '{}' has no databases in its default branch.",
+            "Project '{}' has no branches. Create a branch first at console.serendb.com.",
             selected_project.name
         );
     }
-    let database_names: Vec<String> = databases.iter().map(|db| db.name.clone()).collect();
-    let selected_database_name = Select::new("Select a database:", database_names).prompt()?;
-    let selected_database = databases
-        .into_iter()
-        .find(|db| db.name == selected_database_name)
-        .unwrap();
+
+    let branch = if branches.len() == 1 {
+        branches.into_iter().next().unwrap()
+    } else {
+        let branch_names: Vec<String> = branches.iter().map(|b| b.name.clone()).collect();
+        let selected_branch_name = Select::new("Select a branch:", branch_names).prompt()?;
+        branches
+            .into_iter()
+            .find(|b| b.name == selected_branch_name)
+            .unwrap()
+    };
+
+    // 3. Select or create a database
+    let databases = client
+        .list_databases(&selected_project.id, &branch.id)
+        .await?;
+
+    let selected_database_name = if databases.is_empty() {
+        // No databases exist - prompt for new database name
+        println!(
+            "\n  Project '{}' has no databases yet.",
+            selected_project.name
+        );
+        println!("  The database will be created during replication.\n");
+        Text::new("Enter database name to create:")
+            .with_default("serendb")
+            .prompt()?
+    } else {
+        // Let user select existing database or create new one
+        let mut database_names: Vec<String> = databases.iter().map(|db| db.name.clone()).collect();
+        database_names.push("[ Create new database ]".to_string());
+
+        let selection = Select::new("Select a database:", database_names).prompt()?;
+
+        if selection == "[ Create new database ]" {
+            Text::new("Enter database name to create:")
+                .with_default("serendb")
+                .prompt()?
+        } else {
+            selection
+        }
+    };
 
     // 3. Get connection string
     let conn_str = client
         .get_connection_string(
             &selected_project.id,
             &branch.id,
-            &selected_database.name,
+            &selected_database_name,
             false,
         )
         .await?;

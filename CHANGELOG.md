@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.4] - 2025-12-07
+
+### Fixed
+
+- **Allow replication to empty SerenDB projects**: The interactive target selector now allows specifying a new database name when the selected project has no databases. Previously it would error with "has no databases in its default branch". Now it prompts for a database name (default: `serendb`) that will be created during replication.
+
 ## [6.0.3] - 2025-12-07
 
 ### Fixed
