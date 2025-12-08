@@ -313,9 +313,9 @@ impl SyncDaemon {
         let table_state = state.get_or_create_table(schema, table);
         let since_xmin = table_state.last_xmin;
 
-        // Get table metadata
-        let columns = get_table_columns(writer.client(), schema, table).await?;
-        let pk_columns = get_primary_key_columns(writer.client(), schema, table).await?;
+        // Get table metadata from SOURCE (not target - tables may not exist there yet)
+        let columns = get_table_columns(reader.client(), schema, table).await?;
+        let pk_columns = get_primary_key_columns(reader.client(), schema, table).await?;
 
         if pk_columns.is_empty() {
             anyhow::bail!("Table {}.{} has no primary key", schema, table);

@@ -65,6 +65,11 @@ impl<'a> XminReader<'a> {
         Self { client }
     }
 
+    /// Get the underlying database client.
+    pub fn client(&self) -> &Client {
+        self.client
+    }
+
     /// Get the current transaction ID (xmin snapshot) from the database.
     ///
     /// This should be called at the start of a sync to establish the high-water mark.
