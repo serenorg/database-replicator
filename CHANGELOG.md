@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.1] - 2025-12-08
+
+### Fixed
+
+- **xmin sync reconciliation crash on missing target tables**: Fixed bug where the reconciliation cycle would crash with "Failed to get target primary keys" if a table existed in the source but not in the target (e.g., tables that were filtered during init, or failed to create). Reconciliation now checks if each table exists on the target before attempting to query it.
+
 ## [7.0.0] - 2025-12-08
 
 ### Added

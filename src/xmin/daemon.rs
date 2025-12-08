@@ -165,6 +165,31 @@ impl SyncDaemon {
 
         // Reconcile each table
         for table in &tables {
+            // Check if table exists in target before reconciliation
+            match reconciler
+                .table_exists_in_target(&self.config.schema, table)
+                .await
+            {
+                Ok(true) => {}
+                Ok(false) => {
+                    tracing::warn!(
+                        "Skipping reconciliation for {}.{}: table does not exist in target",
+                        self.config.schema,
+                        table
+                    );
+                    continue;
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Skipping reconciliation for {}.{}: failed to check table existence: {}",
+                        self.config.schema,
+                        table,
+                        e
+                    );
+                    continue;
+                }
+            }
+
             // Get primary key columns
             let pk_columns = reader.get_primary_key(&self.config.schema, table).await?;
             if pk_columns.is_empty() {
