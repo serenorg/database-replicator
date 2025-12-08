@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.7] - 2025-12-08
+
+### Fixed
+
+- **Auto-discover SerenDB project from target URL**: Fixed bug where `sync` command couldn't auto-enable logical replication when using explicit `--target` SerenDB URL without saved state. The tool now discovers the project by matching the target hostname against SerenDB project connection strings. Also prompts for API key interactively if not provided. (Fixes #54)
+
+- **Verify wal_level after enabling logical replication**: After enabling logical replication via SerenDB API, the tool now polls the database to verify `wal_level=logical` is actually applied (up to 60 seconds), with helpful instructions if the endpoint needs manual restart.
+
 ## [6.0.6] - 2025-12-08
 
 ### Fixed

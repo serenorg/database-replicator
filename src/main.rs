@@ -462,18 +462,72 @@ async fn main() -> anyhow::Result<()> {
                 filter.with_table_rules(table_rule_data)
             };
 
-            // Get project_id from CLI or saved target state
-            let effective_project_id = project_id.or_else(|| {
+            // Get project_id from CLI, saved target state, or discover from target URL
+            let mut effective_project_id = project_id.or_else(|| {
                 database_replicator::serendb::load_target_state()
                     .ok()
                     .flatten()
                     .map(|state| state.project_id)
             });
 
+            // If project_id is still None and target is SerenDB, try to discover it by hostname
+            if effective_project_id.is_none()
+                && database_replicator::utils::is_serendb_target(&resolved_target)
+            {
+                // Get API key from CLI/env, or prompt user interactively
+                let api_key = global_api_key
+                    .clone()
+                    .or_else(|| database_replicator::interactive::get_api_key().ok());
+
+                if let Some(api_key) = api_key {
+                    // Extract hostname from target URL
+                    if let Ok(parts) =
+                        database_replicator::utils::parse_postgres_url(&resolved_target)
+                    {
+                        tracing::info!(
+                            "Discovering SerenDB project for hostname {}...",
+                            parts.host
+                        );
+                        let client = database_replicator::serendb::ConsoleClient::new(
+                            Some(&console_api),
+                            api_key,
+                        );
+                        match client.find_project_by_hostname(&parts.host).await {
+                            Ok(Some(project_id)) => {
+                                effective_project_id = Some(project_id);
+                            }
+                            Ok(None) => {
+                                tracing::warn!(
+                                    "Could not find SerenDB project matching hostname {}. \
+                                     Logical replication auto-enable will be skipped.",
+                                    parts.host
+                                );
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "Failed to discover project from hostname: {}. \
+                                     Logical replication auto-enable will be skipped.",
+                                    e
+                                );
+                            }
+                        }
+                    }
+                } else {
+                    tracing::debug!(
+                        "No API key available, skipping project discovery from target hostname"
+                    );
+                }
+            }
+
             // If project_id is available and target is SerenDB, check/enable logical replication
             if let Some(ref project_id) = effective_project_id {
                 if database_replicator::utils::is_serendb_target(&resolved_target) {
-                    check_and_enable_logical_replication(project_id, &console_api).await?;
+                    check_and_enable_logical_replication(
+                        project_id,
+                        &console_api,
+                        &resolved_target,
+                    )
+                    .await?;
                 }
             }
 
@@ -536,6 +590,7 @@ async fn main() -> anyhow::Result<()> {
 async fn check_and_enable_logical_replication(
     project_id: &str,
     console_api: &str,
+    target_url: &str,
 ) -> anyhow::Result<()> {
     use database_replicator::serendb::ConsoleClient;
     use dialoguer::{theme::ColorfulTheme, Confirm};
@@ -556,6 +611,29 @@ async fn check_and_enable_logical_replication(
             "✓ Logical replication is already enabled for project '{}'",
             project.name
         );
+        // Verify the actual wal_level on the database (endpoint may still be restarting)
+        match database_replicator::postgres::connect_with_retry(target_url).await {
+            Ok(client) => {
+                if let Ok(row) = client.query_one("SHOW wal_level", &[]).await {
+                    let level: String = row.get(0);
+                    if level == "logical" {
+                        return Ok(());
+                    }
+                    // wal_level not yet 'logical', need to wait for endpoint restart
+                    tracing::info!(
+                        "Endpoint has wal_level='{}', waiting for restart to apply 'logical'...",
+                        level
+                    );
+                }
+            }
+            Err(_) => {
+                tracing::info!("Endpoint may be restarting, will poll for readiness...");
+            }
+        }
+        // Fall through to wait for wal_level to become 'logical'
+        println!();
+        println!("⏳ Waiting for endpoint to restart with wal_level=logical...");
+        wait_for_wal_level_logical(target_url).await?;
         return Ok(());
     }
 
@@ -601,12 +679,9 @@ async fn check_and_enable_logical_replication(
         println!();
         println!("✓ Logical replication enabled successfully!");
         println!();
-        println!("⏳ Waiting for endpoints to restart (this may take up to 30 seconds)...");
+        println!("⏳ Waiting for endpoint to restart with wal_level=logical...");
 
-        // Wait for endpoints to restart - the wal_level change requires endpoint restart
-        tokio::time::sleep(tokio::time::Duration::from_secs(15)).await;
-
-        tracing::info!("✓ Endpoints should now be ready with wal_level=logical");
+        wait_for_wal_level_logical(target_url).await?;
     } else {
         anyhow::bail!(
             "Failed to enable logical replication. The API call succeeded but the setting was not updated.\n\
@@ -617,6 +692,69 @@ async fn check_and_enable_logical_replication(
     }
 
     Ok(())
+}
+
+/// Poll the database until wal_level becomes 'logical' (up to 60 seconds)
+async fn wait_for_wal_level_logical(target_url: &str) -> anyhow::Result<()> {
+    let max_attempts = 12;
+    let poll_interval = tokio::time::Duration::from_secs(5);
+
+    for attempt in 1..=max_attempts {
+        tokio::time::sleep(poll_interval).await;
+
+        match database_replicator::postgres::connect_with_retry(target_url).await {
+            Ok(client) => {
+                match client
+                    .query_one("SHOW wal_level", &[])
+                    .await
+                    .map(|row| row.get::<_, String>(0))
+                {
+                    Ok(level) if level == "logical" => {
+                        println!();
+                        tracing::info!("✓ Endpoint is ready with wal_level=logical");
+                        return Ok(());
+                    }
+                    Ok(level) => {
+                        print!(
+                            "\r⏳ Attempt {}/{}: wal_level={}, waiting...",
+                            attempt, max_attempts, level
+                        );
+                        std::io::Write::flush(&mut std::io::stdout()).ok();
+                    }
+                    Err(_) => {
+                        print!(
+                            "\r⏳ Attempt {}/{}: checking wal_level...",
+                            attempt, max_attempts
+                        );
+                        std::io::Write::flush(&mut std::io::stdout()).ok();
+                    }
+                }
+            }
+            Err(_) => {
+                print!(
+                    "\r⏳ Attempt {}/{}: endpoint restarting...",
+                    attempt, max_attempts
+                );
+                std::io::Write::flush(&mut std::io::stdout()).ok();
+            }
+        }
+    }
+
+    println!();
+    println!();
+    println!("⚠️  Timed out waiting for wal_level to become 'logical'.");
+    println!();
+    println!("The SerenDB endpoint may need to be manually restarted:");
+    println!("  1. Go to https://console.serendb.com");
+    println!("  2. Navigate to your project's Compute endpoints");
+    println!("  3. Click 'Restart' on the endpoint");
+    println!("  4. Wait for the endpoint to become available");
+    println!("  5. Re-run this command");
+    println!();
+    anyhow::bail!(
+        "Endpoint wal_level is still 'replica' after enabling logical replication. \
+         The endpoint may need to be manually restarted via the SerenDB console."
+    )
 }
 
 #[allow(clippy::too_many_arguments)]

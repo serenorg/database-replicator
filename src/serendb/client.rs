@@ -429,6 +429,58 @@ impl ConsoleClient {
         Ok(project.enable_logical_replication)
     }
 
+    /// Find a project by matching the target hostname against project connection strings
+    ///
+    /// This is useful when the user provides a direct connection string (e.g., from
+    /// `init` output) but doesn't have saved target state with the project_id.
+    ///
+    /// # Arguments
+    ///
+    /// * `target_hostname` - The hostname to search for (e.g., "ep-xyz.serendb.com")
+    ///
+    /// # Returns
+    ///
+    /// The project_id if a matching project is found, None otherwise
+    pub async fn find_project_by_hostname(&self, target_hostname: &str) -> Result<Option<String>> {
+        let target_host_lower = target_hostname.to_lowercase();
+
+        // List all projects accessible to this API key
+        let projects = self.list_projects().await?;
+
+        for project in projects {
+            // Get the default branch for each project
+            let branch = match self.get_default_branch(&project.id).await {
+                Ok(b) => b,
+                Err(_) => continue, // Skip projects without branches
+            };
+
+            // Get connection string for this branch (use serendb as dummy database)
+            let conn_str = match self
+                .get_connection_string(&project.id, &branch.id, "serendb", false)
+                .await
+            {
+                Ok(s) => s,
+                Err(_) => continue, // Skip branches without endpoints
+            };
+
+            // Extract hostname from the connection string
+            if let Ok(parts) = crate::utils::parse_postgres_url(&conn_str) {
+                if parts.host.to_lowercase() == target_host_lower {
+                    tracing::info!(
+                        "Found matching project '{}' ({}) for hostname {}",
+                        project.name,
+                        project.id,
+                        target_hostname
+                    );
+                    return Ok(Some(project.id));
+                }
+            }
+        }
+
+        tracing::debug!("No project found matching hostname {}", target_hostname);
+        Ok(None)
+    }
+
     async fn handle_common_errors(&self, response: &reqwest::Response) -> Result<()> {
         self.handle_common_errors_with_context(response, None).await
     }
