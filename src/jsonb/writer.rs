@@ -128,7 +128,10 @@ pub async fn truncate_jsonb_table(client: &Client, table_name: &str) -> Result<(
 
     tracing::debug!("Truncating JSONB table '{}'", table_name);
 
-    let truncate_sql = format!(r#"TRUNCATE TABLE "{}" RESTART IDENTITY CASCADE"#, table_name);
+    let truncate_sql = format!(
+        r#"TRUNCATE TABLE "{}" RESTART IDENTITY CASCADE"#,
+        table_name
+    );
 
     client
         .execute(&truncate_sql, &[])

@@ -125,7 +125,7 @@ enum Commands {
     /// - If source has wal_level=replica: uses xmin-based polling (no config required)
     Sync {
         #[arg(long)]
-        source: String,
+        source: Option<String>,
         #[arg(long)]
         target: Option<String>,
         /// Include only these databases (comma-separated)
@@ -166,6 +166,15 @@ enum Commands {
         /// Disable reconciliation (delete detection) for xmin-based sync
         #[arg(long)]
         no_reconcile: bool,
+        /// Run sync as a background daemon (detaches from terminal)
+        #[arg(long)]
+        daemon: bool,
+        /// Stop a running sync daemon
+        #[arg(long)]
+        stop: bool,
+        /// Show status of the sync daemon
+        #[arg(long)]
+        daemon_status: bool,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -453,7 +462,67 @@ async fn main() -> anyhow::Result<()> {
             reconcile_interval,
             once,
             no_reconcile,
+            daemon,
+            stop,
+            daemon_status,
         } => {
+            // Handle daemon control commands first (don't require source/target)
+            if stop {
+                return match database_replicator::daemon::stop_daemon()? {
+                    true => {
+                        println!("Daemon stopped successfully");
+                        Ok(())
+                    }
+                    false => {
+                        println!("No daemon was running");
+                        Ok(())
+                    }
+                };
+            }
+
+            if daemon_status {
+                return database_replicator::daemon::print_status();
+            }
+
+            // For actual sync, source is required
+            let source = source.ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Source database URL is required for sync.\n\
+                     Use --source to specify a source database.\n\
+                     (Use --stop to stop a running daemon, or --daemon-status to check status)"
+                )
+            })?;
+
+            // Handle daemon child process initialization (Windows)
+            #[cfg(windows)]
+            if database_replicator::daemon::is_daemon_child() {
+                use std::fs::OpenOptions;
+                use tracing_subscriber::fmt::writer::MakeWriterExt;
+
+                let log_file = database_replicator::daemon::init_daemon_child()?;
+
+                // Redirect tracing to log file
+                let file = OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&log_file)?;
+
+                // Re-initialize logging to file
+                let file_appender = tracing_subscriber::fmt::layer()
+                    .with_writer(file)
+                    .with_ansi(false);
+
+                // Note: We can't easily re-initialize the global subscriber,
+                // so we'll just proceed with existing logging
+                tracing::info!("Daemon child process started (PID: {})", std::process::id());
+            }
+
+            // If --daemon flag is set, daemonize before continuing
+            if daemon {
+                database_replicator::daemon::daemonize()?;
+                // After daemonize(), we're running in the child process
+            }
+
             let mut app_state = database_replicator::state::load()?;
             let target_candidate = target.or(app_state.target_url.clone());
             let resolved_target = database_replicator::commands::sync::resolve_target_for_sync(
@@ -1182,6 +1251,11 @@ async fn xmin_sync(
         });
 
         daemon.run(shutdown_rx).await?;
+
+        // Clean up daemon PID file on graceful shutdown
+        if let Err(e) = database_replicator::daemon::cleanup() {
+            tracing::warn!("Failed to clean up daemon PID file: {}", e);
+        }
     }
 
     Ok(())

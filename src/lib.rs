@@ -4,6 +4,7 @@
 pub mod checkpoint;
 pub mod commands;
 pub mod config;
+pub mod daemon;
 pub mod filters;
 pub mod interactive;
 pub mod jsonb;

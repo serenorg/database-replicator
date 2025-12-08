@@ -42,6 +42,10 @@ mysql_async = "0.34"
 dirs = "5.0"
 url = "2.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
+libc = "0.2"
+
+[target.'cfg(unix)'.dependencies]
+daemonize = "0.5"
 
 [[test]]
 name = "fallback_test"

@@ -126,12 +126,7 @@ impl SyncDaemon {
                 }
                 Err(e) => {
                     // Log with :? to show full error chain including root cause
-                    tracing::error!(
-                        "Failed to sync {}.{}: {:?}",
-                        self.config.schema,
-                        table,
-                        e
-                    );
+                    tracing::error!("Failed to sync {}.{}: {:?}", self.config.schema, table, e);
                     let error_msg =
                         format!("Failed to sync {}.{}: {}", self.config.schema, table, e);
                     stats.errors.push(error_msg);
