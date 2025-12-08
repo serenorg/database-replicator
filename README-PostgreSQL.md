@@ -291,7 +291,65 @@ INFO: Starting sync...
 4. **Remove orphans**: Deletes rows from target that no longer exist in source
 5. **Persist state**: Saves sync progress to enable resume after interruption
 
-The xmin-based sync runs continuously, polling for changes at a configurable interval (default: 30 seconds).
+The xmin-based sync runs continuously, polling for changes at configurable intervals.
+
+### Sync Timing Controls
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--sync-interval` | 3600 (1 hour) | Seconds between sync cycles |
+| `--reconcile-interval` | 86400 (1 day) | Seconds between delete detection cycles |
+| `--once` | false | Run a single sync cycle and exit |
+| `--no-reconcile` | false | Disable delete detection entirely |
+
+**Examples:**
+
+```bash
+# Sync every 5 minutes, reconcile every 6 hours
+database-replicator sync \
+  --source "postgresql://..." \
+  --target "postgresql://..." \
+  --sync-interval 300 \
+  --reconcile-interval 21600
+
+# Run a single sync cycle (useful for cron jobs)
+database-replicator sync \
+  --source "postgresql://..." \
+  --target "postgresql://..." \
+  --once
+
+# High-frequency sync without delete detection
+database-replicator sync \
+  --source "postgresql://..." \
+  --target "postgresql://..." \
+  --sync-interval 60 \
+  --no-reconcile
+```
+
+### Daemon Mode
+
+Run sync as a background process that survives terminal disconnection:
+
+```bash
+# Start sync as a daemon (detaches from terminal)
+database-replicator sync \
+  --source "postgresql://..." \
+  --target "postgresql://..." \
+  --daemon
+
+# Check daemon status
+database-replicator sync --daemon-status
+
+# Stop a running daemon
+database-replicator sync --stop
+```
+
+**Daemon behavior:**
+
+- Logs to `~/.seren-replicator/sync.log`
+- PID stored in `~/.seren-replicator/sync.pid`
+- Survives terminal closure and SSH disconnection
+- Gracefully stops on SIGTERM
 
 **With filtering:**
 
@@ -346,7 +404,7 @@ SELECT * FROM table WHERE xmin::text::bigint > $last_seen_xmin;
 
 | Aspect | Logical Replication | xmin-Based Sync |
 |--------|---------------------|-----------------|
-| Latency | Sub-second | Polling interval (default 30s) |
+| Latency | Sub-second | Polling interval (default 1 hour) |
 | Delete detection | Real-time | Periodic reconciliation |
 | Network traffic | Streams only changes | Full row on any column change |
 | Source config | Requires wal_level=logical | None required |
@@ -1449,7 +1507,7 @@ This runs every 10 sync cycles by default.
 
 | Feature | Logical Replication | xmin-Based Sync |
 |---------|---------------------|-----------------|
-| Latency | Sub-second | Polling interval (30s default) |
+| Latency | Sub-second | Polling interval (1 hour default) |
 | Delete detection | Real-time | Periodic (every ~5 minutes) |
 | Source requirements | wal_level=logical | None (SELECT only) |
 | Network usage | Minimal (only changes) | Higher (full rows) |
