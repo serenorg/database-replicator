@@ -116,8 +116,9 @@ impl<'a> XminReader<'a> {
         };
 
         // Query rows where xmin > since_xmin, including the xmin value
+        // Note: ORDER BY uses the casted value because xid type doesn't have ordering operators
         let query = format!(
-            "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" WHERE xmin::text::bigint > $1 ORDER BY xmin",
+            "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" WHERE xmin::text::bigint > $1 ORDER BY xmin::text::bigint",
             column_list, schema, table
         );
 
@@ -194,7 +195,7 @@ impl<'a> XminReader<'a> {
         let query = format!(
             "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" \
              WHERE xmin::text::bigint > $1 \
-             ORDER BY xmin \
+             ORDER BY xmin::text::bigint \
              LIMIT $2",
             column_list, batch_reader.schema, batch_reader.table
         );
@@ -363,8 +364,9 @@ impl<'a> XminReader<'a> {
         };
 
         // Query ALL rows, including their xmin values
+        // Note: ORDER BY uses the casted value because xid type doesn't have ordering operators
         let query = format!(
-            "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" ORDER BY xmin",
+            "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" ORDER BY xmin::text::bigint",
             column_list, schema, table
         );
 
