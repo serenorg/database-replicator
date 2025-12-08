@@ -102,6 +102,54 @@ If your source has `wal_level=logical`, it uses native logical replication. If n
 
 ---
 
+## xmin vs WAL: Trade-offs and Costs
+
+Choosing between xmin-based sync and native logical replication involves trade-offs in latency, resource usage, and operational complexity.
+
+### Performance Comparison
+
+| Metric | WAL (Logical Replication) | xmin Polling |
+|--------|---------------------------|--------------|
+| **Latency** | Sub-second (streaming) | Configurable (default: 1 hour) |
+| **Source CPU** | Minimal (reads WAL) | Higher (full table scans) |
+| **Source I/O** | WAL only | Data pages + indexes |
+| **Delete detection** | Immediate | Requires reconciliation |
+| **Configuration** | `wal_level=logical` + restart | None |
+
+### When to Use Each
+
+**Use WAL replication when:**
+
+- You control the source database configuration
+- You need real-time or near-real-time sync
+- The source has `wal_level=logical` already enabled
+- You're replicating high-volume OLTP workloads
+
+**Use xmin polling when:**
+
+- Source is a managed service without logical replication
+- Hourly/daily sync is acceptable
+- You can't restart the source database
+- You need zero-config replication from any PostgreSQL
+
+### Compute Costs (Continuous Sync)
+
+For xmin-based sync running 24/7 on cloud infrastructure:
+
+| Instance | Use Case | Monthly Cost |
+|----------|----------|--------------|
+| t3.micro | Light sync (small DB) | ~$8 |
+| t3.small | Medium workloads | ~$15 |
+| t3.medium | Heavy sync (many tables) | ~$30 |
+
+WAL replication has no dedicated compute cost—it runs within your existing PostgreSQL process. However, it increases WAL volume and may require larger storage.
+
+### Our Recommendation
+
+Start with xmin polling (it works everywhere). If you need lower latency and can enable `wal_level=logical`, the tool automatically upgrades to native replication—no code changes required.
+
+---
+
 ## Fork It
 
 The entire codebase is Apache 2.0 licensed. Key extension points:
