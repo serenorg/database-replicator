@@ -43,6 +43,7 @@ dirs = "5.0"
 url = "2.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 libc = "0.2"
+rust_decimal = { version = "1.39", features = ["db-tokio-postgres"] }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"

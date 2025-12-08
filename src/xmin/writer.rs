@@ -2,6 +2,7 @@
 // ABOUTME: Uses INSERT ... ON CONFLICT DO UPDATE for efficient upserts
 
 use anyhow::{Context, Result};
+use rust_decimal::Decimal;
 use tokio_postgres::types::ToSql;
 use tokio_postgres::{Client, Row};
 
@@ -31,6 +32,7 @@ impl<'a> ChangeWriter<'a> {
     ///
     /// Uses batching internally to stay within PostgreSQL's parameter limits.
     /// Each batch is executed as a separate query (PostgreSQL auto-commits).
+    /// Automatically retries with smaller batches if "value too large" errors occur.
     ///
     /// # Arguments
     ///
@@ -56,18 +58,86 @@ impl<'a> ChangeWriter<'a> {
         }
 
         // PostgreSQL has a limit of ~65535 parameters per query
-        // Calculate batch size based on number of columns
+        // Calculate batch size based on number of columns, but cap at 100 rows
+        // to avoid "value too large to transmit" errors with large JSONB/TEXT columns
         let params_per_row = all_columns.len();
         let max_params = 65000; // Leave some margin
-        let batch_size = std::cmp::max(1, max_params / params_per_row);
+        let param_based_batch_size = std::cmp::max(1, max_params / params_per_row);
+        let batch_size = std::cmp::min(param_based_batch_size, 100); // Cap at 100 rows
 
         let mut total_affected = 0u64;
 
         for chunk in rows.chunks(batch_size) {
             let affected = self
-                .execute_upsert_batch(schema, table, primary_key_columns, all_columns, chunk)
+                .execute_upsert_batch_with_retry(
+                    schema,
+                    table,
+                    primary_key_columns,
+                    all_columns,
+                    chunk,
+                )
                 .await?;
             total_affected += affected;
+        }
+
+        Ok(total_affected)
+    }
+
+    /// Execute upsert batch with automatic retry using smaller batches on "value too large" errors.
+    /// Uses iterative splitting instead of recursion to handle Rust's async limitations.
+    async fn execute_upsert_batch_with_retry(
+        &self,
+        schema: &str,
+        table: &str,
+        primary_key_columns: &[String],
+        all_columns: &[String],
+        rows: &[Vec<Box<dyn ToSql + Sync + Send>>],
+    ) -> Result<u64> {
+        // Try progressively smaller batch sizes until success
+        let mut current_batch_size = rows.len();
+        let mut total_affected = 0u64;
+        let mut offset = 0;
+
+        while offset < rows.len() {
+            let end = std::cmp::min(offset + current_batch_size, rows.len());
+            let chunk = &rows[offset..end];
+
+            match self
+                .execute_upsert_batch(schema, table, primary_key_columns, all_columns, chunk)
+                .await
+            {
+                Ok(affected) => {
+                    total_affected += affected;
+                    offset = end;
+                    // Reset batch size for next chunk
+                    current_batch_size = std::cmp::min(100, rows.len() - offset);
+                }
+                Err(e) => {
+                    let error_str = format!("{:?}", e);
+                    if error_str.contains("value too large to transmit") {
+                        if current_batch_size > 1 {
+                            // Halve the batch size and retry
+                            current_batch_size /= 2;
+                            tracing::warn!(
+                                "Batch too large for {}.{}, reducing to {} rows",
+                                schema,
+                                table,
+                                current_batch_size
+                            );
+                        } else {
+                            // Single row still too large - this is a data issue
+                            anyhow::bail!(
+                                "Single row too large to transmit for {}.{}. \
+                                 Consider reducing column sizes or using COPY protocol.",
+                                schema,
+                                table
+                            );
+                        }
+                    } else {
+                        return Err(e);
+                    }
+                }
+            }
         }
 
         Ok(total_affected)
@@ -429,8 +499,8 @@ pub fn row_to_values(
                     Box::new(val)
                 }
                 "numeric" | "decimal" => {
-                    // Fall back to string representation
-                    let val: Option<String> = row.try_get::<_, String>(idx).ok();
+                    // Use rust_decimal for proper numeric handling
+                    let val: Option<Decimal> = row.get(idx);
                     Box::new(val)
                 }
                 _ => {

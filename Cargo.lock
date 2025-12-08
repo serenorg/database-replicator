@@ -687,7 +687,7 @@ checksum = "2a2330da5de22e8a3cb63252ce2abb30116bf5265e89c0e01bc17015ce30a476"
 
 [[package]]
 name = "database-replicator"
-version = "7.0.1"
+version = "7.0.2"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -709,6 +709,7 @@ dependencies = [
  "rand 0.8.5",
  "reqwest",
  "rusqlite",
+ "rust_decimal",
  "serde",
  "serde_json",
  "sha2",
@@ -2664,6 +2665,7 @@ dependencies = [
  "borsh",
  "bytes",
  "num-traits",
+ "postgres-types",
  "rand 0.8.5",
  "rkyv",
  "serde",
