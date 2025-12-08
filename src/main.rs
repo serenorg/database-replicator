@@ -118,7 +118,11 @@ enum Commands {
         #[arg(long, default_value_t = 28800)]
         job_timeout: u64,
     },
-    /// Set up continuous logical replication from source to target
+    /// Set up continuous replication from source to target (auto-detects best method)
+    ///
+    /// Automatically detects source database capabilities:
+    /// - If source has wal_level=logical: uses PostgreSQL logical replication (fastest)
+    /// - If source has wal_level=replica: uses xmin-based polling (no config required)
     Sync {
         #[arg(long)]
         source: String,
@@ -150,6 +154,25 @@ enum Commands {
         /// SerenDB Console API URL (defaults to https://api.serendb.com)
         #[arg(long, default_value = "https://api.serendb.com")]
         console_api: String,
+        // --- xmin fallback options (used when logical replication unavailable) ---
+        /// Schema to sync when using xmin mode (defaults to "public")
+        #[arg(long, default_value = "public")]
+        schema: String,
+        /// Sync interval in seconds for xmin mode (default: 60)
+        #[arg(long, default_value_t = 60)]
+        xmin_interval: u64,
+        /// Reconciliation interval in seconds for delete detection in xmin mode (default: 3600)
+        #[arg(long, default_value_t = 3600)]
+        xmin_reconcile_interval: u64,
+        /// Batch size for xmin mode (default: 1000)
+        #[arg(long, default_value_t = 1000)]
+        xmin_batch_size: usize,
+        /// Run a single sync cycle then exit (xmin mode only)
+        #[arg(long)]
+        once: bool,
+        /// Skip reconciliation/delete detection (xmin mode only)
+        #[arg(long)]
+        no_reconcile: bool,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -465,6 +488,12 @@ async fn main() -> anyhow::Result<()> {
             force,
             project_id,
             console_api,
+            schema,
+            xmin_interval,
+            xmin_reconcile_interval,
+            xmin_batch_size,
+            once,
+            no_reconcile,
         } => {
             let mut app_state = database_replicator::state::load()?;
             let target_candidate = target.or(app_state.target_url.clone());
@@ -476,6 +505,9 @@ async fn main() -> anyhow::Result<()> {
             .await?;
             app_state.target_url = Some(resolved_target.clone());
             database_replicator::state::save(&app_state)?;
+
+            // Clone include_tables for potential xmin fallback usage
+            let include_tables_for_xmin = include_tables.clone();
 
             let filter = if !no_interactive {
                 // Interactive mode (default) - prompt user to select databases and tables
@@ -563,16 +595,59 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            commands::sync(
-                &source,
-                &resolved_target,
-                Some(filter),
-                None,
-                None,
-                None,
-                force,
-            )
-            .await
+            // Auto-detect source wal_level to choose sync method
+            tracing::info!("Checking source database capabilities...");
+            let source_client = database_replicator::postgres::connect(&source)
+                .await
+                .context("Failed to connect to source database for capability detection")?;
+            let source_wal_level = database_replicator::postgres::check_wal_level(&source_client)
+                .await
+                .unwrap_or_else(|_| "unknown".to_string());
+            drop(source_client); // Release connection before sync
+
+            if source_wal_level == "logical" {
+                tracing::info!("Source has wal_level=logical (logical replication available)");
+                tracing::info!("Using PostgreSQL logical replication (fastest method)");
+
+                commands::sync(
+                    &source,
+                    &resolved_target,
+                    Some(filter),
+                    None,
+                    None,
+                    None,
+                    force,
+                )
+                .await
+            } else {
+                tracing::info!(
+                    "Source has wal_level={} (logical replication not available)",
+                    source_wal_level
+                );
+                tracing::info!("Using xmin-based sync (no source configuration required)");
+
+                // Get tables from filter if available
+                let tables = if !no_interactive {
+                    // Interactive mode already selected tables via filter
+                    None // Let xmin daemon discover tables
+                } else {
+                    include_tables_for_xmin
+                };
+
+                xmin_sync(
+                    source,
+                    resolved_target,
+                    schema,
+                    tables,
+                    xmin_interval,
+                    xmin_reconcile_interval,
+                    xmin_batch_size,
+                    None, // state_file - use default
+                    once,
+                    no_reconcile,
+                )
+                .await
+            }
         }
         Commands::Status {
             source,
@@ -1085,11 +1160,13 @@ async fn xmin_sync(
     tracing::info!("Starting xmin-based sync...");
     tracing::info!(
         "Source: {}",
-        database_replicator::utils::strip_password_from_url(&source).unwrap_or_else(|_| source.clone())
+        database_replicator::utils::strip_password_from_url(&source)
+            .unwrap_or_else(|_| source.clone())
     );
     tracing::info!(
         "Target: {}",
-        database_replicator::utils::strip_password_from_url(&target).unwrap_or_else(|_| target.clone())
+        database_replicator::utils::strip_password_from_url(&target)
+            .unwrap_or_else(|_| target.clone())
     );
     tracing::info!("Schema: {}", schema);
     if let Some(ref t) = tables {

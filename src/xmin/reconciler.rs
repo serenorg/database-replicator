@@ -114,7 +114,12 @@ impl<'a> Reconciler<'a> {
             .delete_rows(schema, table, primary_key_columns, pk_values)
             .await?;
 
-        tracing::info!("Deleted {} orphaned rows from {}.{}", deleted, schema, table);
+        tracing::info!(
+            "Deleted {} orphaned rows from {}.{}",
+            deleted,
+            schema,
+            table
+        );
 
         Ok(deleted)
     }

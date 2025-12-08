@@ -124,7 +124,10 @@ impl<'a> XminReader<'a> {
     }
 
     /// Execute a batched read query and return the next batch.
-    pub async fn fetch_batch(&self, batch_reader: &mut BatchReader) -> Result<Option<(Vec<Row>, u32)>> {
+    pub async fn fetch_batch(
+        &self,
+        batch_reader: &mut BatchReader,
+    ) -> Result<Option<(Vec<Row>, u32)>> {
         if batch_reader.exhausted {
             return Ok(None);
         }
@@ -152,7 +155,10 @@ impl<'a> XminReader<'a> {
             .client
             .query(
                 &query,
-                &[&(batch_reader.current_xmin as i64), &(batch_reader.batch_size as i64)],
+                &[
+                    &(batch_reader.current_xmin as i64),
+                    &(batch_reader.batch_size as i64),
+                ],
             )
             .await
             .with_context(|| {
@@ -190,7 +196,12 @@ impl<'a> XminReader<'a> {
     /// Get the estimated row count for changes since a given xmin.
     ///
     /// This uses EXPLAIN to estimate without actually scanning the table.
-    pub async fn estimate_changes(&self, schema: &str, table: &str, since_xmin: u32) -> Result<i64> {
+    pub async fn estimate_changes(
+        &self,
+        schema: &str,
+        table: &str,
+        since_xmin: u32,
+    ) -> Result<i64> {
         let query = format!(
             "SELECT COUNT(*) FROM \"{}\".\"{}\" WHERE xmin::text::bigint > $1",
             schema, table

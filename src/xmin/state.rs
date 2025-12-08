@@ -134,8 +134,8 @@ impl SyncState {
                 .with_context(|| format!("Failed to create directory {:?}", parent))?;
         }
 
-        let contents = serde_json::to_string_pretty(self)
-            .context("Failed to serialize sync state")?;
+        let contents =
+            serde_json::to_string_pretty(self).context("Failed to serialize sync state")?;
         fs::write(path, contents)
             .await
             .with_context(|| format!("Failed to write sync state to {:?}", path))?;
