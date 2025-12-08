@@ -16,6 +16,8 @@ All notable changes to this project will be documented in this file.
 
 - **Large batch handling**: Fixed batch size issues that could cause sync failures on tables with many columns.
 
+- **SQLite/MongoDB/MySQL init idempotency**: Fixed "relation already exists" errors when re-running `init` for JSONB-based sources (SQLite, MongoDB, MySQL). Now truncates existing tables instead of failing, making init idempotent.
+
 ### Changed
 
 - **Default sync intervals**: Changed default sync interval from 60 seconds to 1 hour (3600s), and default reconciliation interval from 1 hour to 1 day (86400s) for more production-appropriate defaults.
