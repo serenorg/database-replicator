@@ -154,6 +154,18 @@ enum Commands {
         /// SerenDB Console API URL (defaults to https://api.serendb.com)
         #[arg(long, default_value = "https://api.serendb.com")]
         console_api: String,
+        /// Sync interval in seconds for xmin-based sync (default: 60)
+        #[arg(long, default_value_t = 60)]
+        sync_interval: u64,
+        /// Reconciliation interval in seconds for xmin-based sync (default: 3600 = 1 hour)
+        #[arg(long, default_value_t = 3600)]
+        reconcile_interval: u64,
+        /// Run a single sync cycle and exit (don't run continuously)
+        #[arg(long)]
+        once: bool,
+        /// Disable reconciliation (delete detection) for xmin-based sync
+        #[arg(long)]
+        no_reconcile: bool,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -437,6 +449,10 @@ async fn main() -> anyhow::Result<()> {
             force,
             project_id,
             console_api,
+            sync_interval,
+            reconcile_interval,
+            once,
+            no_reconcile,
         } => {
             let mut app_state = database_replicator::state::load()?;
             let target_candidate = target.or(app_state.target_url.clone());
@@ -566,19 +582,18 @@ async fn main() -> anyhow::Result<()> {
                 );
                 tracing::info!("Using xmin-based sync (no source configuration required)");
 
-                // Use sensible defaults for xmin sync - no user configuration needed
-                // Default: sync every 60s, reconcile every hour, batch size 1000
+                // Use CLI-provided intervals or defaults
                 xmin_sync(
                     source,
                     resolved_target,
                     "public".to_string(), // Default schema
                     None,                 // Discover all tables
-                    60,                   // Sync interval: 60 seconds
-                    3600,                 // Reconcile interval: 1 hour
+                    sync_interval,        // CLI: --sync-interval (default 60s)
+                    reconcile_interval,   // CLI: --reconcile-interval (default 3600s)
                     1000,                 // Batch size
                     None,                 // State file: use default
-                    false,                // Run continuously, not once
-                    false,                // Enable reconciliation
+                    once,                 // CLI: --once (run single cycle)
+                    no_reconcile,         // CLI: --no-reconcile (disable delete detection)
                 )
                 .await
             }
