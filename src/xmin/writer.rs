@@ -379,6 +379,8 @@ fn build_delete_query(
 /// Extract column metadata from a PostgreSQL table.
 ///
 /// Returns (column_name, data_type) pairs for all columns in the table.
+/// Uses `udt_name` from information_schema which includes array type info
+/// (e.g., `_text` for text[], `_int4` for integer[]).
 pub async fn get_table_columns(
     client: &Client,
     schema: &str,
@@ -386,7 +388,7 @@ pub async fn get_table_columns(
 ) -> Result<Vec<(String, String)>> {
     let rows = client
         .query(
-            "SELECT column_name, data_type
+            "SELECT column_name, udt_name
              FROM information_schema.columns
              WHERE table_schema = $1 AND table_name = $2
              ORDER BY ordinal_position",
@@ -458,7 +460,7 @@ pub fn row_to_values(
                     let val: Option<i16> = row.get(idx);
                     Box::new(val)
                 }
-                "text" | "varchar" | "character varying" | "char" | "character" | "name" => {
+                "text" | "varchar" | "bpchar" | "char" | "character" | "name" | "citext" => {
                     let val: Option<String> = row.get(idx);
                     Box::new(val)
                 }
@@ -503,41 +505,61 @@ pub fn row_to_values(
                     let val: Option<Decimal> = row.get(idx);
                     Box::new(val)
                 }
-                // Array types (PostgreSQL uses underscore prefix for array type names)
-                "ARRAY" | "_text" | "text[]" => {
+                // Array types (PostgreSQL udt_name uses underscore prefix for array types)
+                "_text" | "_varchar" | "_bpchar" | "_citext" => {
                     let val: Option<Vec<String>> = row.get(idx);
                     Box::new(val)
                 }
-                "_int4" | "integer[]" | "int4[]" => {
+                "_int4" => {
                     let val: Option<Vec<i32>> = row.get(idx);
                     Box::new(val)
                 }
-                "_int8" | "bigint[]" | "int8[]" => {
+                "_int8" => {
                     let val: Option<Vec<i64>> = row.get(idx);
                     Box::new(val)
                 }
-                "_int2" | "smallint[]" | "int2[]" => {
+                "_int2" => {
                     let val: Option<Vec<i16>> = row.get(idx);
                     Box::new(val)
                 }
-                "_float4" | "real[]" | "float4[]" => {
+                "_float4" => {
                     let val: Option<Vec<f32>> = row.get(idx);
                     Box::new(val)
                 }
-                "_float8" | "double precision[]" | "float8[]" => {
+                "_float8" => {
                     let val: Option<Vec<f64>> = row.get(idx);
                     Box::new(val)
                 }
-                "_bool" | "boolean[]" | "bool[]" => {
+                "_bool" => {
                     let val: Option<Vec<bool>> = row.get(idx);
                     Box::new(val)
                 }
-                "_uuid" | "uuid[]" => {
+                "_uuid" => {
                     let val: Option<Vec<uuid::Uuid>> = row.get(idx);
                     Box::new(val)
                 }
-                "_bytea" | "bytea[]" => {
+                "_bytea" => {
                     let val: Option<Vec<Vec<u8>>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_numeric" => {
+                    let val: Option<Vec<Decimal>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_jsonb" | "_json" => {
+                    let val: Option<Vec<serde_json::Value>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_timestamp" => {
+                    let val: Option<Vec<chrono::NaiveDateTime>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_timestamptz" => {
+                    let val: Option<Vec<chrono::DateTime<chrono::Utc>>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_date" => {
+                    let val: Option<Vec<chrono::NaiveDate>> = row.get(idx);
                     Box::new(val)
                 }
                 _ => {
