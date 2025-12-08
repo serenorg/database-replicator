@@ -1198,26 +1198,22 @@ async fn xmin_sync(
                 .unwrap_or_default();
 
             // Look for a database on target that matches source database name
-            let matching_db = available_dbs
-                .iter()
-                .find(|db| db.name == *source_db_name);
+            let matching_db = available_dbs.iter().find(|db| db.name == *source_db_name);
 
             if let Some(db) = matching_db {
                 // Found matching database - check if it has tables
                 let db_url = database_replicator::commands::sync::replace_database_in_url(
-                    &target,
-                    &db.name,
+                    &target, &db.name,
                 )?;
-                let table_count = if let Ok(db_client) =
-                    database_replicator::postgres::connect(&db_url).await
-                {
-                    database_replicator::migration::list_tables(&db_client)
-                        .await
-                        .map(|t| t.len())
-                        .unwrap_or(0)
-                } else {
-                    0
-                };
+                let table_count =
+                    if let Ok(db_client) = database_replicator::postgres::connect(&db_url).await {
+                        database_replicator::migration::list_tables(&db_client)
+                            .await
+                            .map(|t| t.len())
+                            .unwrap_or(0)
+                    } else {
+                        0
+                    };
 
                 if table_count > 0 {
                     // Auto-switch to the matching database
@@ -1226,13 +1222,17 @@ async fn xmin_sync(
                     println!("⚠️  Target database '{}' has no tables", target_db_name);
                     println!("========================================");
                     println!();
-                    println!("Found matching database '{}' with {} tables.", source_db_name, table_count);
+                    println!(
+                        "Found matching database '{}' with {} tables.",
+                        source_db_name, table_count
+                    );
                     println!("(init preserves source database names on target)");
                     println!();
                     println!("✓ Automatically switching to '{}'", source_db_name);
                     tracing::info!(
                         "Auto-switched target from '{}' to '{}' (source name match)",
-                        target_db_name, source_db_name
+                        target_db_name,
+                        source_db_name
                     );
 
                     database_replicator::commands::sync::replace_database_in_url(
@@ -1245,7 +1245,8 @@ async fn xmin_sync(
                         "Target database '{}' has no tables, and the matching source database \
                          '{}' on target is also empty.\n\n\
                          Did you run 'init' first to copy data from source to target?",
-                        target_db_name, source_db_name
+                        target_db_name,
+                        source_db_name
                     );
                 }
             } else {

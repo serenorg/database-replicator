@@ -355,14 +355,20 @@ pub async fn init(
             println!("⚠️  IMPORTANT: Target database name ignored");
             println!("========================================");
             println!();
-            println!("You specified target database '{}', but replication preserves", target_db);
+            println!(
+                "You specified target database '{}', but replication preserves",
+                target_db
+            );
             println!("source database names. Data will be replicated to:");
             println!();
             for db_name in &source_db_names {
                 println!("  → {}", db_name);
             }
             println!();
-            println!("The '{}' database in your target URL is used only for", target_db);
+            println!(
+                "The '{}' database in your target URL is used only for",
+                target_db
+            );
             println!("the initial connection. Source databases will be created");
             println!("on the target server with their original names.");
             println!();
