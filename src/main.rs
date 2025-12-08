@@ -1169,7 +1169,8 @@ async fn xmin_sync(
 
     // Pre-flight check: verify target database has tables to sync
     // This prevents confusing errors like "relation does not exist"
-    {
+    // If target is empty, auto-switch to matching source database name (init preserves names)
+    let target = {
         let target_client = database_replicator::postgres::connect(&target)
             .await
             .context("Failed to connect to target database")?;
@@ -1178,11 +1179,14 @@ async fn xmin_sync(
 
         if target_tables.is_empty() {
             // Target database has no tables - likely user specified wrong database
-            // Get the target database name and list available databases
             let target_parts = database_replicator::utils::parse_postgres_url(&target)?;
             let target_db_name = &target_parts.database;
 
-            // Connect to postgres database to list all databases
+            // Get source database name - init preserves source names on target
+            let source_parts = database_replicator::utils::parse_postgres_url(&source)?;
+            let source_db_name = &source_parts.database;
+
+            // Connect to postgres database to check if source-named database exists on target
             let server_url =
                 database_replicator::commands::sync::replace_database_in_url(&target, "postgres")?;
             let server_client = database_replicator::postgres::connect(&server_url)
@@ -1193,53 +1197,70 @@ async fn xmin_sync(
                 .await
                 .unwrap_or_default();
 
-            // Build helpful error message
-            let mut msg = format!(
-                "Target database '{}' has no tables to sync.\n\n",
-                target_db_name
-            );
+            // Look for a database on target that matches source database name
+            let matching_db = available_dbs
+                .iter()
+                .find(|db| db.name == *source_db_name);
 
-            if !available_dbs.is_empty() {
-                msg.push_str("Available databases on target server:\n");
-                for db in &available_dbs {
-                    // Check if this database has tables
-                    let db_url = database_replicator::commands::sync::replace_database_in_url(
+            if let Some(db) = matching_db {
+                // Found matching database - check if it has tables
+                let db_url = database_replicator::commands::sync::replace_database_in_url(
+                    &target,
+                    &db.name,
+                )?;
+                let table_count = if let Ok(db_client) =
+                    database_replicator::postgres::connect(&db_url).await
+                {
+                    database_replicator::migration::list_tables(&db_client)
+                        .await
+                        .map(|t| t.len())
+                        .unwrap_or(0)
+                } else {
+                    0
+                };
+
+                if table_count > 0 {
+                    // Auto-switch to the matching database
+                    println!();
+                    println!("========================================");
+                    println!("⚠️  Target database '{}' has no tables", target_db_name);
+                    println!("========================================");
+                    println!();
+                    println!("Found matching database '{}' with {} tables.", source_db_name, table_count);
+                    println!("(init preserves source database names on target)");
+                    println!();
+                    println!("✓ Automatically switching to '{}'", source_db_name);
+                    tracing::info!(
+                        "Auto-switched target from '{}' to '{}' (source name match)",
+                        target_db_name, source_db_name
+                    );
+
+                    database_replicator::commands::sync::replace_database_in_url(
                         &target,
-                        &db.name,
-                    )?;
-                    let table_count = if let Ok(db_client) =
-                        database_replicator::postgres::connect(&db_url).await
-                    {
-                        database_replicator::migration::list_tables(&db_client)
-                            .await
-                            .map(|t| t.len())
-                            .unwrap_or(0)
-                    } else {
-                        0
-                    };
-
-                    if table_count > 0 {
-                        msg.push_str(&format!(
-                            "  → {} ({} tables) ← likely the correct database\n",
-                            db.name, table_count
-                        ));
-                    } else {
-                        msg.push_str(&format!("  - {} (empty)\n", db.name));
-                    }
+                        source_db_name,
+                    )?
+                } else {
+                    // Matching database exists but is empty
+                    anyhow::bail!(
+                        "Target database '{}' has no tables, and the matching source database \
+                         '{}' on target is also empty.\n\n\
+                         Did you run 'init' first to copy data from source to target?",
+                        target_db_name, source_db_name
+                    );
                 }
-                msg.push('\n');
+            } else {
+                // No matching database found - user must run init first
+                anyhow::bail!(
+                    "Database '{}' does not exist on target server.\n\n\
+                     Sync requires the target database name to match the source.\n\
+                     Run 'init' first to copy the source database to target.",
+                    source_db_name
+                );
             }
-
-            msg.push_str(
-                "The init command preserves source database names.\n\
-                 If you ran init with source '/neondb', the data is in '/neondb' on target.\n\n\
-                 To fix, use the correct database name in your target URL:\n  \
-                 --target \"postgresql://.../<correct_database>\"",
-            );
-
-            anyhow::bail!(msg);
+        } else {
+            target
         }
-    }
+    };
 
     // Build daemon config
     let state_path = state_file
