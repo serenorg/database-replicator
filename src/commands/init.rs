@@ -340,6 +340,41 @@ pub async fn init(
 
     tracing::info!("Found {} database(s) to replicate", databases.len());
 
+    // Check if user specified a target database name that doesn't match source databases
+    // This is important because init preserves source database names during replication
+    if let Ok(target_parts) = crate::utils::parse_postgres_url(target_url) {
+        let target_db = &target_parts.database;
+        let source_db_names: Vec<&str> = databases.iter().map(|db| db.name.as_str()).collect();
+
+        if !source_db_names.contains(&target_db.as_str())
+            && target_db != "postgres"
+            && !target_db.is_empty()
+        {
+            println!();
+            println!("========================================");
+            println!("⚠️  IMPORTANT: Target database name ignored");
+            println!("========================================");
+            println!();
+            println!("You specified target database '{}', but replication preserves", target_db);
+            println!("source database names. Data will be replicated to:");
+            println!();
+            for db_name in &source_db_names {
+                println!("  → {}", db_name);
+            }
+            println!();
+            println!("The '{}' database in your target URL is used only for", target_db);
+            println!("the initial connection. Source databases will be created");
+            println!("on the target server with their original names.");
+            println!();
+            println!("When running 'sync' later, use the correct database name:");
+            if let Some(first_db) = source_db_names.first() {
+                println!("  --target \"postgresql://.../{}\"\n", first_db);
+            }
+            println!("========================================");
+            println!();
+        }
+    }
+
     // Estimate database sizes and get confirmation
     if !skip_confirmation {
         tracing::info!("Analyzing database sizes...");
