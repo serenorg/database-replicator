@@ -57,3 +57,8 @@ doc = false
 name = "interactive_serendb_test"
 path = "tests/interactive_serendb_test.rs"
 doc = false
+
+[[test]]
+name = "xmin_integration_test"
+path = "tests/xmin_integration_test.rs"
+doc = false
