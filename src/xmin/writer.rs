@@ -503,6 +503,43 @@ pub fn row_to_values(
                     let val: Option<Decimal> = row.get(idx);
                     Box::new(val)
                 }
+                // Array types (PostgreSQL uses underscore prefix for array type names)
+                "ARRAY" | "_text" | "text[]" => {
+                    let val: Option<Vec<String>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_int4" | "integer[]" | "int4[]" => {
+                    let val: Option<Vec<i32>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_int8" | "bigint[]" | "int8[]" => {
+                    let val: Option<Vec<i64>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_int2" | "smallint[]" | "int2[]" => {
+                    let val: Option<Vec<i16>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_float4" | "real[]" | "float4[]" => {
+                    let val: Option<Vec<f32>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_float8" | "double precision[]" | "float8[]" => {
+                    let val: Option<Vec<f64>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_bool" | "boolean[]" | "bool[]" => {
+                    let val: Option<Vec<bool>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_uuid" | "uuid[]" => {
+                    let val: Option<Vec<uuid::Uuid>> = row.get(idx);
+                    Box::new(val)
+                }
+                "_bytea" | "bytea[]" => {
+                    let val: Option<Vec<Vec<u8>>> = row.get(idx);
+                    Box::new(val)
+                }
                 _ => {
                     // For unknown types, try to get as string
                     let val: Option<String> = row.try_get::<_, String>(idx).ok();
