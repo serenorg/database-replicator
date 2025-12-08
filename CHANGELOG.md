@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.3] - 2025-12-08
+
+### Fixed
+
+- **Windows build failure**: Removed unused tracing code that caused E0282 type inference error in Windows-only daemon initialization code.
+
+- **PostgreSQL array type handling in xmin sync**: Fixed "cannot convert between String and _text" errors by properly handling PostgreSQL array types (`text[]`, `integer[]`, `bigint[]`, etc.). Added support for 15+ array types including `_text`, `_int4`, `_int8`, `_float8`, `_bool`, `_uuid`, `_numeric`, `_jsonb`, `_timestamp`, and more.
+
+- **Accurate PostgreSQL type detection**: Changed from using `data_type` (which returns generic "ARRAY" for all arrays) to `udt_name` in `information_schema.columns`, which returns specific types like `_text`, `_int4`, enabling correct array element type handling.
+
+- **Numeric type handling**: Fixed "value too large to fit in target type" errors by using `rust_decimal` for PostgreSQL `numeric`/`decimal` columns instead of f64.
+
+- **Large batch handling**: Fixed batch size issues that could cause sync failures on tables with many columns.
+
+### Changed
+
+- **Default sync intervals**: Changed default sync interval from 60 seconds to 1 hour (3600s), and default reconciliation interval from 1 hour to 1 day (86400s) for more production-appropriate defaults.
+
 ## [7.0.1] - 2025-12-08
 
 ### Fixed
