@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [6.0.6] - 2025-12-08
+
+### Fixed
+
+- **Sync command now uses saved target state**: Fixed bug where `sync` required manual `--project-id` even after `init` captured it interactively. Now `init` saves TargetState to `.seren-replicator/target.json`, and `sync` automatically loads the `project_id` from saved state for auto-enabling logical replication. (Fixes #53)
+
 ## [6.0.5] - 2025-12-07
 
 ### Fixed
