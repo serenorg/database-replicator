@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM debian:bookworm-slim AS downloader
+FROM ubuntu:24.04 AS downloader
 ARG VERSION=latest
 ENV BINARY_NAME=database-replicator-linux-x64-binary
 ENV RELEASE_ROOT=https://github.com/serenorg/database-replicator/releases
@@ -16,13 +16,13 @@ RUN set -eux; \
     curl -fL "$URL" -o /tmp/database-replicator && \
     chmod +x /tmp/database-replicator
 
-FROM debian:bookworm-slim
+FROM ubuntu:24.04
 LABEL org.opencontainers.image.title="database-replicator" \
       org.opencontainers.image.description="Seren database replicator CLI" \
       org.opencontainers.image.source="https://github.com/serenorg/database-replicator"
 
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends ca-certificates libssl3 libpq5 postgresql-client && \
+    apt-get install -y --no-install-recommends ca-certificates libsqlite3-0 libssl3 libpq5 postgresql-client && \
     rm -rf /var/lib/apt/lists/* && \
     useradd -m replicator
 
