@@ -298,9 +298,9 @@ impl SyncDaemon {
 
         let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
 
-        // Read changes
-        let (rows, max_xmin) = reader
-            .read_changes(schema, table, &column_names, since_xmin)
+        // Read changes with wraparound detection
+        let (rows, max_xmin, was_full_sync) = reader
+            .read_changes_with_wraparound_check(schema, table, &column_names, since_xmin)
             .await?;
 
         if rows.is_empty() {
@@ -313,14 +313,23 @@ impl SyncDaemon {
             return Ok(0);
         }
 
-        tracing::info!(
-            "Found {} changed rows in {}.{} (xmin {} -> {})",
-            rows.len(),
-            schema,
-            table,
-            since_xmin,
-            max_xmin
-        );
+        if was_full_sync {
+            tracing::warn!(
+                "xmin wraparound detected for {}.{} - performed full table sync ({} rows)",
+                schema,
+                table,
+                rows.len()
+            );
+        } else {
+            tracing::info!(
+                "Found {} changed rows in {}.{} (xmin {} -> {})",
+                rows.len(),
+                schema,
+                table,
+                since_xmin,
+                max_xmin
+            );
+        }
 
         // Convert rows to values (excluding the _xmin column we added)
         let values: Vec<Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>>> = rows

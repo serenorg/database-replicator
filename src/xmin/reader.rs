@@ -4,14 +4,57 @@
 use anyhow::{Context, Result};
 use tokio_postgres::{Client, Row};
 
+/// Threshold for detecting xmin wraparound.
+/// If old_xmin - new_xmin > this value, we assume wraparound occurred.
+/// PostgreSQL xmin is 32-bit (~4 billion max), so 2 billion is half.
+const WRAPAROUND_THRESHOLD: u32 = 2_000_000_000;
+
+/// Result of checking for xmin wraparound.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WraparoundCheck {
+    /// No wraparound detected, safe to proceed with incremental sync
+    Normal,
+    /// Wraparound detected, full table sync required
+    WraparoundDetected,
+}
+
+/// Detect if xmin wraparound has occurred.
+///
+/// PostgreSQL transaction IDs are 32-bit unsigned integers that wrap around
+/// after ~4 billion transactions. When this happens, new xmin values will be
+/// smaller than old ones by a large margin (> 2 billion).
+///
+/// # Arguments
+///
+/// * `old_xmin` - The previously recorded xmin value
+/// * `current_xmin` - The current database transaction ID
+///
+/// # Returns
+///
+/// `WraparoundCheck::WraparoundDetected` if wraparound occurred, `Normal` otherwise.
+pub fn detect_wraparound(old_xmin: u32, current_xmin: u32) -> WraparoundCheck {
+    // If current < old by more than half the 32-bit range, it's likely a wraparound
+    if old_xmin > current_xmin && (old_xmin - current_xmin) > WRAPAROUND_THRESHOLD {
+        tracing::warn!(
+            "xmin wraparound detected: old_xmin={}, current_xmin={}, delta={}",
+            old_xmin,
+            current_xmin,
+            old_xmin - current_xmin
+        );
+        WraparoundCheck::WraparoundDetected
+    } else {
+        WraparoundCheck::Normal
+    }
+}
+
 /// Reads changed rows from a PostgreSQL table using xmin-based change detection.
 ///
 /// PostgreSQL's `xmin` system column contains the transaction ID that last modified
 /// each row. By tracking the maximum xmin seen, we can query for only rows that
 /// have been modified since the last sync.
 ///
-/// Note: xmin wraps around at 2^32 transactions, so this method is suitable for
-/// incremental syncs but not for long-term archival purposes.
+/// **Warning:** xmin wraps around at 2^32 transactions. Use `detect_wraparound()`
+/// to check for this condition and trigger a full table sync when detected.
 pub struct XminReader<'a> {
     client: &'a Client,
 }
@@ -277,6 +320,113 @@ impl<'a> XminReader<'a> {
 
         Ok(rows.iter().map(|row| row.get(0)).collect())
     }
+
+    /// Read ALL rows from a table (full sync).
+    ///
+    /// This is used when xmin wraparound is detected and we need to resync
+    /// the entire table to ensure data consistency.
+    ///
+    /// # Arguments
+    ///
+    /// * `schema` - The schema name (e.g., "public")
+    /// * `table` - The table name
+    /// * `columns` - Column names to select (pass empty slice to select all)
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (rows, max_xmin) where max_xmin is the highest xmin seen.
+    pub async fn read_all_rows(
+        &self,
+        schema: &str,
+        table: &str,
+        columns: &[String],
+    ) -> Result<(Vec<Row>, u32)> {
+        tracing::info!(
+            "Performing full table read for {}.{} (wraparound recovery)",
+            schema,
+            table
+        );
+
+        let column_list = if columns.is_empty() {
+            "*".to_string()
+        } else {
+            columns
+                .iter()
+                .map(|c| format!("\"{}\"", c))
+                .collect::<Vec<_>>()
+                .join(", ")
+        };
+
+        // Query ALL rows, including their xmin values
+        let query = format!(
+            "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" ORDER BY xmin",
+            column_list, schema, table
+        );
+
+        let rows = self
+            .client
+            .query(&query, &[])
+            .await
+            .with_context(|| format!("Failed to read all rows from {}.{}", schema, table))?;
+
+        // Find the max xmin in the result set
+        let max_xmin = rows
+            .iter()
+            .map(|row| {
+                let xmin: i64 = row.get("_xmin");
+                (xmin & 0xFFFFFFFF) as u32
+            })
+            .max()
+            .unwrap_or(0);
+
+        tracing::info!(
+            "Full table read complete: {} rows, max_xmin={}",
+            rows.len(),
+            max_xmin
+        );
+
+        Ok((rows, max_xmin))
+    }
+
+    /// Check for wraparound and read changes accordingly.
+    ///
+    /// This is the recommended method for reading changes as it automatically
+    /// handles wraparound detection and triggers full table sync when needed.
+    ///
+    /// # Arguments
+    ///
+    /// * `schema` - The schema name
+    /// * `table` - The table name
+    /// * `columns` - Column names to select
+    /// * `since_xmin` - The last synced xmin value
+    ///
+    /// # Returns
+    ///
+    /// A tuple of (rows, max_xmin, was_full_sync) where was_full_sync indicates
+    /// if a full table sync was performed due to wraparound.
+    pub async fn read_changes_with_wraparound_check(
+        &self,
+        schema: &str,
+        table: &str,
+        columns: &[String],
+        since_xmin: u32,
+    ) -> Result<(Vec<Row>, u32, bool)> {
+        // Get current database xmin to check for wraparound
+        let current_xmin = self.get_current_xmin().await?;
+
+        // Check for wraparound
+        if detect_wraparound(since_xmin, current_xmin) == WraparoundCheck::WraparoundDetected {
+            // Wraparound detected - perform full table sync
+            let (rows, max_xmin) = self.read_all_rows(schema, table, columns).await?;
+            Ok((rows, max_xmin, true))
+        } else {
+            // Normal incremental sync
+            let (rows, max_xmin) = self
+                .read_changes(schema, table, columns, since_xmin)
+                .await?;
+            Ok((rows, max_xmin, false))
+        }
+    }
 }
 
 /// Batch reader state for iterating over large result sets.
@@ -331,5 +481,57 @@ mod tests {
         assert_eq!(col.name, "id");
         assert!(!col.is_nullable);
         assert!(col.has_default);
+    }
+
+    #[test]
+    fn test_wraparound_detection_normal() {
+        // Normal case: current > old (no wraparound)
+        assert_eq!(detect_wraparound(100, 200), WraparoundCheck::Normal);
+
+        // Normal case: current slightly less than old (normal variation)
+        assert_eq!(detect_wraparound(1000, 900), WraparoundCheck::Normal);
+
+        // Normal case: both at low values
+        assert_eq!(detect_wraparound(0, 100), WraparoundCheck::Normal);
+    }
+
+    #[test]
+    fn test_wraparound_detection_wraparound() {
+        // Wraparound case: old is near max (3.5B), current is near 0
+        // Delta = 3.5B - 100 = 3.5B > 2B threshold
+        assert_eq!(
+            detect_wraparound(3_500_000_000, 100),
+            WraparoundCheck::WraparoundDetected
+        );
+
+        // Wraparound case: old at 4B, current at 1M
+        assert_eq!(
+            detect_wraparound(4_000_000_000, 1_000_000),
+            WraparoundCheck::WraparoundDetected
+        );
+
+        // Edge case: exactly at threshold
+        assert_eq!(
+            detect_wraparound(2_500_000_000, 400_000_000),
+            WraparoundCheck::WraparoundDetected
+        );
+    }
+
+    #[test]
+    fn test_wraparound_detection_edge_cases() {
+        // Edge case: old = 0, current = anything (should be normal)
+        assert_eq!(detect_wraparound(0, 1_000_000), WraparoundCheck::Normal);
+
+        // Edge case: same values
+        assert_eq!(detect_wraparound(1000, 1000), WraparoundCheck::Normal);
+
+        // Edge case: just under threshold
+        assert_eq!(detect_wraparound(2_000_000_001, 1), WraparoundCheck::Normal);
+
+        // Edge case: just at threshold
+        assert_eq!(
+            detect_wraparound(2_000_000_002, 1),
+            WraparoundCheck::WraparoundDetected
+        );
     }
 }
