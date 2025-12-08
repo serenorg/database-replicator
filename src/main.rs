@@ -154,25 +154,6 @@ enum Commands {
         /// SerenDB Console API URL (defaults to https://api.serendb.com)
         #[arg(long, default_value = "https://api.serendb.com")]
         console_api: String,
-        // --- xmin fallback options (used when logical replication unavailable) ---
-        /// Schema to sync when using xmin mode (defaults to "public")
-        #[arg(long, default_value = "public")]
-        schema: String,
-        /// Sync interval in seconds for xmin mode (default: 60)
-        #[arg(long, default_value_t = 60)]
-        xmin_interval: u64,
-        /// Reconciliation interval in seconds for delete detection in xmin mode (default: 3600)
-        #[arg(long, default_value_t = 3600)]
-        xmin_reconcile_interval: u64,
-        /// Batch size for xmin mode (default: 1000)
-        #[arg(long, default_value_t = 1000)]
-        xmin_batch_size: usize,
-        /// Run a single sync cycle then exit (xmin mode only)
-        #[arg(long)]
-        once: bool,
-        /// Skip reconciliation/delete detection (xmin mode only)
-        #[arg(long)]
-        no_reconcile: bool,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -210,38 +191,6 @@ enum Commands {
     Target {
         #[command(flatten)]
         args: commands::target::TargetArgs,
-    },
-    /// Run xmin-based incremental sync (alternative to logical replication)
-    #[command(name = "xmin-sync")]
-    XminSync {
-        #[arg(long)]
-        source: String,
-        #[arg(long)]
-        target: Option<String>,
-        /// Schema to sync (defaults to "public")
-        #[arg(long, default_value = "public")]
-        schema: String,
-        /// Tables to sync (comma-separated, syncs all if not specified)
-        #[arg(long, value_delimiter = ',')]
-        tables: Option<Vec<String>>,
-        /// Sync interval in seconds (default: 60)
-        #[arg(long, default_value_t = 60)]
-        interval: u64,
-        /// Reconciliation interval in seconds for delete detection (default: 3600 = 1 hour)
-        #[arg(long, default_value_t = 3600)]
-        reconcile_interval: u64,
-        /// Batch size for reading changes (default: 1000)
-        #[arg(long, default_value_t = 1000)]
-        batch_size: usize,
-        /// Path to state file for tracking sync progress
-        #[arg(long)]
-        state_file: Option<String>,
-        /// Run a single sync cycle then exit (useful for cron jobs)
-        #[arg(long)]
-        once: bool,
-        /// Skip reconciliation (delete detection)
-        #[arg(long)]
-        no_reconcile: bool,
     },
 }
 
@@ -488,12 +437,6 @@ async fn main() -> anyhow::Result<()> {
             force,
             project_id,
             console_api,
-            schema,
-            xmin_interval,
-            xmin_reconcile_interval,
-            xmin_batch_size,
-            once,
-            no_reconcile,
         } => {
             let mut app_state = database_replicator::state::load()?;
             let target_candidate = target.or(app_state.target_url.clone());
@@ -505,9 +448,6 @@ async fn main() -> anyhow::Result<()> {
             .await?;
             app_state.target_url = Some(resolved_target.clone());
             database_replicator::state::save(&app_state)?;
-
-            // Clone include_tables for potential xmin fallback usage
-            let include_tables_for_xmin = include_tables.clone();
 
             let filter = if !no_interactive {
                 // Interactive mode (default) - prompt user to select databases and tables
@@ -626,25 +566,19 @@ async fn main() -> anyhow::Result<()> {
                 );
                 tracing::info!("Using xmin-based sync (no source configuration required)");
 
-                // Get tables from filter if available
-                let tables = if !no_interactive {
-                    // Interactive mode already selected tables via filter
-                    None // Let xmin daemon discover tables
-                } else {
-                    include_tables_for_xmin
-                };
-
+                // Use sensible defaults for xmin sync - no user configuration needed
+                // Default: sync every 60s, reconcile every hour, batch size 1000
                 xmin_sync(
                     source,
                     resolved_target,
-                    schema,
-                    tables,
-                    xmin_interval,
-                    xmin_reconcile_interval,
-                    xmin_batch_size,
-                    None, // state_file - use default
-                    once,
-                    no_reconcile,
+                    "public".to_string(), // Default schema
+                    None,                 // Discover all tables
+                    60,                   // Sync interval: 60 seconds
+                    3600,                 // Reconcile interval: 1 hour
+                    1000,                 // Batch size
+                    None,                 // State file: use default
+                    false,                // Run continuously, not once
+                    false,                // Enable reconciliation
                 )
                 .await
             }
@@ -690,37 +624,6 @@ async fn main() -> anyhow::Result<()> {
             commands::verify(&source, &target, Some(filter)).await
         }
         Commands::Target { args } => commands::target(args).await,
-        Commands::XminSync {
-            source,
-            target,
-            schema,
-            tables,
-            interval,
-            reconcile_interval,
-            batch_size,
-            state_file,
-            once,
-            no_reconcile,
-        } => {
-            let state = database_replicator::state::load()?;
-            let target = target.or(state.target_url).ok_or_else(|| {
-                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
-            })?;
-
-            xmin_sync(
-                source,
-                target,
-                schema,
-                tables,
-                interval,
-                reconcile_interval,
-                batch_size,
-                state_file,
-                once,
-                no_reconcile,
-            )
-            .await
-        }
     }
 }
 
