@@ -891,6 +891,11 @@ pub async fn init_sqlite_to_postgres(sqlite_path: &str, target_url: &str) -> Res
             .await
             .with_context(|| format!("Failed to create JSONB table '{}'", table_name))?;
 
+        // Truncate existing data to make init idempotent (fixes #69)
+        crate::jsonb::writer::truncate_jsonb_table(&target_client, table_name)
+            .await
+            .with_context(|| format!("Failed to truncate JSONB table '{}'", table_name))?;
+
         tracing::info!("  ✓ Created JSONB table '{}' in PostgreSQL", table_name);
 
         if !rows.is_empty() {
@@ -1034,6 +1039,11 @@ pub async fn init_mongodb_to_postgres(mongo_url: &str, target_url: &str) -> Resu
             .await
             .with_context(|| format!("Failed to create JSONB table '{}'", collection_name))?;
 
+        // Truncate existing data to make init idempotent (fixes #69)
+        crate::jsonb::writer::truncate_jsonb_table(&target_client, collection_name)
+            .await
+            .with_context(|| format!("Failed to truncate JSONB table '{}'", collection_name))?;
+
         tracing::info!(
             "  ✓ Created JSONB table '{}' in PostgreSQL",
             collection_name
@@ -1176,6 +1186,11 @@ pub async fn init_mysql_to_postgres(mysql_url: &str, target_url: &str) -> Result
         crate::jsonb::writer::create_jsonb_table(&target_client, table_name, "mysql")
             .await
             .with_context(|| format!("Failed to create JSONB table '{}'", table_name))?;
+
+        // Truncate existing data to make init idempotent (fixes #69)
+        crate::jsonb::writer::truncate_jsonb_table(&target_client, table_name)
+            .await
+            .with_context(|| format!("Failed to truncate JSONB table '{}'", table_name))?;
 
         tracing::info!("  ✓ Created JSONB table '{}' in PostgreSQL", table_name);
 

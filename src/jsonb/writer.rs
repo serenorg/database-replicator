@@ -108,6 +108,38 @@ pub async fn create_jsonb_table(
     Ok(())
 }
 
+/// Truncate a JSONB table to remove all existing data
+///
+/// This is used to make init idempotent - rerunning init will clear existing
+/// data before inserting fresh data from the source.
+///
+/// # Arguments
+///
+/// * `client` - PostgreSQL client connection
+/// * `table_name` - Name of the table to truncate (must be validated)
+///
+/// # Security
+///
+/// CRITICAL: table_name MUST be validated with validate_table_name() before calling.
+pub async fn truncate_jsonb_table(client: &Client, table_name: &str) -> Result<()> {
+    // Validate table name to prevent SQL injection
+    crate::jsonb::validate_table_name(table_name)
+        .context("Invalid table name for JSONB table truncation")?;
+
+    tracing::debug!("Truncating JSONB table '{}'", table_name);
+
+    let truncate_sql = format!(r#"TRUNCATE TABLE "{}" RESTART IDENTITY CASCADE"#, table_name);
+
+    client
+        .execute(&truncate_sql, &[])
+        .await
+        .with_context(|| format!("Failed to truncate JSONB table '{}'", table_name))?;
+
+    tracing::debug!("Truncated JSONB table '{}'", table_name);
+
+    Ok(())
+}
+
 /// Insert a single JSONB row with metadata
 ///
 /// Inserts a single row into a JSONB table with the original ID, data, and metadata.
