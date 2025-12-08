@@ -496,24 +496,9 @@ async fn main() -> anyhow::Result<()> {
             // Handle daemon child process initialization (Windows)
             #[cfg(windows)]
             if database_replicator::daemon::is_daemon_child() {
-                use std::fs::OpenOptions;
-                use tracing_subscriber::fmt::writer::MakeWriterExt;
-
-                let log_file = database_replicator::daemon::init_daemon_child()?;
-
-                // Redirect tracing to log file
-                let file = OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(&log_file)?;
-
-                // Re-initialize logging to file
-                let file_appender = tracing_subscriber::fmt::layer()
-                    .with_writer(file)
-                    .with_ansi(false);
-
-                // Note: We can't easily re-initialize the global subscriber,
-                // so we'll just proceed with existing logging
+                let _log_file = database_replicator::daemon::init_daemon_child()?;
+                // Note: We can't easily re-initialize the global subscriber on Windows,
+                // so we just proceed with existing logging (logs go to parent's console)
                 tracing::info!("Daemon child process started (PID: {})", std::process::id());
             }
 
