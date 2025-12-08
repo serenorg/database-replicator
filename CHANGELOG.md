@@ -2,6 +2,34 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.0] - 2025-12-08
+
+### Added
+
+- **Automatic xmin-based sync fallback**: The `sync` command now automatically detects your source database's `wal_level` and chooses the optimal sync method. When `wal_level=logical` is not available (the default for most managed PostgreSQL services like Neon, AWS RDS, Heroku), the tool automatically falls back to xmin-based incremental sync - **no source database configuration required**.
+
+- **xmin sync module** (`src/xmin/`): New module implementing PostgreSQL xmin-based change detection:
+  - `XminReader`: Reads changed rows using PostgreSQL's `xmin` system column
+  - `ChangeWriter`: Applies changes to target via efficient batched UPSERTs
+  - `Reconciler`: Detects deleted rows via primary key reconciliation
+  - `SyncDaemon`: Continuous background sync with configurable intervals
+  - `SyncState`: Persistent state for resume after interruption
+
+- **xmin wraparound handling**: Automatic detection of PostgreSQL transaction ID wraparound (32-bit limit ~4 billion) with full table resync when detected - prevents silent data loss.
+
+- **Comprehensive integration tests** for xmin sync lifecycle (`tests/xmin_integration_test.rs`)
+
+### Changed
+
+- **Sync command UX**: Zero configuration required - just run `database-replicator sync` and it works regardless of source database `wal_level` setting
+
+### Documentation
+
+- Updated README.md and README-PostgreSQL.md with:
+  - Automatic sync method detection tables
+  - New "xmin-Based Sync" section with full technical details
+  - FAQ entries explaining xmin sync trade-offs vs logical replication
+
 ## [6.0.7] - 2025-12-08
 
 ### Fixed
