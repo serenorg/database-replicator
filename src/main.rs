@@ -118,7 +118,11 @@ enum Commands {
         #[arg(long, default_value_t = 28800)]
         job_timeout: u64,
     },
-    /// Set up continuous logical replication from source to target
+    /// Set up continuous replication from source to target (auto-detects best method)
+    ///
+    /// Automatically detects source database capabilities:
+    /// - If source has wal_level=logical: uses PostgreSQL logical replication (fastest)
+    /// - If source has wal_level=replica: uses xmin-based polling (no config required)
     Sync {
         #[arg(long)]
         source: String,
@@ -187,38 +191,6 @@ enum Commands {
     Target {
         #[command(flatten)]
         args: commands::target::TargetArgs,
-    },
-    /// Run xmin-based incremental sync (alternative to logical replication)
-    #[command(name = "xmin-sync")]
-    XminSync {
-        #[arg(long)]
-        source: String,
-        #[arg(long)]
-        target: Option<String>,
-        /// Schema to sync (defaults to "public")
-        #[arg(long, default_value = "public")]
-        schema: String,
-        /// Tables to sync (comma-separated, syncs all if not specified)
-        #[arg(long, value_delimiter = ',')]
-        tables: Option<Vec<String>>,
-        /// Sync interval in seconds (default: 60)
-        #[arg(long, default_value_t = 60)]
-        interval: u64,
-        /// Reconciliation interval in seconds for delete detection (default: 3600 = 1 hour)
-        #[arg(long, default_value_t = 3600)]
-        reconcile_interval: u64,
-        /// Batch size for reading changes (default: 1000)
-        #[arg(long, default_value_t = 1000)]
-        batch_size: usize,
-        /// Path to state file for tracking sync progress
-        #[arg(long)]
-        state_file: Option<String>,
-        /// Run a single sync cycle then exit (useful for cron jobs)
-        #[arg(long)]
-        once: bool,
-        /// Skip reconciliation (delete detection)
-        #[arg(long)]
-        no_reconcile: bool,
     },
 }
 
@@ -563,16 +535,53 @@ async fn main() -> anyhow::Result<()> {
                 }
             }
 
-            commands::sync(
-                &source,
-                &resolved_target,
-                Some(filter),
-                None,
-                None,
-                None,
-                force,
-            )
-            .await
+            // Auto-detect source wal_level to choose sync method
+            tracing::info!("Checking source database capabilities...");
+            let source_client = database_replicator::postgres::connect(&source)
+                .await
+                .context("Failed to connect to source database for capability detection")?;
+            let source_wal_level = database_replicator::postgres::check_wal_level(&source_client)
+                .await
+                .unwrap_or_else(|_| "unknown".to_string());
+            drop(source_client); // Release connection before sync
+
+            if source_wal_level == "logical" {
+                tracing::info!("Source has wal_level=logical (logical replication available)");
+                tracing::info!("Using PostgreSQL logical replication (fastest method)");
+
+                commands::sync(
+                    &source,
+                    &resolved_target,
+                    Some(filter),
+                    None,
+                    None,
+                    None,
+                    force,
+                )
+                .await
+            } else {
+                tracing::info!(
+                    "Source has wal_level={} (logical replication not available)",
+                    source_wal_level
+                );
+                tracing::info!("Using xmin-based sync (no source configuration required)");
+
+                // Use sensible defaults for xmin sync - no user configuration needed
+                // Default: sync every 60s, reconcile every hour, batch size 1000
+                xmin_sync(
+                    source,
+                    resolved_target,
+                    "public".to_string(), // Default schema
+                    None,                 // Discover all tables
+                    60,                   // Sync interval: 60 seconds
+                    3600,                 // Reconcile interval: 1 hour
+                    1000,                 // Batch size
+                    None,                 // State file: use default
+                    false,                // Run continuously, not once
+                    false,                // Enable reconciliation
+                )
+                .await
+            }
         }
         Commands::Status {
             source,
@@ -615,37 +624,6 @@ async fn main() -> anyhow::Result<()> {
             commands::verify(&source, &target, Some(filter)).await
         }
         Commands::Target { args } => commands::target(args).await,
-        Commands::XminSync {
-            source,
-            target,
-            schema,
-            tables,
-            interval,
-            reconcile_interval,
-            batch_size,
-            state_file,
-            once,
-            no_reconcile,
-        } => {
-            let state = database_replicator::state::load()?;
-            let target = target.or(state.target_url).ok_or_else(|| {
-                anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
-            })?;
-
-            xmin_sync(
-                source,
-                target,
-                schema,
-                tables,
-                interval,
-                reconcile_interval,
-                batch_size,
-                state_file,
-                once,
-                no_reconcile,
-            )
-            .await
-        }
     }
 }
 
@@ -1085,11 +1063,13 @@ async fn xmin_sync(
     tracing::info!("Starting xmin-based sync...");
     tracing::info!(
         "Source: {}",
-        database_replicator::utils::strip_password_from_url(&source).unwrap_or_else(|_| source.clone())
+        database_replicator::utils::strip_password_from_url(&source)
+            .unwrap_or_else(|_| source.clone())
     );
     tracing::info!(
         "Target: {}",
-        database_replicator::utils::strip_password_from_url(&target).unwrap_or_else(|_| target.clone())
+        database_replicator::utils::strip_password_from_url(&target)
+            .unwrap_or_else(|_| target.clone())
     );
     tracing::info!("Schema: {}", schema);
     if let Some(ref t) = tables {

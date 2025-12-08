@@ -62,8 +62,8 @@ For local execution (non-SerenDB targets), use the `--local` flag. See [Remote E
 
 `database-replicator` is a command-line tool that replicates databases from multiple sources to PostgreSQL (including Seren Cloud). It automatically detects your source database type and handles the replication accordingly:
 
-- **PostgreSQL**: Zero-downtime replication with continuous sync via logical replication
-- **AWS RDS for PostgreSQL**: Managed Postgres replication with built-in checks for `rds_replication`/`rds_superuser` requirements
+- **PostgreSQL**: Zero-downtime replication with continuous sync (automatic fallback to xmin-based sync when logical replication isn't available)
+- **AWS RDS for PostgreSQL**: Managed Postgres replication with automatic xmin fallback for databases without `wal_level=logical`
 - **SQLite**: One-time replication using JSONB storage
 - **MongoDB**: One-time replication with JSONB storage and periodic refresh support
 - **MySQL/MariaDB**: One-time replication with JSONB storage and periodic refresh support
@@ -80,13 +80,18 @@ For local execution (non-SerenDB targets), use the `--local` flag. See [Remote E
 
 ## Supported Databases
 
-| Source Database | Replication Type | Continuous Sync | Periodic Refresh | Remote Execution |
-|----------------|------------------|-----------------|------------------|------------------|
-| **PostgreSQL** | Native replication | ✅ Logical replication | N/A | ✅ Yes |
-| **AWS RDS (PostgreSQL)** | Native replication | ✅ Logical replication | N/A | ✅ Yes — validates `rds_replication` permissions |
-| **SQLite** | JSONB storage | ❌ One-time | ❌ No | ❌ Local only |
-| **MongoDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
-| **MySQL/MariaDB** | JSONB storage | ❌ One-time | ✅ 24hr default | ✅ Yes |
+| Source Database | Replication Type | Continuous Sync | Remote Execution |
+|----------------|------------------|-----------------|------------------|
+| **PostgreSQL** | Native replication | ✅ Auto-detects: logical replication or xmin-based sync | ✅ Yes |
+| **AWS RDS (PostgreSQL)** | Native replication | ✅ Auto-fallback to xmin when wal_level isn't logical | ✅ Yes |
+| **SQLite** | JSONB storage | ❌ One-time | ❌ Local only |
+| **MongoDB** | JSONB storage | ✅ Periodic refresh (24hr default) | ✅ Yes |
+| **MySQL/MariaDB** | JSONB storage | ✅ Periodic refresh (24hr default) | ✅ Yes |
+
+**PostgreSQL sync methods:**
+
+- **Logical replication** (when `wal_level=logical`): Sub-second latency, real-time delete detection
+- **xmin-based sync** (automatic fallback): Works with any PostgreSQL, no source configuration needed
 
 ---
 
@@ -171,6 +176,8 @@ database-replicator init \
 ### PostgreSQL-to-PostgreSQL
 
 - **Zero-downtime replication** using PostgreSQL logical replication
+- **Automatic sync method detection** - uses logical replication when available, falls back to xmin-based sync otherwise
+- **Works without source configuration** - xmin-based sync requires no `wal_level` changes
 - **Continuous sync** keeps databases in sync in real-time
 - **Selective replication** with database and table-level filtering
 - **Interactive mode** for selecting databases and tables
@@ -534,6 +541,7 @@ For more details on the AWS infrastructure and architecture, see the [AWS Setup 
 - **src/postgres/** - PostgreSQL connection and utilities
 - **src/migration/** - Schema introspection, dump/restore, checksums
 - **src/replication/** - Logical replication management
+- **src/xmin/** - xmin-based incremental sync (automatic fallback when logical replication unavailable)
 - **src/sqlite/** - SQLite reader and JSONB conversion
 - **src/mongodb/** - MongoDB reader and BSON to JSONB conversion
 - **src/mysql/** - MySQL reader and JSONB conversion

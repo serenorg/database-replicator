@@ -8,7 +8,7 @@ pub mod state;
 pub mod writer;
 
 pub use daemon::{DaemonConfig, SyncDaemon, SyncStats};
-pub use reader::{BatchReader, ColumnInfo, XminReader};
+pub use reader::{detect_wraparound, BatchReader, ColumnInfo, WraparoundCheck, XminReader};
 pub use reconciler::{ReconcileConfig, ReconcileResult, Reconciler};
 pub use state::{SyncState, TableSyncState};
 pub use writer::{get_primary_key_columns, get_table_columns, row_to_values, ChangeWriter};

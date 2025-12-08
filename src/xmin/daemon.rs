@@ -125,7 +125,8 @@ impl SyncDaemon {
                     stats.rows_synced += rows;
                 }
                 Err(e) => {
-                    let error_msg = format!("Failed to sync {}.{}: {}", self.config.schema, table, e);
+                    let error_msg =
+                        format!("Failed to sync {}.{}: {}", self.config.schema, table, e);
                     tracing::error!("{}", error_msg);
                     stats.errors.push(error_msg);
                 }
@@ -204,10 +205,7 @@ impl SyncDaemon {
     /// Reconciliation runs at its own interval if configured.
     pub async fn run(&self, mut shutdown: tokio::sync::broadcast::Receiver<()>) -> Result<()> {
         let mut sync_interval = interval(self.config.sync_interval);
-        let mut reconcile_interval = self
-            .config
-            .reconcile_interval
-            .map(|d| interval(d));
+        let mut reconcile_interval = self.config.reconcile_interval.map(|d| interval(d));
 
         let mut cycles = 0u64;
         let mut reconcile_cycles = 0u64;
@@ -300,24 +298,38 @@ impl SyncDaemon {
 
         let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
 
-        // Read changes
-        let (rows, max_xmin) = reader
-            .read_changes(schema, table, &column_names, since_xmin)
+        // Read changes with wraparound detection
+        let (rows, max_xmin, was_full_sync) = reader
+            .read_changes_with_wraparound_check(schema, table, &column_names, since_xmin)
             .await?;
 
         if rows.is_empty() {
-            tracing::debug!("No changes in {}.{} since xmin {}", schema, table, since_xmin);
+            tracing::debug!(
+                "No changes in {}.{} since xmin {}",
+                schema,
+                table,
+                since_xmin
+            );
             return Ok(0);
         }
 
-        tracing::info!(
-            "Found {} changed rows in {}.{} (xmin {} -> {})",
-            rows.len(),
-            schema,
-            table,
-            since_xmin,
-            max_xmin
-        );
+        if was_full_sync {
+            tracing::warn!(
+                "xmin wraparound detected for {}.{} - performed full table sync ({} rows)",
+                schema,
+                table,
+                rows.len()
+            );
+        } else {
+            tracing::info!(
+                "Found {} changed rows in {}.{} (xmin {} -> {})",
+                rows.len(),
+                schema,
+                table,
+                since_xmin,
+                max_xmin
+            );
+        }
 
         // Convert rows to values (excluding the _xmin column we added)
         let values: Vec<Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>>> = rows
@@ -341,7 +353,10 @@ impl SyncDaemon {
         if self.config.state_path.exists() {
             match SyncState::load(&self.config.state_path).await {
                 Ok(state) => {
-                    tracing::info!("Loaded existing sync state from {:?}", self.config.state_path);
+                    tracing::info!(
+                        "Loaded existing sync state from {:?}",
+                        self.config.state_path
+                    );
                     return Ok(state);
                 }
                 Err(e) => {

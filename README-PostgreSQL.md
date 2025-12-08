@@ -87,15 +87,30 @@ Use this option if you prefer to pin to a commit, apply local patches, or cross-
 ### Source Database
 
 - PostgreSQL 12 or later
-- `REPLICATION` privilege (can create publications)
 - Read access to all tables you want to replicate
-- `wal_level = logical` configured (check with `SHOW wal_level;`)
+- **For logical replication (optimal)**: `REPLICATION` privilege and `wal_level = logical`
+- **For xmin-based sync (fallback)**: No special configuration required - just `SELECT` privilege
 
-Grant required privileges:
+The tool **automatically detects** your source database's capabilities and chooses the best sync method:
+
+| Source Configuration | Sync Method | Delete Detection | Latency |
+|---------------------|-------------|------------------|---------|
+| `wal_level = logical` | Logical replication | Real-time | Sub-second |
+| `wal_level = replica` (default) | xmin polling | Periodic reconciliation | Seconds |
+
+**For optimal performance (logical replication):**
 
 ```sql
 -- On source database
 ALTER USER myuser WITH REPLICATION;
+GRANT USAGE ON SCHEMA public TO myuser;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO myuser;
+```
+
+**For xmin-based sync (no source changes required):**
+
+```sql
+-- Just read access is sufficient
 GRANT USAGE ON SCHEMA public TO myuser;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO myuser;
 ```
@@ -242,7 +257,7 @@ To discard the checkpoint and start fresh, use `--no-resume` (a new checkpoint w
 
 ### 3. Sync
 
-Set up continuous logical replication for ongoing change synchronization:
+Set up continuous replication for ongoing change synchronization:
 
 ```bash
 database-replicator sync \
@@ -250,12 +265,33 @@ database-replicator sync \
   --target "postgresql://user:pass@target-host:5432/db"
 ```
 
-**What happens during sync:**
+**Automatic sync method detection:**
+
+The sync command automatically detects your source database's `wal_level` and chooses the optimal sync method:
+
+```text
+INFO: Checking source database capabilities...
+INFO: Source has wal_level=replica (logical replication not available)
+INFO: Using xmin-based sync (no source changes required)
+INFO: Starting sync...
+```
+
+**For logical replication (wal_level=logical):**
 
 1. **Create publication**: Creates publication on source database with all tables
 2. **Create subscription**: Creates subscription on target that connects to source
 3. **Initial sync**: PostgreSQL performs initial table synchronization
 4. **Continuous replication**: Changes stream automatically from source to target
+
+**For xmin-based sync (wal_level=replica, the default):**
+
+1. **Detect changes**: Queries source for rows modified since last sync using PostgreSQL's `xmin` system column
+2. **Apply changes**: UPSERTs changed rows to the target database in batches
+3. **Detect deletes**: Periodically reconciles primary keys between source and target to find deleted rows
+4. **Remove orphans**: Deletes rows from target that no longer exist in source
+5. **Persist state**: Saves sync progress to enable resume after interruption
+
+The xmin-based sync runs continuously, polling for changes at a configurable interval (default: 30 seconds).
 
 **With filtering:**
 
@@ -284,6 +320,53 @@ PostgreSQL subscriptions store connection strings (including passwords) in the `
 3. Omit password from source URL when running `sync`
 
 See [Security](#security) section for details.
+
+---
+
+### xmin-Based Sync (Automatic Fallback)
+
+When your source database doesn't have `wal_level=logical` configured (which is the case for most managed PostgreSQL services), the `sync` command automatically falls back to xmin-based incremental sync. This requires **no configuration changes** on your source database.
+
+**How xmin works:**
+
+PostgreSQL maintains a hidden system column called `xmin` on every row. It contains the transaction ID that last inserted or updated that row. By tracking the highest `xmin` value seen, we can efficiently query for all rows that have changed:
+
+```sql
+SELECT * FROM table WHERE xmin::text::bigint > $last_seen_xmin;
+```
+
+**Benefits:**
+
+- **Zero source configuration**: Works with any PostgreSQL database, including managed services like Neon, AWS RDS, and Heroku that don't allow `wal_level=logical`
+- **Automatic detection**: No flags or configuration needed - just run `sync` and it works
+- **Resume support**: Progress is persisted to disk, allowing recovery after interruptions
+- **Efficient batching**: Changes are processed in configurable batch sizes to manage memory
+
+**Limitations vs. logical replication:**
+
+| Aspect | Logical Replication | xmin-Based Sync |
+|--------|---------------------|-----------------|
+| Latency | Sub-second | Polling interval (default 30s) |
+| Delete detection | Real-time | Periodic reconciliation |
+| Network traffic | Streams only changes | Full row on any column change |
+| Source config | Requires wal_level=logical | None required |
+
+**When xmin-based sync is recommended:**
+
+- Source database doesn't support `wal_level=logical` (most managed services)
+- You can't or don't want to modify source database configuration
+- Near-real-time sync is acceptable (seconds latency vs. sub-second)
+- You want the simplest possible setup
+
+**Delete detection:**
+
+Since `xmin` only tracks modified rows (deleted rows are gone), xmin-based sync performs periodic **primary key reconciliation** to detect deletions:
+
+1. Fetches all primary keys from source table
+2. Compares with primary keys in target table
+3. Deletes rows from target that no longer exist in source
+
+This reconciliation runs periodically (configurable, default every 10 sync cycles) to balance performance and delete detection latency.
 
 ---
 
@@ -1333,6 +1416,45 @@ Run `init` first to copy existing data, then `sync` to keep databases synchroniz
 ### Do I need to run init before sync?
 
 Yes, `sync` only streams changes - it doesn't copy existing data. Run `init` first to perform the initial snapshot, then `sync` to set up continuous replication.
+
+---
+
+### What is xmin-based sync and when is it used?
+
+xmin-based sync is an automatic fallback when your source database doesn't have `wal_level=logical` configured. It uses PostgreSQL's `xmin` system column to detect which rows have changed since the last sync.
+
+The tool automatically detects your source's capabilities and chooses the best method - you don't need to configure anything.
+
+---
+
+### Can I use sync without changing my source database configuration?
+
+Yes! If your source database has the default `wal_level=replica`, the sync command automatically uses xmin-based sync, which requires no source configuration changes - just `SELECT` privilege on the tables you want to sync.
+
+---
+
+### How does xmin-based sync detect deleted rows?
+
+Since deleted rows no longer exist, `xmin` can't track them. Instead, xmin-based sync periodically performs **primary key reconciliation**:
+
+1. Fetches all PKs from source
+2. Compares with PKs in target
+3. Deletes rows from target that don't exist in source
+
+This runs every 10 sync cycles by default.
+
+---
+
+### What are the trade-offs of xmin-based sync vs. logical replication?
+
+| Feature | Logical Replication | xmin-Based Sync |
+|---------|---------------------|-----------------|
+| Latency | Sub-second | Polling interval (30s default) |
+| Delete detection | Real-time | Periodic (every ~5 minutes) |
+| Source requirements | wal_level=logical | None (SELECT only) |
+| Network usage | Minimal (only changes) | Higher (full rows) |
+
+Use logical replication for sub-second latency if your source supports it. Use xmin-based sync for zero-configuration simplicity.
 
 ---
 
