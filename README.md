@@ -347,6 +347,8 @@ database-replicator sync \
 - Detailed command documentation
 - Selective replication (filtering databases/tables)
 - Interactive mode
+- **Sync timing controls** (`--sync-interval`, `--reconcile-interval`, `--once`)
+- **Daemon mode** (`--daemon`, `--stop`, `--daemon-status`)
 - Remote execution on cloud infrastructure
 - Multi-provider support (Neon, AWS RDS, Hetzner, etc.)
 - Schema-aware filtering
