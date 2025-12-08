@@ -449,7 +449,7 @@ pub async fn resolve_target_for_sync(
 /// # Returns
 ///
 /// URL with the database name replaced
-fn replace_database_in_url(url: &str, new_db_name: &str) -> Result<String> {
+pub fn replace_database_in_url(url: &str, new_db_name: &str) -> Result<String> {
     // Split into base URL and query parameters
     let parts: Vec<&str> = url.splitn(2, '?').collect();
     let base_url = parts[0];
