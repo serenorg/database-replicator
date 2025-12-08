@@ -275,6 +275,8 @@ async fn main() -> anyhow::Result<()> {
                 let (conn_str, target_state) =
                     database_replicator::interactive::select_seren_database().await?;
                 target = Some(conn_str);
+                // Save target state for use by subsequent commands (sync, status, etc.)
+                database_replicator::serendb::save_target_state(&target_state)?;
                 seren_target_state = Some(target_state);
             }
 
@@ -460,8 +462,16 @@ async fn main() -> anyhow::Result<()> {
                 filter.with_table_rules(table_rule_data)
             };
 
-            // If project_id is provided and target is SerenDB, check/enable logical replication
-            if let Some(ref project_id) = project_id {
+            // Get project_id from CLI or saved target state
+            let effective_project_id = project_id.or_else(|| {
+                database_replicator::serendb::load_target_state()
+                    .ok()
+                    .flatten()
+                    .map(|state| state.project_id)
+            });
+
+            // If project_id is available and target is SerenDB, check/enable logical replication
+            if let Some(ref project_id) = effective_project_id {
                 if database_replicator::utils::is_serendb_target(&resolved_target) {
                     check_and_enable_logical_replication(project_id, &console_api).await?;
                 }
