@@ -13,7 +13,8 @@ categories = ["command-line-utilities", "database"]
 
 [dependencies]
 tokio = { version = "1.35", features = ["full"] }
-tokio-postgres = { version = "0.7", features = ["with-serde_json-1"] }
+tokio-postgres = { version = "0.7", features = ["with-serde_json-1", "with-chrono-0_4", "with-uuid-1"] }
+uuid = { version = "1", features = ["v4"] }
 clap = { version = "4.4", features = ["derive", "env"] }
 anyhow = "1.0"
 tracing = "0.1"
@@ -40,7 +41,7 @@ bson = "2.9"
 mysql_async = "0.34"
 dirs = "5.0"
 url = "2.5"
-chrono = { version = "0.4", default-features = false, features = ["clock"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 
 [[test]]
 name = "fallback_test"

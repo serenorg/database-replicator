@@ -19,6 +19,7 @@ pub mod sqlite;
 pub mod state;
 pub mod table_rules;
 pub mod utils;
+pub mod xmin;
 
 use anyhow::{bail, Result};
 
