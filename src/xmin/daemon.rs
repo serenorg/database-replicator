@@ -32,8 +32,8 @@ pub struct DaemonConfig {
 impl Default for DaemonConfig {
     fn default() -> Self {
         Self {
-            sync_interval: Duration::from_secs(60),
-            reconcile_interval: Some(Duration::from_secs(3600)), // 1 hour
+            sync_interval: Duration::from_secs(3600), // 1 hour
+            reconcile_interval: Some(Duration::from_secs(86400)), // 1 day
             state_path: SyncState::default_path(),
             batch_size: 1000,
             tables: Vec::new(),
@@ -407,8 +407,8 @@ mod tests {
     #[test]
     fn test_daemon_config_default() {
         let config = DaemonConfig::default();
-        assert_eq!(config.sync_interval, Duration::from_secs(60));
-        assert_eq!(config.reconcile_interval, Some(Duration::from_secs(3600)));
+        assert_eq!(config.sync_interval, Duration::from_secs(3600));
+        assert_eq!(config.reconcile_interval, Some(Duration::from_secs(86400)));
         assert_eq!(config.batch_size, 1000);
         assert_eq!(config.schema, "public");
     }

@@ -154,11 +154,11 @@ enum Commands {
         /// SerenDB Console API URL (defaults to https://api.serendb.com)
         #[arg(long, default_value = "https://api.serendb.com")]
         console_api: String,
-        /// Sync interval in seconds for xmin-based sync (default: 60)
-        #[arg(long, default_value_t = 60)]
-        sync_interval: u64,
-        /// Reconciliation interval in seconds for xmin-based sync (default: 3600 = 1 hour)
+        /// Sync interval in seconds for xmin-based sync (default: 3600 = 1 hour)
         #[arg(long, default_value_t = 3600)]
+        sync_interval: u64,
+        /// Reconciliation interval in seconds for xmin-based sync (default: 86400 = 1 day)
+        #[arg(long, default_value_t = 86400)]
         reconcile_interval: u64,
         /// Run a single sync cycle and exit (don't run continuously)
         #[arg(long)]
