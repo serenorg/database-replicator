@@ -258,7 +258,8 @@ async fn main() -> anyhow::Result<()> {
             // Detect source type - interactive mode only works with PostgreSQL
             let source_type = database_replicator::detect_source_type(&source)
                 .context("Failed to detect source database type")?;
-            let is_postgres_source = matches!(source_type, database_replicator::SourceType::PostgreSQL);
+            let is_postgres_source =
+                matches!(source_type, database_replicator::SourceType::PostgreSQL);
 
             let filter = if !no_interactive && is_postgres_source {
                 // Interactive mode (default) - prompt user to select databases and tables
@@ -332,7 +333,8 @@ async fn main() -> anyhow::Result<()> {
             // Detect source type early to determine if interactive mode is supported
             let source_type = database_replicator::detect_source_type(&source)
                 .context("Failed to detect source database type")?;
-            let is_postgres_source = matches!(source_type, database_replicator::SourceType::PostgreSQL);
+            let is_postgres_source =
+                matches!(source_type, database_replicator::SourceType::PostgreSQL);
 
             // Interactive mode is default unless:
             // - --no-interactive flag is set
@@ -543,7 +545,8 @@ async fn main() -> anyhow::Result<()> {
             // Detect source type - interactive mode only works with PostgreSQL
             let source_type = database_replicator::detect_source_type(&source)
                 .context("Failed to detect source database type")?;
-            let is_postgres_source = matches!(source_type, database_replicator::SourceType::PostgreSQL);
+            let is_postgres_source =
+                matches!(source_type, database_replicator::SourceType::PostgreSQL);
 
             let filter = if !no_interactive && !has_cli_filters && is_postgres_source {
                 // Interactive mode (default) - prompt user to select databases and tables
