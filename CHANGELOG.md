@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.6] - 2025-12-09
+
+### Fixed
+
+- **Non-PostgreSQL sources incorrectly trigger remote execution**: Fixed bug where `init` command with SQLite, MongoDB, or MySQL sources would attempt SerenAI cloud execution (which requires the source to be accessible remotely). The tool now automatically uses local execution for non-PostgreSQL sources since these files/databases are only accessible from the local machine.
+
 ## [7.0.5] - 2025-12-09
 
 ### Fixed

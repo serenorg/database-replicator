@@ -370,10 +370,14 @@ async fn main() -> anyhow::Result<()> {
             // Determine execution mode:
             // 1. --seren flag → remote execution
             // 2. --local flag → local execution
-            // 3. Neither → auto-detect based on target URL (SerenDB = remote)
+            // 3. Non-PostgreSQL sources (SQLite, MongoDB, MySQL) → local execution (required)
+            // 4. Neither → auto-detect based on target URL (SerenDB = remote)
             let use_remote = if seren {
                 true
             } else if local {
+                false
+            } else if !is_postgres_source {
+                // Non-PostgreSQL sources require local execution - remote can't access local files
                 false
             } else {
                 // Auto-detect: SerenDB targets default to remote execution
