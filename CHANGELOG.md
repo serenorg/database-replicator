@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.5] - 2025-12-09
+
+### Fixed
+
+- **Interactive mode fails for non-PostgreSQL sources**: Fixed bug where `init`, `validate`, and `sync` commands would fail for SQLite, MongoDB, and MySQL sources because interactive mode attempted to connect to the source as PostgreSQL. The tool now detects the source type before entering interactive mode and automatically skips it for non-PostgreSQL sources.
+
+### Changed
+
+- **README-SQLite.md**: Updated all examples to include `-y` flag and added notes explaining that interactive mode only works with PostgreSQL sources.
+
 ## [7.0.4] - 2025-12-09
 
 ### Fixed

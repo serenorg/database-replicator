@@ -11,11 +11,13 @@ This guide explains how to replicate SQLite databases to PostgreSQL using databa
 **Note:** SQLite replication requires local execution (the `--local` flag) since the source file must be accessible from your machine.
 
 ```bash
-database-replicator init \
+database-replicator init -y \
   --source /path/to/database.db \
   --target "postgresql://user:pass@your-db.serendb.com:5432/db" \
   --local
 ```
+
+**Important:** The `-y` flag (or `--no-interactive`) is required for SQLite sources to skip the interactive database selection prompt, which only works with PostgreSQL sources.
 
 ---
 
@@ -74,10 +76,12 @@ The tool automatically detects SQLite database files and replicates them to Post
 Replicate an entire SQLite database to PostgreSQL:
 
 ```bash
-database-replicator init \
+database-replicator init -y \
   --source /path/to/database.db \
   --target "postgresql://user:pass@target-host:5432/db"
 ```
+
+> **Note:** The `-y` flag skips interactive mode, which is required for SQLite sources.
 
 The tool automatically:
 1. Detects that the source is SQLite (from `.db` extension)
@@ -249,7 +253,7 @@ Table names are validated before use in SQL:
 wget https://example.com/sample.db
 
 # Migrate to PostgreSQL
-database-replicator init \
+database-replicator init -y \
   --source ./sample.db \
   --target "postgresql://localhost:5432/mydb"
 ```
@@ -454,7 +458,7 @@ FROM users;
    sqlite3 test.db < test_data.sql
 
    # Test replication
-   database-replicator init --source test.db --target "postgresql://localhost/test"
+   database-replicator init -y --source test.db --target "postgresql://localhost/test"
    ```
 
 3. **Verify PostgreSQL Space**

@@ -255,7 +255,12 @@ async fn main() -> anyhow::Result<()> {
                 anyhow::anyhow!("Target database URL not provided and not set in state. Use `--target` or `database-replicator target set`.")
             })?;
 
-            let filter = if !no_interactive {
+            // Detect source type - interactive mode only works with PostgreSQL
+            let source_type = database_replicator::detect_source_type(&source)
+                .context("Failed to detect source database type")?;
+            let is_postgres_source = matches!(source_type, database_replicator::SourceType::PostgreSQL);
+
+            let filter = if !no_interactive && is_postgres_source {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, rules) =
                     database_replicator::interactive::select_databases_and_tables(&source).await?;
@@ -324,17 +329,23 @@ async fn main() -> anyhow::Result<()> {
                 || include_tables.is_some()
                 || exclude_tables.is_some();
 
+            // Detect source type early to determine if interactive mode is supported
+            let source_type = database_replicator::detect_source_type(&source)
+                .context("Failed to detect source database type")?;
+            let is_postgres_source = matches!(source_type, database_replicator::SourceType::PostgreSQL);
+
             // Interactive mode is default unless:
             // - --no-interactive flag is set
             // - --yes flag is set (implies automation)
             // - CLI filter flags are provided
+            // - Source is not PostgreSQL (interactive mode only works with PostgreSQL sources)
             // Run this BEFORE remote execution check so interactive mode works for both local and remote
             let (
                 final_include_databases,
                 final_exclude_databases,
                 final_include_tables,
                 final_exclude_tables,
-            ) = if !no_interactive && !yes && !has_cli_filters {
+            ) = if !no_interactive && !yes && !has_cli_filters && is_postgres_source {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, _rules) =
                     database_replicator::interactive::select_databases_and_tables(&source).await?;
@@ -525,7 +536,12 @@ async fn main() -> anyhow::Result<()> {
                 || include_tables.is_some()
                 || exclude_tables.is_some();
 
-            let filter = if !no_interactive && !has_cli_filters {
+            // Detect source type - interactive mode only works with PostgreSQL
+            let source_type = database_replicator::detect_source_type(&source)
+                .context("Failed to detect source database type")?;
+            let is_postgres_source = matches!(source_type, database_replicator::SourceType::PostgreSQL);
+
+            let filter = if !no_interactive && !has_cli_filters && is_postgres_source {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, rules) =
                     database_replicator::interactive::select_databases_and_tables(&source).await?;
