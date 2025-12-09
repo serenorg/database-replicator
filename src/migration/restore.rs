@@ -218,6 +218,7 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
     let mut cmd = Command::new("pg_restore");
     cmd.arg("--data-only")
         .arg("--no-owner")
+        .arg("--disable-triggers") // Disable FK constraints during parallel restore
         .arg(format!("--jobs={}", num_cpus)) // Parallel restore jobs
         .arg("--host")
         .arg(&parts.host)

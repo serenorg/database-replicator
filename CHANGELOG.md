@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.8] - 2025-12-09
+
+### Fixed
+
+- **Foreign key constraint violations during parallel restore**: Fixed bug where `pg_restore --jobs=N` could fail with FK constraint violations when restoring tables with foreign key relationships. Tables were being restored in parallel without respecting FK dependency order. Added `--disable-triggers` flag to temporarily disable FK constraints during data restore, then re-enable them after completion.
+
 ## [7.0.7] - 2025-12-09
 
 ### Fixed
