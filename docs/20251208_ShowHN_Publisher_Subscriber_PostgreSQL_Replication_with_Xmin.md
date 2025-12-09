@@ -2,7 +2,7 @@
 
 **TL;DR:** We built an open-source Rust CLI that replicates PostgreSQL databases without requiring `wal_level=logical`. It uses PostgreSQL's `xmin` system column to detect changes, enabling CDC-style replication from any managed PostgreSQL service—no configuration changes needed.
 
-**GitHub:** https://github.com/serenorg/database-replicator
+**GitHub:** <https://github.com/serenorg/database-replicator>
 
 ---
 
@@ -96,9 +96,22 @@ database-replicator init \
 database-replicator sync \
   --source "postgresql://source-host/mydb" \
   --target "postgresql://target-host/mydb"
+
+# Sync specific tables only
+database-replicator sync \
+  --source "postgresql://source-host/mydb" \
+  --target "postgresql://target-host/mydb" \
+  --include-tables "mydb.users,mydb.orders"
 ```
 
 If your source has `wal_level=logical`, it uses native logical replication. If not, it automatically falls back to xmin-based polling. Zero configuration required.
+
+**Docker:**
+
+```bash
+docker pull palomachain/database-replicator:latest
+docker run palomachain/database-replicator sync --source "..." --target "..."
+```
 
 ---
 
@@ -150,6 +163,27 @@ Start with xmin polling (it works everywhere). If you need lower latency and can
 
 ---
 
+## Beyond PostgreSQL Sources
+
+While xmin-based sync is PostgreSQL-specific, the tool also supports migrating data from other databases to PostgreSQL using JSONB storage:
+
+| Source | Method | Continuous Sync |
+|--------|--------|-----------------|
+| PostgreSQL | xmin or WAL | Yes |
+| SQLite | Full copy to JSONB | No (one-time) |
+| MongoDB | Full copy to JSONB | Periodic refresh |
+| MySQL/MariaDB | Full copy to JSONB | Periodic refresh |
+
+```bash
+# SQLite to PostgreSQL
+database-replicator init --source ./app.db --target "postgresql://..."
+
+# MongoDB to PostgreSQL
+database-replicator init --source "mongodb://..." --target "postgresql://..."
+```
+
+---
+
 ## Fork It
 
 The entire codebase is Apache 2.0 licensed. Key extension points:
@@ -164,6 +198,8 @@ We'd love contributions for: additional source databases, smarter batching strat
 ---
 
 **Links:**
-- GitHub: https://github.com/serenorg/database-replicator
-- Crates.io: https://crates.io/crates/database-replicator
-- SerenDB: https://serendb.com
+
+- [GitHub](https://github.com/serenorg/database-replicator)
+- [Crates.io](https://crates.io/crates/database-replicator)
+- [Docker Hub](https://hub.docker.com/r/palomachain/database-replicator)
+- [SerenDB](https://serendb.com)
