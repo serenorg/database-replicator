@@ -205,10 +205,79 @@ pub async fn insert_jsonb_row(
     Ok(())
 }
 
-/// Insert multiple JSONB rows in a batch
+/// Estimate the serialized size of a JSONB row for batch sizing
+fn estimate_row_size(id: &str, data: &serde_json::Value) -> usize {
+    // Estimate: id length + JSON serialized size + overhead
+    id.len() + data.to_string().len() + 50 // 50 bytes overhead for metadata
+}
+
+/// Calculate optimal batch size based on row sizes
 ///
-/// Inserts multiple rows efficiently using a multi-value INSERT statement.
-/// This is significantly faster than individual inserts for large datasets.
+/// Targets ~10MB per batch to stay well under typical PostgreSQL limits
+/// while maintaining good throughput.
+fn calculate_batch_size(rows: &[(String, serde_json::Value)], start_idx: usize) -> usize {
+    const TARGET_BATCH_BYTES: usize = 10 * 1024 * 1024; // 10MB target
+    const MIN_BATCH_SIZE: usize = 1;
+    const MAX_BATCH_SIZE: usize = 1000;
+
+    let mut total_size = 0usize;
+    let mut count = 0usize;
+
+    for (id, data) in rows.iter().skip(start_idx) {
+        let row_size = estimate_row_size(id, data);
+        if total_size + row_size > TARGET_BATCH_BYTES && count > 0 {
+            break;
+        }
+        total_size += row_size;
+        count += 1;
+        if count >= MAX_BATCH_SIZE {
+            break;
+        }
+    }
+
+    count.max(MIN_BATCH_SIZE)
+}
+
+/// Execute a single batch insert with the given rows
+async fn execute_batch_insert(
+    client: &Client,
+    table_name: &str,
+    rows: &[(String, serde_json::Value)],
+    source_type: &str,
+) -> Result<()> {
+    // Build parameterized multi-value INSERT
+    let mut value_placeholders = Vec::with_capacity(rows.len());
+    let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
+        Vec::with_capacity(rows.len() * 3);
+
+    for (idx, (id, data)) in rows.iter().enumerate() {
+        let param_base = idx * 3 + 1;
+        value_placeholders.push(format!(
+            "(${}, ${}, ${})",
+            param_base,
+            param_base + 1,
+            param_base + 2
+        ));
+        params.push(id);
+        params.push(data);
+        params.push(&source_type);
+    }
+
+    let insert_sql = format!(
+        r#"INSERT INTO "{}" (id, data, _source_type) VALUES {}"#,
+        table_name,
+        value_placeholders.join(", ")
+    );
+
+    client.execute(&insert_sql, &params).await?;
+    Ok(())
+}
+
+/// Insert multiple JSONB rows with adaptive batching
+///
+/// Inserts multiple rows efficiently using multi-value INSERT statements.
+/// Automatically adjusts batch size based on row payload sizes and retries
+/// with smaller batches on connection failures.
 ///
 /// # Arguments
 ///
@@ -223,7 +292,10 @@ pub async fn insert_jsonb_row(
 ///
 /// # Performance
 ///
-/// Batches rows into groups of 1000 to avoid PostgreSQL parameter limits.
+/// - Dynamically calculates batch size based on estimated payload size
+/// - Targets ~10MB per batch for optimal throughput
+/// - Automatically retries with smaller batches on failure
+/// - Shows progress for large datasets
 ///
 /// # Examples
 ///
@@ -256,68 +328,105 @@ pub async fn insert_jsonb_batch(
         return Ok(());
     }
 
+    let total_rows = rows.len();
     tracing::info!(
         "Inserting {} rows into JSONB table '{}'",
-        rows.len(),
+        total_rows,
         table_name
     );
 
-    // Batch inserts to avoid parameter limit (PostgreSQL limit is ~65535 parameters)
-    // With 3 parameters per row (id, data, source_type), we can do ~21000 rows
-    // Use conservative 1000 rows per batch
-    const BATCH_SIZE: usize = 1000;
+    let mut inserted = 0usize;
+    let mut consecutive_failures = 0u32;
+    const MAX_RETRIES: u32 = 5;
 
-    for (batch_num, chunk) in rows.chunks(BATCH_SIZE).enumerate() {
-        // Build parameterized multi-value INSERT
-        // Format: INSERT INTO table (cols) VALUES ($1,$2,$3),($4,$5,$6),...
-        let mut value_placeholders = Vec::with_capacity(chunk.len());
-        let mut params: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> =
-            Vec::with_capacity(chunk.len() * 3);
+    while inserted < total_rows {
+        // Calculate optimal batch size based on remaining rows
+        let batch_size = calculate_batch_size(&rows, inserted);
+        let end_idx = (inserted + batch_size).min(total_rows);
+        let batch = &rows[inserted..end_idx];
 
-        for (idx, (id, data)) in chunk.iter().enumerate() {
-            let param_base = idx * 3 + 1;
-            value_placeholders.push(format!(
-                "(${}, ${}, ${})",
-                param_base,
-                param_base + 1,
-                param_base + 2
-            ));
-
-            // Add parameters in order: id, data, source_type
-            params.push(id);
-            params.push(data);
-            params.push(&source_type);
+        // Log progress for large datasets
+        if total_rows > 10000 && inserted.checked_rem(50000) == Some(0) {
+            let pct = (inserted as f64 / total_rows as f64 * 100.0) as u32;
+            tracing::info!(
+                "  Progress: {}/{} rows ({}%) inserted into '{}'",
+                inserted,
+                total_rows,
+                pct,
+                table_name
+            );
         }
 
-        let insert_sql = format!(
-            r#"INSERT INTO "{}" (id, data, _source_type) VALUES {}"#,
-            table_name,
-            value_placeholders.join(", ")
-        );
-
-        client
-            .execute(&insert_sql, &params)
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to insert batch {} ({} rows) into '{}'",
-                    batch_num,
-                    chunk.len(),
+        match execute_batch_insert(client, table_name, batch, source_type).await {
+            Ok(()) => {
+                tracing::debug!(
+                    "Inserted batch of {} rows ({}-{}/{}) into '{}'",
+                    batch.len(),
+                    inserted,
+                    end_idx,
+                    total_rows,
                     table_name
-                )
-            })?;
+                );
+                inserted = end_idx;
+                consecutive_failures = 0;
+            }
+            Err(e) => {
+                consecutive_failures += 1;
+                let is_connection_error = e.to_string().contains("connection")
+                    || e.to_string().contains("closed")
+                    || e.to_string().contains("communicating");
 
-        tracing::debug!(
-            "Inserted batch {} ({} rows) into '{}'",
-            batch_num,
-            chunk.len(),
-            table_name
-        );
+                if is_connection_error && consecutive_failures <= MAX_RETRIES && batch.len() > 1 {
+                    // Connection error with multi-row batch - retry with smaller batches
+                    let new_batch_size = (batch.len() / 2).max(1);
+                    tracing::warn!(
+                        "Batch insert failed (attempt {}/{}), reducing batch size from {} to {} rows",
+                        consecutive_failures,
+                        MAX_RETRIES,
+                        batch.len(),
+                        new_batch_size
+                    );
+
+                    // Insert this batch row-by-row as fallback
+                    for (idx, (id, data)) in batch.iter().enumerate() {
+                        if let Err(row_err) =
+                            insert_jsonb_row(client, table_name, id, data.clone(), source_type)
+                                .await
+                        {
+                            return Err(row_err).with_context(|| {
+                                format!(
+                                    "Failed to insert row {} (id='{}') into '{}' after batch failure",
+                                    inserted + idx,
+                                    id,
+                                    table_name
+                                )
+                            });
+                        }
+                    }
+                    inserted = end_idx;
+                    consecutive_failures = 0;
+                    tracing::info!(
+                        "Successfully inserted {} rows individually after batch failure",
+                        batch.len()
+                    );
+                } else {
+                    // Non-recoverable error or too many retries
+                    return Err(e).with_context(|| {
+                        format!(
+                            "Failed to insert batch ({} rows at offset {}) into '{}'",
+                            batch.len(),
+                            inserted,
+                            table_name
+                        )
+                    });
+                }
+            }
+        }
     }
 
     tracing::info!(
         "Successfully inserted {} rows into '{}'",
-        rows.len(),
+        total_rows,
         table_name
     );
 

@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.7] - 2025-12-09
+
+### Fixed
+
+- **Large row JSONB batch insert failures**: Fixed connection failures when replicating tables with large JSONB payloads (SQLite, MongoDB, MySQL sources). The batch insert now uses adaptive sizing that automatically calculates optimal batch sizes based on row payload sizes, targeting ~10MB per batch. On connection failures, automatically falls back to row-by-row insertion for the affected batch.
+
+- **Duplicate key errors during data restoration**: Fixed bug where `pg_restore` data restoration could cause duplicate key constraint violations when a transient failure occurred during restore. The retry logic was incorrectly applied to `pg_restore --data-only`, which is not idempotent (partially inserted data would be re-inserted on retry). Data restoration now fails immediately on error with clear guidance to re-run with `--drop-existing` for a clean database.
+
+### Changed
+
+- **Progress logging for large datasets**: Added progress logging (every 50,000 rows) when inserting large tables to provide visibility during long-running migrations.
+
 ## [7.0.6] - 2025-12-09
 
 ### Fixed

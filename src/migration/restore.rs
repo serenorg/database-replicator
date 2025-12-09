@@ -179,6 +179,15 @@ pub async fn restore_schema(target_url: &str, input_path: &str) -> Result<()> {
 /// - Optimized for directory format dumps created by dump_data()
 ///
 /// The number of parallel jobs is automatically determined based on available CPU cores.
+///
+/// # Note on Retry Behavior
+///
+/// Unlike schema restoration, data restoration does NOT use retry logic. This is
+/// intentional because pg_restore with --data-only is NOT idempotent - if it partially
+/// succeeds and then fails, retrying would cause duplicate key constraint violations.
+///
+/// If data restoration fails due to connection issues, the user should re-run the
+/// command with --drop-existing to ensure a clean slate.
 pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
     // Determine optimal number of parallel jobs (number of CPUs, capped at 8)
     let num_cpus = std::thread::available_parallelism()
@@ -198,71 +207,74 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
         .context("Failed to create .pgpass file for authentication")?;
 
     let env_vars = parts.to_pg_env_vars();
-    let input_path_owned = input_path.to_string();
 
-    // Wrap subprocess execution with retry logic
-    crate::utils::retry_subprocess_with_backoff(
-        || {
-            let mut cmd = Command::new("pg_restore");
-            cmd.arg("--data-only")
-                .arg("--no-owner")
-                .arg(format!("--jobs={}", num_cpus)) // Parallel restore jobs
-                .arg("--host")
-                .arg(&parts.host)
-                .arg("--port")
-                .arg(parts.port.to_string())
-                .arg("--dbname")
-                .arg(&parts.database)
-                .arg("--format=directory") // Directory format
-                .arg("--verbose") // Show progress
-                .arg(&input_path_owned)
-                .env("PGPASSFILE", pgpass.path())
-                .stdout(Stdio::inherit())
-                .stderr(Stdio::inherit());
+    // NOTE: We intentionally do NOT use retry_subprocess_with_backoff here.
+    // pg_restore with --data-only is NOT idempotent - if it partially succeeds
+    // (inserts some rows) and then fails, retrying would cause duplicate key
+    // constraint violations because the already-inserted rows would be re-inserted.
+    //
+    // If data restoration fails, the user should re-run with --drop-existing to
+    // ensure a clean database before retry.
+    let mut cmd = Command::new("pg_restore");
+    cmd.arg("--data-only")
+        .arg("--no-owner")
+        .arg(format!("--jobs={}", num_cpus)) // Parallel restore jobs
+        .arg("--host")
+        .arg(&parts.host)
+        .arg("--port")
+        .arg(parts.port.to_string())
+        .arg("--dbname")
+        .arg(&parts.database)
+        .arg("--format=directory") // Directory format
+        .arg("--verbose") // Show progress
+        .arg(input_path)
+        .env("PGPASSFILE", pgpass.path())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit());
 
-            // Add username if specified
-            if let Some(user) = &parts.user {
-                cmd.arg("--username").arg(user);
-            }
+    // Add username if specified
+    if let Some(user) = &parts.user {
+        cmd.arg("--username").arg(user);
+    }
 
-            // Apply query parameters as environment variables (SSL, channel_binding, etc.)
-            for (env_var, value) in &env_vars {
-                cmd.env(env_var, value);
-            }
+    // Apply query parameters as environment variables (SSL, channel_binding, etc.)
+    for (env_var, value) in &env_vars {
+        cmd.env(env_var, value);
+    }
 
-            // Apply TCP keepalive parameters to prevent idle connection timeouts
-            for (env_var, value) in crate::utils::get_keepalive_env_vars() {
-                cmd.env(env_var, value);
-            }
+    // Apply TCP keepalive parameters to prevent idle connection timeouts
+    for (env_var, value) in crate::utils::get_keepalive_env_vars() {
+        cmd.env(env_var, value);
+    }
 
-            // Mitigate hangs on serverless DBs with strict connection limits
-            cmd.env("PGCONNECT_TIMEOUT", "30");
+    // Mitigate hangs on serverless DBs with strict connection limits
+    cmd.env("PGCONNECT_TIMEOUT", "30");
 
-            cmd.status().context(
-                "Failed to execute pg_restore. Is PostgreSQL client installed?\n\
-                 Install with:\n\
-                 - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
-                 - macOS: brew install postgresql\n\
-                 - RHEL/CentOS: sudo yum install postgresql",
-            )
-        },
-        3,                      // Max 3 retries
-        Duration::from_secs(1), // Start with 1 second delay
-        "pg_restore (restore data)",
-    )
-    .await
-    .context(
-        "Data restoration failed.\n\
-         \n\
-         Common causes:\n\
-         - Foreign key constraint violations\n\
-         - Unique constraint violations (data already exists)\n\
-         - User lacks INSERT privileges on target tables\n\
-         - Disk space issues on target\n\
-         - Data type mismatches\n\
-         - Input directory is not a valid pg_dump directory format\n\
-         - Connection timeout or network issues",
+    let status = cmd.status().context(
+        "Failed to execute pg_restore. Is PostgreSQL client installed?\n\
+         Install with:\n\
+         - Ubuntu/Debian: sudo apt-get install postgresql-client\n\
+         - macOS: brew install postgresql\n\
+         - RHEL/CentOS: sudo yum install postgresql",
     )?;
+
+    if !status.success() {
+        anyhow::bail!(
+            "Data restoration failed (exit code: {}).\n\
+             \n\
+             Common causes:\n\
+             - Foreign key constraint violations\n\
+             - Unique constraint violations (data already exists from a previous partial restore)\n\
+             - User lacks INSERT privileges on target tables\n\
+             - Disk space issues on target\n\
+             - Data type mismatches\n\
+             - Input directory is not a valid pg_dump directory format\n\
+             - Connection timeout or network issues\n\
+             \n\
+             If you see 'duplicate key' errors, re-run with --drop-existing to ensure a clean database.",
+            status.code().unwrap_or(-1)
+        );
+    }
 
     tracing::info!(
         "✓ Data restored successfully using {} parallel jobs",
