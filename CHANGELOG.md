@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.4] - 2025-12-09
+
+### Fixed
+
+- **`--include-tables` ignored in xmin sync**: Fixed bug where `--include-tables` and other CLI filter flags were ignored by the `sync` command when using xmin-based sync. The sync command now correctly respects table filters when CLI flags are provided, skipping interactive mode and passing filtered tables to xmin sync.
+
+- **CTRL+C not responding during sync**: Fixed bug where CTRL+C would not interrupt a running sync cycle. The daemon now checks for shutdown signals during sync and reconciliation cycles, allowing graceful termination at any point.
+
 ## [7.0.3] - 2025-12-08
 
 ### Fixed

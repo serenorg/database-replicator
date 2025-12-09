@@ -519,7 +519,13 @@ async fn main() -> anyhow::Result<()> {
             app_state.target_url = Some(resolved_target.clone());
             database_replicator::state::save(&app_state)?;
 
-            let filter = if !no_interactive {
+            // Check if CLI filter flags were provided (skip interactive if so)
+            let has_cli_filters = include_databases.is_some()
+                || exclude_databases.is_some()
+                || include_tables.is_some()
+                || exclude_tables.is_some();
+
+            let filter = if !no_interactive && !has_cli_filters {
                 // Interactive mode (default) - prompt user to select databases and tables
                 let (filter, rules) =
                     database_replicator::interactive::select_databases_and_tables(&source).await?;
@@ -636,12 +642,39 @@ async fn main() -> anyhow::Result<()> {
                 );
                 tracing::info!("Using xmin-based sync (no source configuration required)");
 
+                // Extract tables from filter for xmin sync
+                // Filter stores "db.table" format, we need just table names for the source db
+                let source_parts = database_replicator::utils::parse_postgres_url(&source)?;
+                let source_db = &source_parts.database;
+
+                let tables_to_sync: Option<Vec<String>> = filter.include_tables().map(|tables| {
+                    tables
+                        .iter()
+                        .filter_map(|qualified| {
+                            // Split "db.table" into parts
+                            let parts: Vec<&str> = qualified.splitn(2, '.').collect();
+                            if parts.len() == 2 {
+                                let (db, table) = (parts[0], parts[1]);
+                                // Only include tables from the source database
+                                if db == source_db {
+                                    Some(table.to_string())
+                                } else {
+                                    None
+                                }
+                            } else {
+                                // No dot, treat as plain table name
+                                Some(qualified.clone())
+                            }
+                        })
+                        .collect()
+                });
+
                 // Use CLI-provided intervals or defaults
                 xmin_sync(
                     source,
                     resolved_target,
                     "public".to_string(), // Default schema
-                    None,                 // Discover all tables
+                    tables_to_sync,       // Tables from filter
                     sync_interval,        // CLI: --sync-interval (default 60s)
                     reconcile_interval,   // CLI: --reconcile-interval (default 3600s)
                     1000,                 // Batch size

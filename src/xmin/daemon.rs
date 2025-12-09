@@ -244,25 +244,41 @@ impl SyncDaemon {
 
         loop {
             tokio::select! {
+                biased; // Check shutdown first
+
+                _ = shutdown.recv() => {
+                    tracing::info!("Shutdown signal received, stopping SyncDaemon");
+                    break;
+                }
                 _ = sync_interval.tick() => {
                     cycles += 1;
                     tracing::info!("Starting sync cycle {}", cycles);
 
-                    match self.run_sync_cycle().await {
-                        Ok(stats) => {
-                            tracing::info!(
-                                "Sync cycle {} completed: {} tables, {} rows in {}ms",
-                                cycles,
-                                stats.tables_synced,
-                                stats.rows_synced,
-                                stats.duration_ms
-                            );
-                            if !stats.errors.is_empty() {
-                                tracing::warn!("Sync cycle had {} errors", stats.errors.len());
-                            }
+                    // Run sync cycle with shutdown check - abort if shutdown received
+                    tokio::select! {
+                        biased;
+                        _ = shutdown.recv() => {
+                            tracing::info!("Shutdown signal received during sync cycle, aborting");
+                            break;
                         }
-                        Err(e) => {
-                            tracing::error!("Sync cycle {} failed: {}", cycles, e);
+                        result = self.run_sync_cycle() => {
+                            match result {
+                                Ok(stats) => {
+                                    tracing::info!(
+                                        "Sync cycle {} completed: {} tables, {} rows in {}ms",
+                                        cycles,
+                                        stats.tables_synced,
+                                        stats.rows_synced,
+                                        stats.duration_ms
+                                    );
+                                    if !stats.errors.is_empty() {
+                                        tracing::warn!("Sync cycle had {} errors", stats.errors.len());
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::error!("Sync cycle {} failed: {}", cycles, e);
+                                }
+                            }
                         }
                     }
                 }
@@ -276,24 +292,30 @@ impl SyncDaemon {
                     reconcile_cycles += 1;
                     tracing::info!("Starting reconciliation cycle {}", reconcile_cycles);
 
-                    match self.run_reconciliation().await {
-                        Ok(stats) => {
-                            tracing::info!(
-                                "Reconciliation cycle {} completed: {} tables, {} rows deleted in {}ms",
-                                reconcile_cycles,
-                                stats.tables_synced,
-                                stats.rows_deleted,
-                                stats.duration_ms
-                            );
+                    // Run reconciliation with shutdown check
+                    tokio::select! {
+                        biased;
+                        _ = shutdown.recv() => {
+                            tracing::info!("Shutdown signal received during reconciliation, aborting");
+                            break;
                         }
-                        Err(e) => {
-                            tracing::error!("Reconciliation cycle {} failed: {}", reconcile_cycles, e);
+                        result = self.run_reconciliation() => {
+                            match result {
+                                Ok(stats) => {
+                                    tracing::info!(
+                                        "Reconciliation cycle {} completed: {} tables, {} rows deleted in {}ms",
+                                        reconcile_cycles,
+                                        stats.tables_synced,
+                                        stats.rows_deleted,
+                                        stats.duration_ms
+                                    );
+                                }
+                                Err(e) => {
+                                    tracing::error!("Reconciliation cycle {} failed: {}", reconcile_cycles, e);
+                                }
+                            }
                         }
                     }
-                }
-                _ = shutdown.recv() => {
-                    tracing::info!("Shutdown signal received, stopping SyncDaemon");
-                    break;
                 }
             }
         }
