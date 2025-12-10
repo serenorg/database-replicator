@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.9] - 2025-12-10
+
+### Fixed
+
+- **Data restore fails on managed PostgreSQL services**: Fixed bug where `pg_restore` would fail with "permission denied: system trigger" on managed PostgreSQL services (SerenDB, AWS RDS, Neon, etc.). The v7.0.8 fix for FK constraint violations used `--disable-triggers`, which requires superuser privileges that managed services don't grant. Replaced parallel restore with single-threaded restore that naturally respects FK dependency order, eliminating the need for elevated privileges.
+
+### Changed
+
+- **Removed parallel restore**: Data restoration now uses single-threaded `pg_restore` instead of parallel (`--jobs=N`). This is slower but works on all PostgreSQL deployments without requiring superuser privileges. The trade-off is acceptable since correctness and compatibility are prioritized over speed.
+
 ## [7.0.8] - 2025-12-09
 
 ### Fixed

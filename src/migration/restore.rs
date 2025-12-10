@@ -171,14 +171,22 @@ pub async fn restore_schema(target_url: &str, input_path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Restore data using pg_restore with parallel jobs
+/// Restore data using pg_restore
 ///
 /// Uses PostgreSQL directory format restore with:
-/// - Parallel restore for faster performance
+/// - Single-threaded restore to respect FK dependency order
 /// - Automatic decompression of compressed dump files
 /// - Optimized for directory format dumps created by dump_data()
 ///
-/// The number of parallel jobs is automatically determined based on available CPU cores.
+/// # Why Single-Threaded?
+///
+/// Parallel restore (`--jobs=N`) requires `--disable-triggers` to avoid FK
+/// constraint violations when tables are restored out of dependency order.
+/// However, `--disable-triggers` requires superuser privileges, which managed
+/// PostgreSQL services (SerenDB, AWS RDS, Neon, etc.) do not grant.
+///
+/// Single-threaded restore naturally processes tables in FK dependency order,
+/// avoiding the need for elevated privileges while ensuring data integrity.
 ///
 /// # Note on Retry Behavior
 ///
@@ -189,16 +197,7 @@ pub async fn restore_schema(target_url: &str, input_path: &str) -> Result<()> {
 /// If data restoration fails due to connection issues, the user should re-run the
 /// command with --drop-existing to ensure a clean slate.
 pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
-    // Determine optimal number of parallel jobs (number of CPUs, capped at 8)
-    let num_cpus = std::thread::available_parallelism()
-        .map(|n| n.get().min(8))
-        .unwrap_or(4);
-
-    tracing::info!(
-        "Restoring data from {} (parallel={}, format=directory)",
-        input_path,
-        num_cpus
-    );
+    tracing::info!("Restoring data from {} (format=directory)", input_path);
 
     // Parse URL and create .pgpass file for secure authentication
     let parts = crate::utils::parse_postgres_url(target_url)
@@ -218,8 +217,6 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
     let mut cmd = Command::new("pg_restore");
     cmd.arg("--data-only")
         .arg("--no-owner")
-        .arg("--disable-triggers") // Disable FK constraints during parallel restore
-        .arg(format!("--jobs={}", num_cpus)) // Parallel restore jobs
         .arg("--host")
         .arg(&parts.host)
         .arg("--port")
@@ -277,10 +274,7 @@ pub async fn restore_data(target_url: &str, input_path: &str) -> Result<()> {
         );
     }
 
-    tracing::info!(
-        "✓ Data restored successfully using {} parallel jobs",
-        num_cpus
-    );
+    tracing::info!("✓ Data restored successfully");
     Ok(())
 }
 
