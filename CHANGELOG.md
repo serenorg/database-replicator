@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.10] - 2025-12-10
+
+### Fixed
+
+- **Critical: xmin batching skipping rows with same xmin**: Fixed bug where batched xmin sync would skip rows when multiple rows shared the same xmin value (e.g., bulk inserts in a single transaction). Only the first batch was returned; subsequent queries filtered out remaining rows. Now uses `(xmin, ctid)` as compound pagination key with ctid as a tie-breaker.
+
+- **Critical: Reconciler data loss on numeric primary keys**: Fixed bug where merge-join reconciliation would incorrectly detect orphans for tables with numeric primary keys. PKs were cast to text for SELECT but ORDER BY used native column types, causing lexicographic vs numeric ordering mismatch ("10" < "2" vs 10 > 2). Both SELECT and ORDER BY now use `::text` cast for consistent ordering.
+
+- **macOS page size underestimation on Apple Silicon**: Fixed memory detection on Apple Silicon Macs that hardcoded 4KB page size instead of the actual 16KB. This caused batch sizes to be ~4x smaller than optimal. Now uses `sysctl hw.pagesize` for accurate detection.
+
+### Changed
+
+- **Batched sync and reconciliation**: Sync and reconciliation now process large tables in batches to prevent OOM and connection timeouts. Memory usage is O(batch_size) instead of O(total_rows).
+
+- **Auto-detect optimal batch size**: Batch size is automatically calculated based on available memory (25% of available, clamped to 1K-50K rows). Works on Linux, macOS, and Windows.
+
 ## [7.0.9] - 2025-12-10
 
 ### Fixed
