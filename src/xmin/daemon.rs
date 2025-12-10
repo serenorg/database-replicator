@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 use tokio::time::interval;
 
-use super::reader::XminReader;
+use super::reader::{detect_wraparound, WraparoundCheck, XminReader};
 use super::reconciler::Reconciler;
 use super::state::SyncState;
 use super::writer::{get_primary_key_columns, get_table_columns, row_to_values, ChangeWriter};
@@ -35,7 +35,7 @@ impl Default for DaemonConfig {
             sync_interval: Duration::from_secs(3600), // 1 hour
             reconcile_interval: Some(Duration::from_secs(86400)), // 1 day
             state_path: SyncState::default_path(),
-            batch_size: 1000,
+            batch_size: 10_000, // 10K rows per batch for good throughput while bounding memory
             tables: Vec::new(),
             schema: "public".to_string(),
         }
@@ -323,7 +323,11 @@ impl SyncDaemon {
         Ok(())
     }
 
-    /// Sync a single table.
+    /// Sync a single table using batched processing.
+    ///
+    /// This method processes rows in batches to avoid loading entire tables into memory.
+    /// This is critical for large tables (millions of rows) where loading everything
+    /// at once would cause OOM or connection timeouts.
     async fn sync_table(
         &self,
         reader: &XminReader<'_>,
@@ -334,7 +338,7 @@ impl SyncDaemon {
     ) -> Result<u64> {
         // Get table state
         let table_state = state.get_or_create_table(schema, table);
-        let since_xmin = table_state.last_xmin;
+        let stored_xmin = table_state.last_xmin;
 
         // Get table metadata from SOURCE (not target - tables may not exist there yet)
         let columns = get_table_columns(reader.client(), schema, table).await?;
@@ -346,54 +350,109 @@ impl SyncDaemon {
 
         let column_names: Vec<String> = columns.iter().map(|(name, _)| name.clone()).collect();
 
-        // Read changes with wraparound detection
-        let (rows, max_xmin, was_full_sync) = reader
-            .read_changes_with_wraparound_check(schema, table, &column_names, since_xmin)
+        // Check for xmin wraparound before starting
+        let current_xmin = reader.get_current_xmin().await?;
+        let (since_xmin, is_full_sync) = if detect_wraparound(stored_xmin, current_xmin)
+            == WraparoundCheck::WraparoundDetected
+        {
+            tracing::warn!(
+                "xmin wraparound detected for {}.{} - performing full table sync",
+                schema,
+                table
+            );
+            (0, true) // Start from beginning
+        } else {
+            (stored_xmin, false)
+        };
+
+        // Use batched reading to avoid loading entire table into memory
+        let batch_size = self.config.batch_size;
+        let mut batch_reader = reader
+            .read_changes_batched(schema, table, &column_names, since_xmin, batch_size)
             .await?;
 
-        if rows.is_empty() {
+        let mut total_rows = 0u64;
+        let mut max_xmin = since_xmin;
+        let mut batch_count = 0u64;
+
+        // Process batches until exhausted
+        while let Some((rows, batch_max_xmin)) = reader.fetch_batch(&mut batch_reader).await? {
+            if rows.is_empty() {
+                break;
+            }
+
+            batch_count += 1;
+            let batch_len = rows.len();
+
+            // Log first batch with total context, then periodic progress
+            if batch_count == 1 {
+                if is_full_sync {
+                    tracing::info!(
+                        "Starting full table sync for {}.{} (batch size: {})",
+                        schema,
+                        table,
+                        batch_size
+                    );
+                } else {
+                    tracing::info!(
+                        "Found changes in {}.{} (xmin {} -> {}), processing in batches",
+                        schema,
+                        table,
+                        since_xmin,
+                        batch_max_xmin
+                    );
+                }
+            }
+
+            // Convert and apply batch immediately (memory = O(batch_size))
+            let values: Vec<Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>>> = rows
+                .iter()
+                .map(|row| row_to_values(row, &columns))
+                .collect();
+
+            let affected = writer
+                .apply_batch(schema, table, &pk_columns, &column_names, values)
+                .await?;
+
+            total_rows += affected;
+            max_xmin = batch_max_xmin;
+
+            // Update state after each batch for resume capability
+            state.update_table(schema, table, max_xmin, affected);
+
+            // Log progress every 10 batches or 100K rows
+            if batch_count.is_multiple_of(10) || total_rows % 100_000 < batch_len as u64 {
+                tracing::info!(
+                    "Progress: {}.{} - {} rows synced ({} batches), current xmin: {}",
+                    schema,
+                    table,
+                    total_rows,
+                    batch_count,
+                    max_xmin
+                );
+            }
+        }
+
+        if total_rows == 0 {
             tracing::debug!(
                 "No changes in {}.{} since xmin {}",
                 schema,
                 table,
                 since_xmin
             );
-            return Ok(0);
-        }
-
-        if was_full_sync {
-            tracing::warn!(
-                "xmin wraparound detected for {}.{} - performed full table sync ({} rows)",
-                schema,
-                table,
-                rows.len()
-            );
         } else {
             tracing::info!(
-                "Found {} changed rows in {}.{} (xmin {} -> {})",
-                rows.len(),
+                "Completed sync for {}.{}: {} rows in {} batches (xmin {} -> {})",
                 schema,
                 table,
+                total_rows,
+                batch_count,
                 since_xmin,
                 max_xmin
             );
         }
 
-        // Convert rows to values (excluding the _xmin column we added)
-        let values: Vec<Vec<Box<dyn tokio_postgres::types::ToSql + Sync + Send>>> = rows
-            .iter()
-            .map(|row| row_to_values(row, &columns))
-            .collect();
-
-        // Apply changes
-        let affected = writer
-            .apply_batch(schema, table, &pk_columns, &column_names, values)
-            .await?;
-
-        // Update state
-        state.update_table(schema, table, max_xmin, affected);
-
-        Ok(affected)
+        Ok(total_rows)
     }
 
     /// Load existing state or create new state.
@@ -431,7 +490,7 @@ mod tests {
         let config = DaemonConfig::default();
         assert_eq!(config.sync_interval, Duration::from_secs(3600));
         assert_eq!(config.reconcile_interval, Some(Duration::from_secs(86400)));
-        assert_eq!(config.batch_size, 1000);
+        assert_eq!(config.batch_size, 10_000);
         assert_eq!(config.schema, "public");
     }
 
