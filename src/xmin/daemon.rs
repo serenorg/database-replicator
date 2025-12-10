@@ -203,7 +203,12 @@ impl SyncDaemon {
             }
 
             match reconciler
-                .reconcile_table(&self.config.schema, table, &pk_columns)
+                .reconcile_table_batched(
+                    &self.config.schema,
+                    table,
+                    &pk_columns,
+                    self.config.batch_size,
+                )
                 .await
             {
                 Ok(deleted) => {

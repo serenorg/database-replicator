@@ -2,6 +2,7 @@
 // ABOUTME: Compares primary keys between source and target to find orphaned rows
 
 use anyhow::{Context, Result};
+use std::cmp::Ordering;
 use std::collections::HashSet;
 use tokio_postgres::types::ToSql;
 use tokio_postgres::Client;
@@ -201,6 +202,354 @@ impl<'a> Reconciler<'a> {
             .context("Failed to check if table exists")?;
 
         Ok(row.get(0))
+    }
+
+    /// Reconcile a table using batched streaming comparison (memory-efficient).
+    ///
+    /// Uses merge-join comparison on sorted primary keys fetched in batches.
+    /// This avoids loading all PKs into memory, making it suitable for tables
+    /// with millions of rows.
+    ///
+    /// # Arguments
+    ///
+    /// * `schema` - Schema name
+    /// * `table` - Table name
+    /// * `primary_key_columns` - Primary key column names
+    /// * `batch_size` - Number of PKs to fetch per batch
+    ///
+    /// # Returns
+    ///
+    /// The number of orphaned rows deleted from target.
+    pub async fn reconcile_table_batched(
+        &self,
+        schema: &str,
+        table: &str,
+        primary_key_columns: &[String],
+        batch_size: usize,
+    ) -> Result<u64> {
+        tracing::info!(
+            "Starting batched reconciliation for {}.{} (batch size: {})",
+            schema,
+            table,
+            batch_size
+        );
+
+        let writer = ChangeWriter::new(self.target_client);
+        let mut total_deleted = 0u64;
+        let mut orphans_batch: Vec<Vec<String>> = Vec::new();
+
+        // Initialize batch readers for both source and target
+        let mut source_reader = PkBatchReader::new(
+            self.source_client,
+            schema,
+            table,
+            primary_key_columns,
+            batch_size,
+        );
+        let mut target_reader = PkBatchReader::new(
+            self.target_client,
+            schema,
+            table,
+            primary_key_columns,
+            batch_size,
+        );
+
+        // Fetch initial batches
+        let mut source_batch = source_reader.fetch_next().await?;
+        let mut target_batch = target_reader.fetch_next().await?;
+        let mut source_idx = 0;
+        let mut target_idx = 0;
+        let mut comparisons = 0u64;
+
+        // Merge-join comparison loop
+        loop {
+            // Refill source batch if exhausted
+            if source_idx >= source_batch.len() && !source_reader.exhausted {
+                source_batch = source_reader.fetch_next().await?;
+                source_idx = 0;
+            }
+
+            // Refill target batch if exhausted
+            if target_idx >= target_batch.len() && !target_reader.exhausted {
+                target_batch = target_reader.fetch_next().await?;
+                target_idx = 0;
+            }
+
+            // Check termination conditions
+            let source_exhausted = source_idx >= source_batch.len();
+            let target_exhausted = target_idx >= target_batch.len();
+
+            if source_exhausted && target_exhausted {
+                // Both exhausted - done
+                break;
+            }
+
+            if source_exhausted {
+                // Source exhausted but target has more - all remaining are orphans
+                while target_idx < target_batch.len() {
+                    orphans_batch.push(target_batch[target_idx].clone());
+                    target_idx += 1;
+
+                    // Delete batch when full
+                    if orphans_batch.len() >= batch_size {
+                        total_deleted += self
+                            .delete_orphan_batch(
+                                &writer,
+                                schema,
+                                table,
+                                primary_key_columns,
+                                &orphans_batch,
+                            )
+                            .await?;
+                        orphans_batch.clear();
+                    }
+                }
+
+                // Fetch more from target
+                if !target_reader.exhausted {
+                    target_batch = target_reader.fetch_next().await?;
+                    target_idx = 0;
+                }
+                continue;
+            }
+
+            if target_exhausted {
+                // Target exhausted but source has more - no more orphans possible
+                break;
+            }
+
+            // Compare current PKs
+            let source_pk = &source_batch[source_idx];
+            let target_pk = &target_batch[target_idx];
+            comparisons += 1;
+
+            match compare_pks(source_pk, target_pk) {
+                Ordering::Equal => {
+                    // PKs match - both exist, advance both
+                    source_idx += 1;
+                    target_idx += 1;
+                }
+                Ordering::Less => {
+                    // Source PK < Target PK - source has row target doesn't
+                    // This is fine, just advance source
+                    source_idx += 1;
+                }
+                Ordering::Greater => {
+                    // Source PK > Target PK - target has orphan
+                    orphans_batch.push(target_pk.clone());
+                    target_idx += 1;
+
+                    // Delete batch when full
+                    if orphans_batch.len() >= batch_size {
+                        total_deleted += self
+                            .delete_orphan_batch(
+                                &writer,
+                                schema,
+                                table,
+                                primary_key_columns,
+                                &orphans_batch,
+                            )
+                            .await?;
+                        orphans_batch.clear();
+                    }
+                }
+            }
+
+            // Log progress periodically
+            if comparisons.is_multiple_of(100_000) {
+                tracing::info!(
+                    "Reconciliation progress for {}.{}: {} comparisons, {} orphans found",
+                    schema,
+                    table,
+                    comparisons,
+                    total_deleted + orphans_batch.len() as u64
+                );
+            }
+        }
+
+        // Delete remaining orphans
+        if !orphans_batch.is_empty() {
+            total_deleted += self
+                .delete_orphan_batch(&writer, schema, table, primary_key_columns, &orphans_batch)
+                .await?;
+        }
+
+        tracing::info!(
+            "Completed reconciliation for {}.{}: {} comparisons, {} orphans deleted",
+            schema,
+            table,
+            comparisons,
+            total_deleted
+        );
+
+        Ok(total_deleted)
+    }
+
+    /// Delete a batch of orphan rows.
+    async fn delete_orphan_batch(
+        &self,
+        writer: &ChangeWriter<'_>,
+        schema: &str,
+        table: &str,
+        primary_key_columns: &[String],
+        orphans: &[Vec<String>],
+    ) -> Result<u64> {
+        if orphans.is_empty() {
+            return Ok(0);
+        }
+
+        tracing::debug!(
+            "Deleting batch of {} orphan rows from {}.{}",
+            orphans.len(),
+            schema,
+            table
+        );
+
+        // Convert string PKs to ToSql values
+        let pk_values: Vec<Vec<Box<dyn ToSql + Sync + Send>>> = orphans
+            .iter()
+            .map(|pk| {
+                pk.iter()
+                    .map(|v| Box::new(v.clone()) as Box<dyn ToSql + Sync + Send>)
+                    .collect()
+            })
+            .collect();
+
+        writer
+            .delete_rows(schema, table, primary_key_columns, pk_values)
+            .await
+    }
+}
+
+/// Compare two primary key tuples lexicographically.
+fn compare_pks(a: &[String], b: &[String]) -> Ordering {
+    for (av, bv) in a.iter().zip(b.iter()) {
+        match av.cmp(bv) {
+            Ordering::Equal => continue,
+            other => return other,
+        }
+    }
+    a.len().cmp(&b.len())
+}
+
+/// Batch reader for primary keys using keyset pagination.
+///
+/// Fetches PKs in sorted order using WHERE pk > last_pk LIMIT batch_size,
+/// which is more efficient than OFFSET for large tables.
+struct PkBatchReader<'a> {
+    client: &'a Client,
+    schema: String,
+    table: String,
+    pk_columns: Vec<String>,
+    batch_size: usize,
+    last_pk: Option<Vec<String>>,
+    pub exhausted: bool,
+}
+
+impl<'a> PkBatchReader<'a> {
+    fn new(
+        client: &'a Client,
+        schema: &str,
+        table: &str,
+        pk_columns: &[String],
+        batch_size: usize,
+    ) -> Self {
+        Self {
+            client,
+            schema: schema.to_string(),
+            table: table.to_string(),
+            pk_columns: pk_columns.to_vec(),
+            batch_size,
+            last_pk: None,
+            exhausted: false,
+        }
+    }
+
+    /// Fetch the next batch of primary keys.
+    async fn fetch_next(&mut self) -> Result<Vec<Vec<String>>> {
+        if self.exhausted {
+            return Ok(Vec::new());
+        }
+
+        let pk_cols_select: Vec<String> = self
+            .pk_columns
+            .iter()
+            .map(|c| format!("\"{}\"::text", c))
+            .collect();
+
+        let order_by: Vec<String> = self
+            .pk_columns
+            .iter()
+            .map(|c| format!("\"{}\"", c))
+            .collect();
+
+        let query = if self.last_pk.is_some() {
+            // Keyset pagination: WHERE (pk1, pk2, ...) > ($1, $2, ...)
+            let pk_tuple: Vec<String> = self
+                .pk_columns
+                .iter()
+                .map(|c| format!("\"{}\"", c))
+                .collect();
+
+            let params: Vec<String> = (1..=self.pk_columns.len())
+                .map(|i| format!("${}", i))
+                .collect();
+
+            format!(
+                "SELECT {} FROM \"{}\".\"{}\" WHERE ({}) > ({}) ORDER BY {} LIMIT {}",
+                pk_cols_select.join(", "),
+                self.schema,
+                self.table,
+                pk_tuple.join(", "),
+                params.join(", "),
+                order_by.join(", "),
+                self.batch_size
+            )
+        } else {
+            // First batch: no WHERE clause
+            format!(
+                "SELECT {} FROM \"{}\".\"{}\" ORDER BY {} LIMIT {}",
+                pk_cols_select.join(", "),
+                self.schema,
+                self.table,
+                order_by.join(", "),
+                self.batch_size
+            )
+        };
+
+        // Build parameters for keyset pagination
+        let params: Vec<&(dyn ToSql + Sync)> = if let Some(ref last) = self.last_pk {
+            last.iter().map(|s| s as &(dyn ToSql + Sync)).collect()
+        } else {
+            Vec::new()
+        };
+
+        let rows = self.client.query(&query, &params).await.with_context(|| {
+            format!(
+                "Failed to fetch PK batch from {}.{}",
+                self.schema, self.table
+            )
+        })?;
+
+        if rows.len() < self.batch_size {
+            self.exhausted = true;
+        }
+
+        let pks: Vec<Vec<String>> = rows
+            .iter()
+            .map(|row| {
+                (0..self.pk_columns.len())
+                    .map(|i| row.get::<_, String>(i))
+                    .collect()
+            })
+            .collect();
+
+        // Update last_pk for next iteration
+        if let Some(last_row) = pks.last() {
+            self.last_pk = Some(last_row.clone());
+        }
+
+        Ok(pks)
     }
 }
 
