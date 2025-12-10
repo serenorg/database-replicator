@@ -167,12 +167,17 @@ impl<'a> XminReader<'a> {
             table: table.to_string(),
             columns: columns.to_vec(),
             current_xmin: since_xmin,
+            last_ctid: None,
             batch_size,
             exhausted: false,
         })
     }
 
     /// Execute a batched read query and return the next batch.
+    ///
+    /// Uses (xmin, ctid) as the pagination key to correctly handle cases where
+    /// many rows share the same xmin (e.g., bulk inserts in a single transaction).
+    /// Without ctid tie-breaking, rows with duplicate xmin values would be skipped.
     pub async fn fetch_batch(
         &self,
         batch_reader: &mut BatchReader,
@@ -192,45 +197,81 @@ impl<'a> XminReader<'a> {
                 .join(", ")
         };
 
-        let query = format!(
-            "SELECT {}, xmin::text::bigint as _xmin FROM \"{}\".\"{}\" \
-             WHERE xmin::text::bigint > $1 \
-             ORDER BY xmin::text::bigint \
-             LIMIT $2",
-            column_list, batch_reader.schema, batch_reader.table
-        );
+        // Use (xmin, ctid) as compound pagination key to handle duplicate xmin values.
+        // ctid is the physical tuple location and provides a stable tie-breaker.
+        let (query, rows) = if let Some(ref last_ctid) = batch_reader.last_ctid {
+            // Subsequent batches: use compound (xmin, ctid) > ($1, $2) filter
+            let query = format!(
+                "SELECT {}, xmin::text::bigint as _xmin, ctid::text as _ctid \
+                 FROM \"{}\".\"{}\" \
+                 WHERE (xmin::text::bigint, ctid) > ($1, $2::tid) \
+                 ORDER BY xmin::text::bigint, ctid \
+                 LIMIT $3",
+                column_list, batch_reader.schema, batch_reader.table
+            );
 
-        let rows = self
-            .client
-            .query(
-                &query,
-                &[
-                    &(batch_reader.current_xmin as i64),
-                    &(batch_reader.batch_size as i64),
-                ],
-            )
-            .await
-            .with_context(|| {
-                format!(
-                    "Failed to read batch from {}.{}",
-                    batch_reader.schema, batch_reader.table
+            let rows = self
+                .client
+                .query(
+                    &query,
+                    &[
+                        &(batch_reader.current_xmin as i64),
+                        &last_ctid,
+                        &(batch_reader.batch_size as i64),
+                    ],
                 )
-            })?;
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to read batch from {}.{}",
+                        batch_reader.schema, batch_reader.table
+                    )
+                })?;
+            (query, rows)
+        } else {
+            // First batch: simple xmin > $1 filter
+            let query = format!(
+                "SELECT {}, xmin::text::bigint as _xmin, ctid::text as _ctid \
+                 FROM \"{}\".\"{}\" \
+                 WHERE xmin::text::bigint > $1 \
+                 ORDER BY xmin::text::bigint, ctid \
+                 LIMIT $2",
+                column_list, batch_reader.schema, batch_reader.table
+            );
+
+            let rows = self
+                .client
+                .query(
+                    &query,
+                    &[
+                        &(batch_reader.current_xmin as i64),
+                        &(batch_reader.batch_size as i64),
+                    ],
+                )
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to read batch from {}.{}",
+                        batch_reader.schema, batch_reader.table
+                    )
+                })?;
+            (query, rows)
+        };
+
+        // Suppress unused variable warning - query is useful for debugging
+        let _ = query;
 
         if rows.is_empty() {
             batch_reader.exhausted = true;
             return Ok(None);
         }
 
-        // Update current_xmin to the max in this batch
-        let max_xmin = rows
-            .iter()
-            .map(|row| {
-                let xmin: i64 = row.get("_xmin");
-                (xmin & 0xFFFFFFFF) as u32
-            })
-            .max()
-            .unwrap_or(batch_reader.current_xmin);
+        // Get xmin and ctid from the last row for next iteration's pagination
+        let last_row = rows.last().unwrap();
+        let last_xmin: i64 = last_row.get("_xmin");
+        let last_ctid: String = last_row.get("_ctid");
+
+        let max_xmin = (last_xmin & 0xFFFFFFFF) as u32;
 
         // Mark as exhausted if we got fewer rows than batch_size
         if rows.len() < batch_reader.batch_size {
@@ -238,6 +279,7 @@ impl<'a> XminReader<'a> {
         }
 
         batch_reader.current_xmin = max_xmin;
+        batch_reader.last_ctid = Some(last_ctid);
 
         Ok(Some((rows, max_xmin)))
     }
@@ -437,11 +479,17 @@ impl<'a> XminReader<'a> {
 }
 
 /// Batch reader state for iterating over large result sets.
+///
+/// Uses (xmin, ctid) as the pagination key to handle cases where many rows
+/// share the same xmin (e.g., bulk inserts in a single transaction).
 pub struct BatchReader {
     pub schema: String,
     pub table: String,
     pub columns: Vec<String>,
     pub current_xmin: u32,
+    /// Last seen ctid for tie-breaking when multiple rows have same xmin.
+    /// Format: "(page,tuple)" e.g., "(0,1)"
+    pub last_ctid: Option<String>,
     pub batch_size: usize,
     pub exhausted: bool,
 }
@@ -466,6 +514,7 @@ mod tests {
             table: "users".to_string(),
             columns: vec!["id".to_string(), "name".to_string()],
             current_xmin: 0,
+            last_ctid: None,
             batch_size: 1000,
             exhausted: false,
         };
@@ -473,6 +522,7 @@ mod tests {
         assert_eq!(reader.schema, "public");
         assert_eq!(reader.table, "users");
         assert_eq!(reader.current_xmin, 0);
+        assert!(reader.last_ctid.is_none());
         assert!(!reader.exhausted);
     }
 
