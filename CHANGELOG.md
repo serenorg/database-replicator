@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.11] - 2025-12-10
+
+### Fixed
+
+- **Critical: ctid parameter serialization failure in batched sync**: Fixed bug where batched xmin sync would fail after the first batch with "cannot convert between Rust type `&String` and Postgres type `tid`". The ctid value was being passed as a parameterized query argument, but tokio-postgres cannot serialize Rust strings to PostgreSQL's tid type. Now inlines the ctid value in the query (with format validation to prevent SQL injection).
+
 ## [7.0.10] - 2025-12-10
 
 ### Fixed

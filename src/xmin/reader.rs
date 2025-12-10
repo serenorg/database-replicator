@@ -47,6 +47,27 @@ pub fn detect_wraparound(old_xmin: u32, current_xmin: u32) -> WraparoundCheck {
     }
 }
 
+/// Validate that a ctid string has the correct format "(page,tuple)".
+///
+/// ctid is a PostgreSQL system column representing the physical location of a row.
+/// Format is "(page_number,tuple_index)" where both are non-negative integers.
+/// Examples: "(0,1)", "(123,45)", "(0,100)"
+///
+/// We validate before inlining in SQL to prevent injection attacks.
+fn is_valid_ctid(s: &str) -> bool {
+    let s = s.trim();
+    if !s.starts_with('(') || !s.ends_with(')') {
+        return false;
+    }
+    let inner = &s[1..s.len() - 1];
+    let parts: Vec<&str> = inner.split(',').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    // Both parts must be valid unsigned integers
+    parts[0].trim().parse::<u64>().is_ok() && parts[1].trim().parse::<u32>().is_ok()
+}
+
 /// Reads changed rows from a PostgreSQL table using xmin-based change detection.
 ///
 /// PostgreSQL's `xmin` system column contains the transaction ID that last modified
@@ -200,14 +221,21 @@ impl<'a> XminReader<'a> {
         // Use (xmin, ctid) as compound pagination key to handle duplicate xmin values.
         // ctid is the physical tuple location and provides a stable tie-breaker.
         let (query, rows) = if let Some(ref last_ctid) = batch_reader.last_ctid {
-            // Subsequent batches: use compound (xmin, ctid) > ($1, $2) filter
+            // Validate ctid format for safety before inlining in query.
+            // ctid format is "(page,tuple)" e.g., "(0,1)" or "(123,45)"
+            if !is_valid_ctid(last_ctid) {
+                anyhow::bail!("Invalid ctid format: {}", last_ctid);
+            }
+
+            // Subsequent batches: use compound (xmin, ctid) > ($1, 'ctid'::tid) filter
+            // Note: ctid must be inlined because tokio-postgres can't serialize String to tid type
             let query = format!(
                 "SELECT {}, xmin::text::bigint as _xmin, ctid::text as _ctid \
                  FROM \"{}\".\"{}\" \
-                 WHERE (xmin::text::bigint, ctid) > ($1, $2::tid) \
+                 WHERE (xmin::text::bigint, ctid) > ($1, '{}'::tid) \
                  ORDER BY xmin::text::bigint, ctid \
-                 LIMIT $3",
-                column_list, batch_reader.schema, batch_reader.table
+                 LIMIT $2",
+                column_list, batch_reader.schema, batch_reader.table, last_ctid
             );
 
             let rows = self
@@ -216,7 +244,6 @@ impl<'a> XminReader<'a> {
                     &query,
                     &[
                         &(batch_reader.current_xmin as i64),
-                        &last_ctid,
                         &(batch_reader.batch_size as i64),
                     ],
                 )
@@ -590,5 +617,27 @@ mod tests {
             detect_wraparound(2_000_000_002, 1),
             WraparoundCheck::WraparoundDetected
         );
+    }
+
+    #[test]
+    fn test_is_valid_ctid() {
+        // Valid ctid formats
+        assert!(is_valid_ctid("(0,1)"));
+        assert!(is_valid_ctid("(123,45)"));
+        assert!(is_valid_ctid("(0,100)"));
+        assert!(is_valid_ctid("(999999,65535)"));
+        assert!(is_valid_ctid(" (0,1) ")); // Whitespace trimmed
+
+        // Invalid formats
+        assert!(!is_valid_ctid("0,1")); // Missing parentheses
+        assert!(!is_valid_ctid("(0,1")); // Missing closing paren
+        assert!(!is_valid_ctid("0,1)")); // Missing opening paren
+        assert!(!is_valid_ctid("(0)")); // Missing tuple index
+        assert!(!is_valid_ctid("(0,1,2)")); // Too many parts
+        assert!(!is_valid_ctid("(a,1)")); // Non-numeric page
+        assert!(!is_valid_ctid("(0,b)")); // Non-numeric tuple
+        assert!(!is_valid_ctid("")); // Empty string
+        assert!(!is_valid_ctid("()")); // Empty parens
+        assert!(!is_valid_ctid("(-1,1)")); // Negative page (parses as invalid)
     }
 }
