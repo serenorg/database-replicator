@@ -1369,15 +1369,15 @@ pub fn get_available_memory() -> Result<u64> {
 fn get_available_memory_linux() -> Result<u64> {
     use std::fs;
 
-    let meminfo = fs::read_to_string("/proc/meminfo")
-        .context("Failed to read /proc/meminfo")?;
+    let meminfo = fs::read_to_string("/proc/meminfo").context("Failed to read /proc/meminfo")?;
 
     // Try MemAvailable first (more accurate, available since Linux 3.14)
     for line in meminfo.lines() {
         if line.starts_with("MemAvailable:") {
             let parts: Vec<&str> = line.split_whitespace().collect();
             if parts.len() >= 2 {
-                let kb: u64 = parts[1].parse()
+                let kb: u64 = parts[1]
+                    .parse()
                     .context("Failed to parse MemAvailable value")?;
                 return Ok(kb * 1024); // Convert KB to bytes
             }
@@ -1417,7 +1417,9 @@ fn get_available_memory_macos() -> Result<u64> {
         .context("Failed to execute sysctl")?;
 
     let total_str = String::from_utf8_lossy(&output.stdout);
-    let total_bytes: u64 = total_str.trim().parse()
+    let total_bytes: u64 = total_str
+        .trim()
+        .parse()
         .context("Failed to parse hw.memsize")?;
 
     // Get page size and free pages using vm_stat
@@ -1578,8 +1580,16 @@ mod tests {
         // Should succeed (may fail in very restricted environments)
         if let Ok(available) = result {
             // Sanity check: should be at least 10MB, less than 1TB
-            assert!(available > 10 * 1024 * 1024, "Available memory too low: {}", available);
-            assert!(available < 1024 * 1024 * 1024 * 1024, "Available memory too high: {}", available);
+            assert!(
+                available > 10 * 1024 * 1024,
+                "Available memory too low: {}",
+                available
+            );
+            assert!(
+                available < 1024 * 1024 * 1024 * 1024,
+                "Available memory too high: {}",
+                available
+            );
         }
     }
 
