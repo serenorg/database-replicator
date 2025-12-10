@@ -1422,15 +1422,24 @@ fn get_available_memory_macos() -> Result<u64> {
         .parse()
         .context("Failed to parse hw.memsize")?;
 
-    // Get page size and free pages using vm_stat
+    // Get actual page size using sysctl hw.pagesize
+    // Intel Macs use 4KB (4096), Apple Silicon uses 16KB (16384)
+    let page_size: u64 = {
+        let page_output = Command::new("sysctl")
+            .args(["-n", "hw.pagesize"])
+            .output()
+            .context("Failed to execute sysctl hw.pagesize")?;
+
+        let page_str = String::from_utf8_lossy(&page_output.stdout);
+        page_str.trim().parse().unwrap_or(4096) // Default to 4KB if parsing fails
+    };
+
+    // Get free pages using vm_stat
     let vm_output = Command::new("vm_stat")
         .output()
         .context("Failed to execute vm_stat")?;
 
     let vm_stat = String::from_utf8_lossy(&vm_output.stdout);
-
-    // Parse page size (usually 4096 or 16384 on Apple Silicon)
-    let page_size: u64 = 4096; // Default, macOS uses 4KB or 16KB pages
 
     // Parse free and inactive pages from vm_stat
     let mut pages_free: u64 = 0;

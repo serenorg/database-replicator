@@ -126,6 +126,9 @@ impl<'a> Reconciler<'a> {
     }
 
     /// Get all primary key values from a table.
+    ///
+    /// Note: Uses `::text` cast for both SELECT and ORDER BY to ensure consistent
+    /// lexicographic ordering that matches Rust string comparison.
     async fn get_all_primary_keys(
         &self,
         client: &Client,
@@ -133,21 +136,18 @@ impl<'a> Reconciler<'a> {
         table: &str,
         primary_key_columns: &[String],
     ) -> Result<Vec<Vec<String>>> {
-        let pk_cols: Vec<String> = primary_key_columns
+        // Use ::text cast for both SELECT and ORDER BY to match Rust comparison
+        let pk_cols_text: Vec<String> = primary_key_columns
             .iter()
             .map(|c| format!("\"{}\"::text", c))
             .collect();
 
         let query = format!(
             "SELECT {} FROM \"{}\".\"{}\" ORDER BY {}",
-            pk_cols.join(", "),
+            pk_cols_text.join(", "),
             schema,
             table,
-            primary_key_columns
-                .iter()
-                .map(|c| format!("\"{}\"", c))
-                .collect::<Vec<_>>()
-                .join(", ")
+            pk_cols_text.join(", ")
         );
 
         let rows = client
@@ -466,53 +466,50 @@ impl<'a> PkBatchReader<'a> {
     }
 
     /// Fetch the next batch of primary keys.
+    ///
+    /// IMPORTANT: Both SELECT and ORDER BY use `::text` cast to ensure the SQL
+    /// stream order matches the lexicographic comparison used in Rust. Without
+    /// this, numeric PKs would be ordered numerically in SQL (1, 2, 10) but
+    /// compared lexicographically in Rust ("1" < "10" < "2"), causing false
+    /// orphan detection and data loss.
     async fn fetch_next(&mut self) -> Result<Vec<Vec<String>>> {
         if self.exhausted {
             return Ok(Vec::new());
         }
 
-        let pk_cols_select: Vec<String> = self
+        // Cast PKs to text for both SELECT and ORDER BY to ensure SQL stream
+        // order matches Rust's lexicographic string comparison
+        let pk_cols_text: Vec<String> = self
             .pk_columns
             .iter()
             .map(|c| format!("\"{}\"::text", c))
             .collect();
 
-        let order_by: Vec<String> = self
-            .pk_columns
-            .iter()
-            .map(|c| format!("\"{}\"", c))
-            .collect();
-
         let query = if self.last_pk.is_some() {
-            // Keyset pagination: WHERE (pk1, pk2, ...) > ($1, $2, ...)
-            let pk_tuple: Vec<String> = self
-                .pk_columns
-                .iter()
-                .map(|c| format!("\"{}\"", c))
-                .collect();
-
+            // Keyset pagination: WHERE (pk1::text, pk2::text, ...) > ($1, $2, ...)
+            // Must use text-cast columns in WHERE to match ORDER BY ordering
             let params: Vec<String> = (1..=self.pk_columns.len())
                 .map(|i| format!("${}", i))
                 .collect();
 
             format!(
                 "SELECT {} FROM \"{}\".\"{}\" WHERE ({}) > ({}) ORDER BY {} LIMIT {}",
-                pk_cols_select.join(", "),
+                pk_cols_text.join(", "),
                 self.schema,
                 self.table,
-                pk_tuple.join(", "),
+                pk_cols_text.join(", "),
                 params.join(", "),
-                order_by.join(", "),
+                pk_cols_text.join(", "),
                 self.batch_size
             )
         } else {
             // First batch: no WHERE clause
             format!(
                 "SELECT {} FROM \"{}\".\"{}\" ORDER BY {} LIMIT {}",
-                pk_cols_select.join(", "),
+                pk_cols_text.join(", "),
                 self.schema,
                 self.table,
-                order_by.join(", "),
+                pk_cols_text.join(", "),
                 self.batch_size
             )
         };
