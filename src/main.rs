@@ -700,7 +700,7 @@ async fn main() -> anyhow::Result<()> {
                     tables_to_sync,       // Tables from filter
                     sync_interval,        // CLI: --sync-interval (default 60s)
                     reconcile_interval,   // CLI: --reconcile-interval (default 3600s)
-                    1000,                 // Batch size
+                    database_replicator::utils::calculate_optimal_batch_size(), // Auto-detect based on available memory
                     None,                 // State file: use default
                     once,                 // CLI: --once (run single cycle)
                     no_reconcile,         // CLI: --no-reconcile (disable delete detection)
