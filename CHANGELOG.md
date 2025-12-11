@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 ## [7.0.12] - 2025-12-11
 
+## [7.0.14] - 2025-12-11
+
+### Fixed
+
+- **Avoid duplicate JSONB IDs for SQLite tables without primary keys**: the ID detector now only uses real primary keys or candidate columns that are provably unique. Tables like `prices` with repeated `id` values fall back to row-number IDs, preventing immediate `prices_pkey` violations during inserts.
+
+### Added
+
+- **Duplicate-ID regression tests** covering both the rejection path (when duplicates exist) and the acceptance path for unique-but-not-PK `TEXT` IDs.
+
 ## [7.0.13] - 2025-12-11
 
 ### Fixed

@@ -207,32 +207,93 @@ pub fn convert_table_to_jsonb(conn: &Connection, table: &str) -> Result<Vec<(Str
 /// Checks for common ID column names: "id", "rowid", "_id" (case-insensitive).
 /// If found, returns the column name. Otherwise returns None.
 fn detect_id_column(conn: &Connection, table: &str) -> Result<Option<String>> {
-    // Get column names for the table
-    let query = format!("PRAGMA table_info(\"{}\")", table);
+    crate::jsonb::validate_table_name(table).context("Invalid SQLite table name")?;
+
+    // Get column metadata so we can detect declared primary keys
+    let query = format!("PRAGMA table_info({})", crate::utils::quote_ident(table));
     let mut stmt = conn
         .prepare(&query)
         .with_context(|| format!("Failed to get table info for '{}'", table))?;
 
-    let columns: Vec<String> = stmt
-        .query_map([], |row| row.get::<_, String>(1))
-        .context("Failed to query table columns")?
-        .collect::<Result<Vec<_>, _>>()
-        .context("Failed to collect column names")?;
+    let mut columns: Vec<String> = Vec::new();
+    let mut pk_columns: Vec<(i64, String)> = Vec::new();
 
-    // Check for common ID column names (case-insensitive)
+    let rows = stmt
+        .query_map([], |row| {
+            let name: String = row.get(1)?;
+            let pk_position: i64 = row.get(5)?;
+            Ok((name, pk_position))
+        })
+        .context("Failed to query table columns")?;
+
+    for row in rows {
+        let (name, pk_position) = row.context("Failed to parse table_info row")?;
+        if pk_position > 0 {
+            pk_columns.push((pk_position, name.clone()));
+        }
+        columns.push(name);
+    }
+
+    pk_columns.sort_by_key(|(pos, _)| *pos);
+    if pk_columns.len() == 1 {
+        let pk = pk_columns.remove(0).1;
+        tracing::debug!(
+            "Using primary key column '{}' as ID for table '{}'",
+            pk,
+            table
+        );
+        return Ok(Some(pk));
+    } else if pk_columns.len() > 1 {
+        tracing::info!(
+            "Table '{}' has a composite primary key; falling back to row numbers",
+            table
+        );
+        return Ok(None);
+    }
+
+    // No declared primary key – fall back to heuristic columns, but only if unique
     let id_candidates = ["id", "rowid", "_id"];
     for candidate in &id_candidates {
         if let Some(col) = columns.iter().find(|c| c.to_lowercase() == *candidate) {
-            tracing::debug!("Using column '{}' as ID for table '{}'", col, table);
-            return Ok(Some(col.clone()));
+            if column_is_unique(conn, table, col)? {
+                tracing::debug!("Using unique column '{}' as ID for table '{}'", col, table);
+                return Ok(Some(col.clone()));
+            } else {
+                tracing::warn!(
+                    "Column '{}' on table '{}' contains duplicate values; using row numbers instead",
+                    col,
+                    table
+                );
+            }
         }
     }
 
     tracing::debug!(
-        "No ID column found for table '{}', will use row number",
+        "No unique ID column found for table '{}', will use row number",
         table
     );
     Ok(None)
+}
+
+fn column_is_unique(conn: &Connection, table: &str, column: &str) -> Result<bool> {
+    crate::jsonb::validate_table_name(column).context("Invalid column name")?;
+
+    let query = format!(
+        "SELECT COUNT(*) as total_rows, COUNT(DISTINCT {}) as distinct_rows FROM {}",
+        crate::utils::quote_ident(column),
+        crate::utils::quote_ident(table)
+    );
+
+    let (total_rows, distinct_rows): (i64, i64) = conn
+        .query_row(&query, [], |row| Ok((row.get(0)?, row.get(1)?)))
+        .with_context(|| {
+            format!(
+                "Failed to evaluate uniqueness of column '{}' on table '{}'",
+                column, table
+            )
+        })?;
+
+    Ok(total_rows == distinct_rows)
 }
 
 /// Convert a batch of SQLite rows to JSONB format.
@@ -630,6 +691,37 @@ mod tests {
         let id_col = detect_id_column(&conn, "test").unwrap();
         assert!(id_col.is_some());
         assert_eq!(id_col.unwrap().to_lowercase(), "id");
+    }
+
+    #[test]
+    fn test_detect_id_column_rejects_duplicates() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        conn.execute("CREATE TABLE dup_ids (id TEXT, value TEXT)", [])
+            .unwrap();
+        conn.execute("INSERT INTO dup_ids (id, value) VALUES ('A', 'one')", [])
+            .unwrap();
+        conn.execute("INSERT INTO dup_ids (id, value) VALUES ('A', 'two')", [])
+            .unwrap();
+
+        let id_col = detect_id_column(&conn, "dup_ids").unwrap();
+        assert!(id_col.is_none(), "Duplicate ID column should be rejected");
+    }
+
+    #[test]
+    fn test_detect_id_column_accepts_unique_text() {
+        let conn = Connection::open_in_memory().unwrap();
+
+        conn.execute("CREATE TABLE unique_ids (id TEXT, value TEXT)", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO unique_ids (id, value) VALUES ('A', 'one'), ('B', 'two')",
+            [],
+        )
+        .unwrap();
+
+        let id_col = detect_id_column(&conn, "unique_ids").unwrap();
+        assert_eq!(id_col.as_deref(), Some("id"));
     }
 
     #[test]
