@@ -153,7 +153,9 @@ pub async fn init(
                 );
             }
             if drop_existing {
-                tracing::warn!("⚠ --drop-existing flag is not applicable for SQLite sources");
+                tracing::info!(
+                    "--drop-existing: existing JSONB tables on the target will be dropped"
+                );
             }
             if !enable_sync {
                 tracing::warn!(
@@ -161,7 +163,7 @@ pub async fn init(
                 );
             }
 
-            return init_sqlite_to_postgres(source_url, target_url).await;
+            return init_sqlite_to_postgres(source_url, target_url, drop_existing).await;
         }
         crate::SourceType::MongoDB => {
             // MongoDB to PostgreSQL migration (simpler path)
@@ -853,6 +855,7 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
 ///
 /// * `sqlite_path` - Path to SQLite database file (.db, .sqlite, or .sqlite3)
 /// * `target_url` - PostgreSQL connection string for target (Seren) database
+/// * `drop_existing` - Drop any existing JSONB tables on the target before migrating
 ///
 /// # Returns
 ///
@@ -874,12 +877,17 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
 /// # async fn example() -> Result<()> {
 /// init_sqlite_to_postgres(
 ///     "database.db",
-///     "postgresql://user:pass@seren.example.com/targetdb"
+///     "postgresql://user:pass@seren.example.com/targetdb",
+///     false,
 /// ).await?;
 /// # Ok(())
 /// # }
 /// ```
-pub async fn init_sqlite_to_postgres(sqlite_path: &str, target_url: &str) -> Result<()> {
+pub async fn init_sqlite_to_postgres(
+    sqlite_path: &str,
+    target_url: &str,
+    drop_existing: bool,
+) -> Result<()> {
     tracing::info!("Starting SQLite to PostgreSQL migration...");
 
     // Step 1: Validate SQLite file
@@ -939,6 +947,12 @@ pub async fn init_sqlite_to_postgres(sqlite_path: &str, target_url: &str) -> Res
             table_name,
             row_count
         );
+
+        if drop_existing {
+            crate::jsonb::writer::drop_jsonb_table(&target_client, table_name)
+                .await
+                .with_context(|| format!("Failed to drop existing JSONB table '{}'", table_name))?;
+        }
 
         // Create JSONB table in PostgreSQL
         crate::jsonb::writer::create_jsonb_table(&target_client, table_name, "sqlite")

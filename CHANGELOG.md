@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [7.0.12] - 2025-12-11
 
+## [7.0.13] - 2025-12-11
+
+### Fixed
+
+- **SQLite re-runs are now deterministic**: `truncate_jsonb_table()` now logs at INFO level, verifies the target table is empty, and errors early if rows remain instead of failing later with duplicate primary keys.
+- **`--drop-existing` works for SQLite**: When the flag is supplied, each JSONB table is dropped before recreation, ensuring a pristine schema even if manual changes were made to the target database.
+
+### Added
+
+- **`drop_jsonb_table()` helper**: Shared helper allows future workflows (and the SQLite path today) to explicitly remove JSONB tables when a clean rebuild is required.
+
 ### Added
 
 - **Memory-efficient SQLite migration**: SQLite to PostgreSQL migration now processes rows in batches instead of loading entire tables into memory. This enables migration of large SQLite databases (7M+ rows, multi-GB files) without OOM errors. Batch size automatically adjusts based on available system memory.

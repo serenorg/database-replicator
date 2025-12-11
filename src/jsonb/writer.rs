@@ -1,7 +1,7 @@
 // ABOUTME: Write JSONB data to PostgreSQL with metadata
 // ABOUTME: Handles table creation, single row inserts, and batch inserts
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use tokio_postgres::Client;
 
 /// Create a table with JSONB schema for storing non-PostgreSQL data
@@ -126,7 +126,7 @@ pub async fn truncate_jsonb_table(client: &Client, table_name: &str) -> Result<(
     crate::jsonb::validate_table_name(table_name)
         .context("Invalid table name for JSONB table truncation")?;
 
-    tracing::debug!("Truncating JSONB table '{}'", table_name);
+    tracing::info!("Truncating JSONB table '{}'", table_name);
 
     let truncate_sql = format!(
         r#"TRUNCATE TABLE "{}" RESTART IDENTITY CASCADE"#,
@@ -138,7 +138,45 @@ pub async fn truncate_jsonb_table(client: &Client, table_name: &str) -> Result<(
         .await
         .with_context(|| format!("Failed to truncate JSONB table '{}'", table_name))?;
 
-    tracing::debug!("Truncated JSONB table '{}'", table_name);
+    let verify_sql = format!(r#"SELECT COUNT(*) FROM "{}""#, table_name);
+    let remaining_rows: i64 = client
+        .query_one(&verify_sql, &[])
+        .await
+        .with_context(|| format!("Failed to verify truncate of '{}'", table_name))?
+        .get(0);
+
+    if remaining_rows > 0 {
+        bail!(
+            "Truncate verification failed: table '{}' still has {} rows after truncate",
+            table_name,
+            remaining_rows
+        );
+    }
+
+    tracing::info!(
+        "Truncated JSONB table '{}' successfully ({} rows remaining)",
+        table_name,
+        remaining_rows
+    );
+
+    Ok(())
+}
+
+/// Drop a JSONB table if it exists.
+pub async fn drop_jsonb_table(client: &Client, table_name: &str) -> Result<()> {
+    crate::jsonb::validate_table_name(table_name)
+        .context("Invalid table name for JSONB table drop")?;
+
+    tracing::info!("Dropping JSONB table '{}'", table_name);
+
+    let drop_sql = format!(r#"DROP TABLE IF EXISTS "{}" CASCADE"#, table_name);
+
+    client
+        .execute(&drop_sql, &[])
+        .await
+        .with_context(|| format!("Failed to drop JSONB table '{}'", table_name))?;
+
+    tracing::info!("Dropped JSONB table '{}' (if it existed)", table_name);
 
     Ok(())
 }

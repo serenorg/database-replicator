@@ -560,7 +560,7 @@ No. The tool opens SQLite databases in **read-only mode**. It's impossible to mo
 
 ### Can I replicate the same database twice?
 
-Re-running `init` will **drop and recreate** tables. All data will be replaced with fresh data from SQLite. This is useful for:
+Re-running `init` will **clear** previously migrated tables (via truncate by default or a full drop when `--drop-existing` is supplied). All data will be replaced with fresh data from SQLite. This is useful for:
 - Correcting errors in the first migration
 - Refreshing data from an updated SQLite snapshot
 
@@ -570,7 +570,7 @@ SQLite replications are snapshot-only. For incremental updates:
 
 1. **Option 1**: Periodic full re-migration
    - Create SQLite backup/snapshot
-   - Re-run `init` with `--drop-existing` flag (implied in init)
+   - Re-run `init` (add `--drop-existing` to drop/recreate tables instead of truncate)
 
 2. **Option 2**: Track changes in application
    - Maintain updated_at timestamps
