@@ -911,21 +911,34 @@ pub async fn init_sqlite_to_postgres(sqlite_path: &str, target_url: &str) -> Res
     let target_client = postgres::connect_with_retry(target_url).await?;
     tracing::info!("  ✓ Connected to PostgreSQL target");
 
-    // Step 4: Migrate each table
-    tracing::info!("Step 4/4: Migrating tables...");
-    for (idx, table_name) in tables.iter().enumerate() {
+    // Get row counts for progress display
+    let mut table_row_counts: Vec<(&str, usize)> = Vec::new();
+    let mut total_rows = 0usize;
+    for table_name in &tables {
+        let count =
+            crate::sqlite::reader::get_table_row_count(&sqlite_conn, table_name).unwrap_or(0);
+        table_row_counts.push((table_name, count));
+        total_rows += count;
+    }
+
+    tracing::info!(
+        "Total rows to migrate: {} across {} table(s)",
+        total_rows,
+        tables.len()
+    );
+
+    // Step 4: Migrate each table using batched processing
+    tracing::info!("Step 4/4: Migrating tables (batched processing)...");
+    let mut migrated_rows = 0usize;
+
+    for (idx, (table_name, row_count)) in table_row_counts.iter().enumerate() {
         tracing::info!(
-            "Migrating table {}/{}: '{}'",
+            "Migrating table {}/{}: '{}' ({} rows)",
             idx + 1,
             tables.len(),
-            table_name
+            table_name,
+            row_count
         );
-
-        // Convert SQLite table to JSONB
-        let rows = crate::sqlite::converter::convert_table_to_jsonb(&sqlite_conn, table_name)
-            .with_context(|| format!("Failed to convert table '{}' to JSONB", table_name))?;
-
-        tracing::info!("  ✓ Converted {} rows from '{}'", rows.len(), table_name);
 
         // Create JSONB table in PostgreSQL
         crate::jsonb::writer::create_jsonb_table(&target_client, table_name, "sqlite")
@@ -939,21 +952,39 @@ pub async fn init_sqlite_to_postgres(sqlite_path: &str, target_url: &str) -> Res
 
         tracing::info!("  ✓ Created JSONB table '{}' in PostgreSQL", table_name);
 
-        if !rows.is_empty() {
-            // Batch insert all rows
-            crate::jsonb::writer::insert_jsonb_batch(&target_client, table_name, rows, "sqlite")
-                .await
-                .with_context(|| format!("Failed to insert data into table '{}'", table_name))?;
+        // Use batched conversion for memory efficiency
+        let rows_processed = crate::sqlite::converter::convert_table_batched(
+            &sqlite_conn,
+            &target_client,
+            table_name,
+            "sqlite",
+            None, // Use default batch size
+        )
+        .await
+        .with_context(|| format!("Failed to migrate table '{}'", table_name))?;
 
-            tracing::info!("  ✓ Inserted all rows into '{}'", table_name);
+        migrated_rows += rows_processed;
+
+        if rows_processed > 0 {
+            tracing::info!(
+                "  ✓ Migrated {} rows from '{}' ({:.1}% of total)",
+                rows_processed,
+                table_name,
+                if total_rows > 0 {
+                    migrated_rows as f64 / total_rows as f64 * 100.0
+                } else {
+                    100.0
+                }
+            );
         } else {
-            tracing::info!("  ✓ Table '{}' is empty (no rows to insert)", table_name);
+            tracing::info!("  ✓ Table '{}' is empty (no rows to migrate)", table_name);
         }
     }
 
     tracing::info!("✅ SQLite to PostgreSQL migration complete!");
     tracing::info!(
-        "   Migrated {} table(s) from '{}' to PostgreSQL",
+        "   Migrated {} row(s) from {} table(s) in '{}'",
+        migrated_rows,
         tables.len(),
         sqlite_path
     );
