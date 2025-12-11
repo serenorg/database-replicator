@@ -235,6 +235,166 @@ fn detect_id_column(conn: &Connection, table: &str) -> Result<Option<String>> {
     Ok(None)
 }
 
+/// Convert a batch of SQLite rows to JSONB format.
+///
+/// Converts a pre-read batch of rows, extracting IDs and converting to JSON.
+fn convert_batch_to_jsonb(
+    rows: Vec<HashMap<String, rusqlite::types::Value>>,
+    id_column: &Option<String>,
+    start_row_num: usize,
+    table: &str,
+) -> Result<Vec<(String, JsonValue)>> {
+    let mut result = Vec::with_capacity(rows.len());
+
+    for (batch_idx, mut row) in rows.into_iter().enumerate() {
+        let row_num = start_row_num + batch_idx;
+
+        // Remove internal _rowid tracking column before conversion
+        row.remove("_rowid");
+
+        // Extract or generate ID
+        let id = if let Some(ref id_col) = id_column {
+            match row.get(id_col) {
+                Some(rusqlite::types::Value::Integer(i)) => i.to_string(),
+                Some(rusqlite::types::Value::Text(s)) => s.clone(),
+                Some(rusqlite::types::Value::Real(f)) => f.to_string(),
+                _ => (row_num + 1).to_string(),
+            }
+        } else {
+            (row_num + 1).to_string()
+        };
+
+        // Convert row to JSON
+        let json_data = sqlite_row_to_json(row).with_context(|| {
+            format!(
+                "Failed to convert row {} in table '{}' to JSON",
+                row_num + 1,
+                table
+            )
+        })?;
+
+        result.push((id, json_data));
+    }
+
+    Ok(result)
+}
+
+/// Convert and insert a SQLite table to PostgreSQL using batched processing.
+///
+/// This function uses memory-efficient batched processing to handle large tables:
+/// 1. Reads rows in batches (default 10,000 rows)
+/// 2. Converts each batch to JSONB format
+/// 3. Inserts each batch to PostgreSQL before reading the next
+///
+/// Memory usage stays constant regardless of table size.
+///
+/// # Arguments
+///
+/// * `sqlite_conn` - SQLite database connection
+/// * `pg_client` - PostgreSQL client connection
+/// * `table` - Table name to convert
+/// * `source_type` - Source type label for metadata (e.g., "sqlite")
+/// * `batch_size` - Optional batch size (default: 10,000 rows)
+///
+/// # Returns
+///
+/// Total number of rows processed.
+///
+/// # Examples
+///
+/// ```no_run
+/// # use database_replicator::sqlite::converter::convert_table_batched;
+/// # async fn example(
+/// #     sqlite_conn: &rusqlite::Connection,
+/// #     pg_client: &tokio_postgres::Client,
+/// # ) -> anyhow::Result<()> {
+/// let rows_processed = convert_table_batched(
+///     sqlite_conn,
+///     pg_client,
+///     "large_table",
+///     "sqlite",
+///     None,
+/// ).await?;
+/// println!("Processed {} rows", rows_processed);
+/// # Ok(())
+/// # }
+/// ```
+pub async fn convert_table_batched(
+    sqlite_conn: &Connection,
+    pg_client: &tokio_postgres::Client,
+    table: &str,
+    source_type: &str,
+    batch_size: Option<usize>,
+) -> Result<usize> {
+    use crate::sqlite::reader::{read_table_batch, BatchedTableReader};
+
+    // Use memory-based batch size calculation if not specified
+    let batch_size = batch_size.unwrap_or_else(crate::utils::calculate_optimal_batch_size);
+
+    tracing::info!(
+        "Starting batched conversion of table '{}' (batch_size={})",
+        table,
+        batch_size
+    );
+
+    // Detect ID column once before processing batches
+    let id_column = detect_id_column(sqlite_conn, table)?;
+
+    // Create batched reader
+    let mut reader = BatchedTableReader::new(sqlite_conn, table, batch_size)?;
+
+    let mut total_rows = 0usize;
+    let mut batch_num = 0usize;
+
+    // Process batches until exhausted
+    while let Some(rows) = read_table_batch(sqlite_conn, &mut reader)? {
+        let batch_row_count = rows.len();
+        batch_num += 1;
+
+        tracing::debug!(
+            "Processing batch {} ({} rows) from table '{}'",
+            batch_num,
+            batch_row_count,
+            table
+        );
+
+        // Convert batch to JSONB
+        let jsonb_rows = convert_batch_to_jsonb(rows, &id_column, total_rows, table)?;
+
+        // Insert batch to PostgreSQL
+        if !jsonb_rows.is_empty() {
+            crate::jsonb::writer::insert_jsonb_batch(pg_client, table, jsonb_rows, source_type)
+                .await
+                .with_context(|| {
+                    format!(
+                        "Failed to insert batch {} into PostgreSQL table '{}'",
+                        batch_num, table
+                    )
+                })?;
+        }
+
+        total_rows += batch_row_count;
+
+        // Log progress for large tables
+        if total_rows.is_multiple_of(100_000) {
+            tracing::info!(
+                "Progress: {} rows processed from table '{}'",
+                total_rows,
+                table
+            );
+        }
+    }
+
+    tracing::info!(
+        "Completed batched conversion of table '{}': {} total rows in {} batches",
+        table,
+        total_rows,
+        batch_num
+    );
+
+    Ok(total_rows)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
