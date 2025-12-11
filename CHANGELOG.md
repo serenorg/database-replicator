@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.12] - 2025-12-11
+
+### Added
+
+- **Memory-efficient SQLite migration**: SQLite to PostgreSQL migration now processes rows in batches instead of loading entire tables into memory. This enables migration of large SQLite databases (7M+ rows, multi-GB files) without OOM errors. Batch size automatically adjusts based on available system memory.
+
+### Changed
+
+- **SQLite converter uses memory-based batch sizing**: Like the xmin sync, SQLite migration now uses `calculate_optimal_batch_size()` to determine batch size (25% of available RAM, clamped to 1K-50K rows).
+
 ## [7.0.11] - 2025-12-10
 
 ### Fixed
