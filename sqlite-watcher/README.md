@@ -42,8 +42,8 @@ Flag summary:
 - The current WAL watcher polls the `*.sqlite-wal` file for byte growth. To keep WAL history available, configure your writers with `PRAGMA journal_mode=WAL;` and raise `wal_autocheckpoint` (or disable it) so the SQLite engine does not aggressively truncate the log.
 - Change queue data is stored under `~/.seren/sqlite-watcher/changes.db`. The binary enforces owner-only permissions on that directory to keep tokens + change data private.
 
-### Placeholder change format
+### Row change format
 
-Until the WAL decoder lands, each growth event is recorded as a `RowChange` with `table_name="__wal__"`, `operation=insert`, and a JSON payload describing the byte delta + timestamp. Downstream components can treat these as heartbeats while we finish Tickets B–D.
+Each WAL commit triggers a snapshot diff across user tables. sqlite-watcher emits `RowChange` structs for inserts, updates, and deletes using declared primary keys (falling back to `rowid` when none exists). Payloads contain the latest row image so downstream consumers can apply upserts or tombstones without touching customer schemas.
 
 Additional design constraints and follow-up work items live in `docs/plans/sqlite-watcher-plan.md` and `docs/plans/sqlite-watcher-tickets.md`.

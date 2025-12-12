@@ -8,7 +8,6 @@ use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
-use sqlite_watcher::decoder::WalGrowthDecoder;
 use sqlite_watcher::queue::ChangeQueue;
 #[cfg(unix)]
 use sqlite_watcher::server::spawn_unix_server;
@@ -224,49 +223,31 @@ fn main() -> Result<()> {
     );
 
     let queue = ChangeQueue::open(&config.queue_path)?;
-    let decoder = WalGrowthDecoder::default();
     let server_handle = start_grpc_server(&config.listen, &config.queue_path, &auth_token)?;
-    let (event_tx, event_rx) = mpsc::channel();
+    let (change_tx, change_rx) = mpsc::channel();
     let _wal_handle = start_wal_watcher(
         &config.database_path,
         TailConfig {
             poll_interval: config.poll_interval,
             min_event_bytes: config.min_event_bytes,
         },
-        event_tx,
+        change_tx,
     )?;
 
-    for event in event_rx {
-        match process_wal_event(&decoder, &queue, &event) {
-            Ok(change_ids) if !change_ids.is_empty() => {
-                tracing::info!(
-                    bytes_added = event.bytes_added,
-                    wal_size = event.current_size,
-                    change_count = change_ids.len(),
-                    "queued wal growth event"
-                );
+    for change in change_rx {
+        let new_change = change.into_new_change();
+        match queue.enqueue(&new_change) {
+            Ok(change_id) => {
+                tracing::info!(change_id, table = %new_change.table_name, op = %new_change.operation.as_str(), "queued row change");
             }
             Err(err) => {
-                tracing::warn!(error = %err, "failed to persist wal event to queue");
+                tracing::warn!(error = %err, "failed to persist row change to queue");
             }
-            _ => {}
         }
     }
 
     drop(server_handle);
     Ok(())
-}
-
-fn process_wal_event(
-    decoder: &WalGrowthDecoder,
-    queue: &ChangeQueue,
-    event: &sqlite_watcher::wal::WalEvent,
-) -> Result<Vec<i64>> {
-    let mut ids = Vec::new();
-    for row in decoder.decode(event) {
-        ids.push(queue.enqueue(&row.into_new_change())?);
-    }
-    Ok(ids)
 }
 
 fn read_token_file(path: &Path) -> Result<String> {
@@ -314,7 +295,9 @@ fn start_grpc_server(
 mod tests {
     use super::*;
     use clap::Parser;
-    use sqlite_watcher::queue::ChangeQueue;
+    use serde_json::json;
+    use sqlite_watcher::change::RowChange;
+    use sqlite_watcher::queue::{ChangeOperation, ChangeQueue};
     use tempfile::{tempdir, NamedTempFile};
 
     #[test]
@@ -353,19 +336,22 @@ mod tests {
     }
 
     #[test]
-    fn persist_wal_events_into_queue() {
+    fn enqueue_row_changes_into_queue() {
         let dir = tempdir().unwrap();
         let queue_path = dir.path().join("queue.db");
         let queue = ChangeQueue::open(&queue_path).unwrap();
-        let decoder = WalGrowthDecoder::default();
-
-        let event = sqlite_watcher::wal::WalEvent {
-            bytes_added: 2048,
-            current_size: 4096,
+        let change = RowChange {
+            table_name: "accounts".into(),
+            operation: ChangeOperation::Insert,
+            primary_key: "rowid:1".into(),
+            payload: Some(json!({ "id": 1, "balance": 50 })),
+            wal_frame: None,
+            cursor: None,
         };
-        let change_ids = process_wal_event(&decoder, &queue, &event).unwrap();
+        let change_id = queue.enqueue(&change.into_new_change()).unwrap();
         let batch = queue.fetch_batch(10).unwrap();
-        assert_eq!(batch.len(), change_ids.len());
-        assert_eq!(batch[0].table_name, "__wal__");
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0].change_id, change_id);
+        assert_eq!(batch[0].table_name, "accounts");
     }
 }
