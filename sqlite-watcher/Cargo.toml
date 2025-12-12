@@ -1,0 +1,20 @@
+[package]
+name = "sqlite-watcher"
+version = "0.1.0"
+edition = "2021"
+authors = ["SerenAI <eng@serendb.com>"]
+description = "SQLite WAL tailer that streams change events to database-replicator."
+license = "Apache-2.0"
+repository = "https://github.com/serenorg/database-replicator"
+readme = "README.md"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.4", features = ["derive", "env"] }
+dirs = "5.0"
+rusqlite = "0.30"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tempfile = "3.8"
