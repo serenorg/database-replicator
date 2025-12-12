@@ -36,7 +36,8 @@ indicatif = "0.18"
 which = "6.0"
 home = ">=0.5.4, <0.5.12"  # Pin to avoid v0.5.12 which requires unstable edition2024
 rand = "0.8"
-reqwest = { version = "0.11", features = ["json"] }
+# Disable rustls to avoid pulling rustls-pemfile (unmaintained)
+reqwest = { version = "0.11", default-features = false, features = ["json", "native-tls"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 sha2 = "0.10"
@@ -51,6 +52,12 @@ url = "2.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 libc = "0.2"
 rust_decimal = { version = "1.39", features = ["db-tokio-postgres"] }
+tonic = { version = "0.11", features = ["transport"] }
+tower = "0.4"
+sqlite-watcher = { path = "sqlite-watcher" }
+
+[patch.crates-io]
+fxhash = { path = "third-party/fxhash" }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"
