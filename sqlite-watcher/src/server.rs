@@ -108,8 +108,8 @@ pub fn spawn_unix(path: &Path, queue_path: PathBuf, token: String) -> Result<Ser
         })?;
     }
     let path_buf = path.to_path_buf();
-    let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let listener_path = path_buf.clone();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let thread = thread::spawn(move || -> Result<()> {
         let runtime = Builder::new_multi_thread().enable_all().build()?;
         runtime.block_on(async move {

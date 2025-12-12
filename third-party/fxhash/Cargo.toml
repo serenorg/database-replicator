@@ -1,0 +1,10 @@
+[package]
+name = "fxhash"
+version = "0.2.1"
+edition = "2018"
+description = "Local replacement for fxhash using rustc-hash"
+license = "CC0-1.0"
+publish = false
+
+[dependencies]
+rustc-hash = "1.1"
