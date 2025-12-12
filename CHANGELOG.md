@@ -97,7 +97,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
-- **README-SQLite.md**: Updated all examples to include `-y` flag and added notes explaining that interactive mode only works with PostgreSQL sources.
+- **sqlite-watcher-docs/README-SQLite.md**: Updated all examples to include `-y` flag and added notes explaining that interactive mode only works with PostgreSQL sources.
 
 ## [7.0.4] - 2025-12-09
 
@@ -408,7 +408,7 @@ All notable changes to this project will be documented in this file.
 - **File-based migration** (local execution only, no remote support)
 - **Path validation** with directory traversal prevention
 - **Comprehensive security testing**: 14 SQLite-specific tests
-- **Documentation**: [README-SQLite.md](README-SQLite.md) with usage examples
+- **Documentation**: [sqlite-watcher-docs/README-SQLite.md](sqlite-watcher-docs/README-SQLite.md) with usage examples
 - **Integration tests**: Full workflow testing with real SQLite files
 
 #### MongoDB Support (Phase 2)
@@ -491,7 +491,7 @@ All notable changes to this project will be documented in this file.
 
 - **[README.md](README.md)** - Universal landing page with multi-database support
 - **[README-PostgreSQL.md](README-PostgreSQL.md)** - Comprehensive PostgreSQL replication guide (1,000+ lines)
-- **[README-SQLite.md](README-SQLite.md)** - Complete SQLite migration guide
+- **[sqlite-watcher-docs/README-SQLite.md](sqlite-watcher-docs/README-SQLite.md)** - Complete SQLite migration guide
 - **[README-MongoDB.md](README-MongoDB.md)** - Complete MongoDB migration guide with periodic refresh
 - **[README-MySQL.md](README-MySQL.md)** - Complete MySQL/MariaDB migration guide
 - **[docs/plans/multi-database-support.md](docs/plans/multi-database-support.md)** - Implementation plan and architecture

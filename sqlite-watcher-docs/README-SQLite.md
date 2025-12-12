@@ -600,7 +600,7 @@ For issues or questions:
 
 Once you have completed the initial snapshot (`database-replicator init --source sqlite ...`), you can switch to incremental change capture:
 
-1. Install `sqlite-watcher` (see [docs/installers.md](docs/installers.md) for Linux systemd units, macOS launchd plists, and Windows service guidance).
+1. Install `sqlite-watcher` (see [sqlite-watcher-docs/installers.md](installers.md) for Linux systemd units, macOS launchd plists, and Windows service guidance).
 2. Start the watcher beside your `.sqlite` file (example for Linux/macOS):
 
    ```bash
