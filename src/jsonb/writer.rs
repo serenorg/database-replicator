@@ -2,7 +2,7 @@
 // ABOUTME: Handles table creation, single row inserts, and batch inserts
 
 use anyhow::{bail, Context, Result};
-use tokio_postgres::Client;
+use tokio_postgres::{types::ToSql, Client};
 
 /// Create a table with JSONB schema for storing non-PostgreSQL data
 ///
@@ -468,6 +468,49 @@ pub async fn insert_jsonb_batch(
         table_name
     );
 
+    Ok(())
+}
+
+/// Delete rows from a JSONB table by primary key
+pub async fn delete_jsonb_rows(client: &Client, table_name: &str, ids: &[String]) -> Result<()> {
+    if ids.is_empty() {
+        return Ok(());
+    }
+    crate::jsonb::validate_table_name(table_name)?;
+    let sql = format!(r#"DELETE FROM "{}" WHERE id = ANY($1)"#, table_name);
+    client.execute(&sql, &[&ids]).await?;
+    Ok(())
+}
+
+/// Upsert rows into a JSONB table (used for deduped "_latest" tables)
+pub async fn upsert_jsonb_rows(
+    client: &Client,
+    table_name: &str,
+    rows: &[(String, serde_json::Value)],
+    source_type: &str,
+) -> Result<()> {
+    if rows.is_empty() {
+        return Ok(());
+    }
+    crate::jsonb::validate_table_name(table_name)?;
+
+    let mut value_placeholders = Vec::with_capacity(rows.len());
+    let mut params: Vec<&(dyn ToSql + Sync)> = Vec::with_capacity(rows.len() * 3);
+
+    for (idx, (id, data)) in rows.iter().enumerate() {
+        let base = idx * 3 + 1;
+        value_placeholders.push(format!("(${}, ${}, ${})", base, base + 1, base + 2));
+        params.push(id);
+        params.push(data);
+        params.push(&source_type);
+    }
+
+    let sql = format!(
+        r#"INSERT INTO "{}" (id, data, _source_type) VALUES {} ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, _source_type = EXCLUDED._source_type, _migrated_at = NOW()"#,
+        table_name,
+        value_placeholders.join(", ")
+    );
+    client.execute(&sql, &params).await?;
     Ok(())
 }
 

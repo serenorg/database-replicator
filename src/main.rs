@@ -4,6 +4,7 @@
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
 use database_replicator::commands;
+use std::path::PathBuf;
 
 #[derive(Parser)]
 #[command(name = "database-replicator")]
@@ -175,6 +176,24 @@ enum Commands {
         /// Show status of the sync daemon
         #[arg(long)]
         daemon_status: bool,
+    },
+    /// Consume sqlite-watcher change batches and apply them to SerenDB JSONB tables
+    SyncSqlite {
+        /// Target PostgreSQL/Seren connection string
+        #[arg(long)]
+        target: String,
+        /// sqlite-watcher endpoint (unix:/path or tcp:host:port)
+        #[arg(long, default_value = "unix:/tmp/sqlite-watcher.sock")]
+        watcher_endpoint: String,
+        /// Optional shared-secret token file (defaults to ~/.seren/sqlite-watcher/token)
+        #[arg(long)]
+        token_file: Option<PathBuf>,
+        /// Incremental mode: append (raw only) or append_deduped (maintains *_latest tables)
+        #[arg(long, value_enum, default_value = "append")]
+        incremental_mode: commands::sync_sqlite::IncrementalMode,
+        /// Number of watcher rows to pull per batch
+        #[arg(long, default_value_t = 500)]
+        batch_size: u32,
     },
     /// Check replication status and lag in real-time
     Status {
@@ -747,6 +766,22 @@ async fn main() -> anyhow::Result<()> {
                 exclude_tables,
             )?;
             commands::verify(&source, &target, Some(filter)).await
+        }
+        Commands::SyncSqlite {
+            target,
+            watcher_endpoint,
+            token_file,
+            incremental_mode,
+            batch_size,
+        } => {
+            commands::sync_sqlite::run(commands::sync_sqlite::SyncSqliteOptions {
+                target,
+                watcher_endpoint,
+                token_file,
+                incremental_mode,
+                batch_size,
+            })
+            .await
         }
         Commands::Target { args } => commands::target(args).await,
     }

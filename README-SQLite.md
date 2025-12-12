@@ -596,3 +596,21 @@ No. The tool uses `SQLITE_OPEN_READ_ONLY` which allows concurrent readers. Other
 For issues or questions:
 - **GitHub Issues**: https://github.com/serenorg/database-replicator/issues
 - **Email**: support@seren.ai
+## Incremental sqlite-watcher sync
+
+After running the baseline snapshot (`init --source sqlite ...`), start the sqlite-watcher service alongside your database and consume its change feed with the new `sync-sqlite` command:
+
+```bash
+sqlite-watcher --db /path/to/app.db --listen unix:/tmp/sqlite-watcher.sock &
+
+database-replicator sync-sqlite \
+  --target "postgresql://user:pass@your-serendb.serendb.com:5432/app" \
+  --watcher-endpoint unix:/tmp/sqlite-watcher.sock \
+  --incremental-mode append
+```
+
+- `--incremental-mode append_deduped` maintains `_latest` tables (one row per primary key) in addition to the raw append-only tables.
+- The command refuses to run unless `sqlite_sync_state` shows a completed baseline snapshot so we always have a safe starting point.
+- Tokens are read from `~/.seren/sqlite-watcher/token` by default; pass `--token-file` to override.
+
+The command connects to sqlite-watcher over TCP or Unix sockets, pulls change batches, applies them to the JSONB tables via the existing writer helpers, updates the `sqlite_sync_state` checkpoint table, and acknowledges progress back to the watcher.

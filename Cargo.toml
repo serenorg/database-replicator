@@ -1,3 +1,10 @@
+[workspace]
+resolver = "2"
+members = [
+    ".",
+    "sqlite-watcher",
+]
+
 [package]
 name = "database-replicator"
 version = "7.0.14"
@@ -44,6 +51,9 @@ url = "2.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 libc = "0.2"
 rust_decimal = { version = "1.39", features = ["db-tokio-postgres"] }
+tonic = { version = "0.11", features = ["transport"] }
+tower = "0.4"
+sqlite-watcher = { path = "sqlite-watcher" }
 
 [target.'cfg(unix)'.dependencies]
 daemonize = "0.5"
