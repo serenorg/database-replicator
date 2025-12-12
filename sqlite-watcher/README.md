@@ -1,5 +1,10 @@
-# sqlite-watcher
+# sqlite-watcher (alpha)
 
-Work-in-progress tooling for monitoring SQLite databases. This issue adds the durable change queue used by the watcher service. The queue stores row-level changes plus per-table checkpoints in `~/.seren/sqlite-watcher/changes.db` so restarts can resume from the last acknowledged WAL frame.
+This crate currently ships the shared queue + gRPC server used by `database-replicator sync-sqlite`. The `sqlite-watcher` binary includes:
 
-Run `cargo test -p sqlite-watcher` to execute the queue integration tests.
+- `serve`: start the queue-backed gRPC API so clients can pull change batches.
+- `enqueue`: helper for tests/smoke scripts to add sample changes to the queue database.
+
+> **Note:** WAL tailing is still under active development; use the binary today to test queue + sync flows.
+
+See `sqlite-watcher-docs/installers.md` for per-OS service guidance and `scripts/test-sqlite-delta.sh` for the end-to-end smoke test.

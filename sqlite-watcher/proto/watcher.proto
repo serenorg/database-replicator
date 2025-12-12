@@ -3,14 +3,9 @@ syntax = "proto3";
 package sqlitewatcher;
 
 message HealthCheckRequest {}
-message HealthCheckResponse {
-  string status = 1;
-}
+message HealthCheckResponse { string status = 1; }
 
-message ListChangesRequest {
-  uint32 limit = 1;
-}
-
+message ListChangesRequest { uint32 limit = 1; }
 message Change {
   int64 change_id = 1;
   string table_name = 2;
@@ -20,23 +15,12 @@ message Change {
   string wal_frame = 6;
   string cursor = 7;
 }
+message ListChangesResponse { repeated Change changes = 1; }
 
-message ListChangesResponse {
-  repeated Change changes = 1;
-}
+message AckChangesRequest { int64 up_to_change_id = 1; }
+message AckChangesResponse { uint64 acknowledged = 1; }
 
-message AckChangesRequest {
-  int64 up_to_change_id = 1;
-}
-
-message AckChangesResponse {
-  uint64 acknowledged = 1;
-}
-
-message GetStateRequest {
-  string table_name = 1;
-}
-
+message GetStateRequest { string table_name = 1; }
 message GetStateResponse {
   bool exists = 1;
   int64 last_change_id = 2;
@@ -50,7 +34,6 @@ message SetStateRequest {
   string last_wal_frame = 3;
   string cursor = 4;
 }
-
 message SetStateResponse {}
 
 service Watcher {

@@ -8,7 +8,13 @@ use tokio::runtime::Builder;
 use tokio::sync::oneshot;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::service::Interceptor;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::transport::Server;
+use tonic::{Request, Response, Status};
+
+#[cfg(unix)]
+use tokio::net::UnixListener;
+#[cfg(unix)]
+use tokio_stream::wrappers::UnixListenerStream;
 
 use crate::queue::{ChangeQueue, QueueState};
 use crate::watcher_proto::watcher_server::{Watcher, WatcherServer};
@@ -18,117 +24,118 @@ use crate::watcher_proto::{
     SetStateRequest, SetStateResponse,
 };
 
-#[cfg(unix)]
-use tokio::net::UnixListener;
-#[cfg(unix)]
-use tokio_stream::wrappers::UnixListenerStream;
-
-pub struct ServerHandle {
-    shutdown: Option<oneshot::Sender<()>>,
-    thread: Option<JoinHandle<Result<()>>>,
+pub enum ServerHandle {
+    Tcp {
+        shutdown: Option<oneshot::Sender<()>>,
+        thread: Option<JoinHandle<Result<()>>>,
+    },
     #[cfg(unix)]
-    unix_path: Option<PathBuf>,
+    Unix {
+        shutdown: Option<oneshot::Sender<()>>,
+        thread: Option<JoinHandle<Result<()>>>,
+        path: PathBuf,
+    },
 }
 
 impl Drop for ServerHandle {
     fn drop(&mut self) {
-        if let Some(tx) = self.shutdown.take() {
-            let _ = tx.send(());
-        }
-        if let Some(handle) = self.thread.take() {
-            let _ = handle.join();
-        }
-        #[cfg(unix)]
-        if let Some(path) = self.unix_path.take() {
-            let _ = std::fs::remove_file(path);
+        match self {
+            ServerHandle::Tcp { shutdown, thread } => {
+                if let Some(tx) = shutdown.take() {
+                    let _ = tx.send(());
+                }
+                if let Some(handle) = thread.take() {
+                    let _ = handle.join();
+                }
+            }
+            #[cfg(unix)]
+            ServerHandle::Unix {
+                shutdown,
+                thread,
+                path,
+            } => {
+                if let Some(tx) = shutdown.take() {
+                    let _ = tx.send(());
+                }
+                if let Some(handle) = thread.take() {
+                    let _ = handle.join();
+                }
+                let _ = std::fs::remove_file(path);
+            }
         }
     }
 }
 
-pub fn spawn_tcp_server(
-    addr: SocketAddr,
-    queue_path: PathBuf,
-    token: String,
-) -> Result<ServerHandle> {
+pub fn spawn_tcp(addr: SocketAddr, queue_path: PathBuf, token: String) -> Result<ServerHandle> {
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let thread = thread::spawn(move || -> Result<()> {
-        let runtime = Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .context("failed to build tokio runtime")?;
+        let runtime = Builder::new_multi_thread().enable_all().build()?;
         runtime.block_on(async move {
             let listener = tokio::net::TcpListener::bind(addr)
                 .await
                 .context("failed to bind tcp listener")?;
             let queue_path = Arc::new(queue_path);
             let svc = WatcherService::new(queue_path);
-            let interceptor = AuthInterceptor {
-                token: Arc::new(token),
-            };
+            let interceptor = AuthInterceptor::new(token);
             Server::builder()
                 .add_service(WatcherServer::with_interceptor(svc, interceptor))
                 .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async move {
                     let _ = shutdown_rx.await;
                 })
                 .await
-                .context("grpc server exited with error")?;
-            Ok::<(), anyhow::Error>(())
-        })?;
-        Ok(())
+                .context("grpc server exited")
+        })
     });
 
-    Ok(ServerHandle {
+    Ok(ServerHandle::Tcp {
         shutdown: Some(shutdown_tx),
         thread: Some(thread),
-        #[cfg(unix)]
-        unix_path: None,
     })
 }
 
 #[cfg(unix)]
-pub fn spawn_unix_server(path: &Path, queue_path: PathBuf, token: String) -> Result<ServerHandle> {
+pub fn spawn_unix(path: &Path, queue_path: PathBuf, token: String) -> Result<ServerHandle> {
     if path.exists() {
         std::fs::remove_file(path)
             .with_context(|| format!("failed to remove stale unix socket {}", path.display()))?;
     }
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .with_context(|| format!("failed to create unix socket dir {}", parent.display()))?;
+        std::fs::create_dir_all(parent).with_context(|| {
+            format!(
+                "failed to create unix socket directory {}",
+                parent.display()
+            )
+        })?;
     }
     let path_buf = path.to_path_buf();
+    let listener_path = path_buf.clone();
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
-    let path_for_drop = path_buf.clone();
     let thread = thread::spawn(move || -> Result<()> {
-        let runtime = Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .context("failed to build tokio runtime")?;
+        let runtime = Builder::new_multi_thread().enable_all().build()?;
         runtime.block_on(async move {
-            let listener = UnixListener::bind(&path_buf).context("failed to bind unix socket")?;
+            let listener =
+                UnixListener::bind(&listener_path).context("failed to bind unix socket")?;
             let queue_path = Arc::new(queue_path);
             let svc = WatcherService::new(queue_path);
-            let interceptor = AuthInterceptor {
-                token: Arc::new(token),
-            };
+            let interceptor = AuthInterceptor::new(token);
             Server::builder()
                 .add_service(WatcherServer::with_interceptor(svc, interceptor))
                 .serve_with_incoming_shutdown(UnixListenerStream::new(listener), async move {
                     let _ = shutdown_rx.await;
                 })
                 .await
-                .context("grpc server exited with error")?;
-            Ok::<(), anyhow::Error>(())
-        })?;
-        Ok(())
+                .context("grpc server exited")
+        })
     });
 
-    Ok(ServerHandle {
+    Ok(ServerHandle::Unix {
         shutdown: Some(shutdown_tx),
         thread: Some(thread),
-        unix_path: Some(path_for_drop),
+        path: path_buf,
     })
 }
 
+#[derive(Clone)]
 struct WatcherService {
     queue_path: Arc<PathBuf>,
 }
@@ -138,7 +145,7 @@ impl WatcherService {
         Self { queue_path }
     }
 
-    fn open_queue(&self) -> Result<ChangeQueue> {
+    fn queue(&self) -> Result<ChangeQueue> {
         ChangeQueue::open(&*self.queue_path)
     }
 }
@@ -148,19 +155,23 @@ struct AuthInterceptor {
     token: Arc<String>,
 }
 
+impl AuthInterceptor {
+    fn new(token: String) -> Self {
+        Self {
+            token: Arc::new(token),
+        }
+    }
+}
+
 impl Interceptor for AuthInterceptor {
-    fn call(&mut self, request: Request<()>) -> Result<Request<()>, Status> {
-        let header = request
+    fn call(&mut self, req: Request<()>) -> Result<Request<()>, Status> {
+        let provided = req
             .metadata()
             .get("authorization")
             .ok_or_else(|| Status::unauthenticated("missing authorization header"))?;
-        let expected = format!("Bearer {}", self.token.as_ref());
-        if header
-            .to_str()
-            .map(|value| value == expected)
-            .unwrap_or(false)
-        {
-            Ok(request)
+        let expected = format!("Bearer {}", self.token.as_str());
+        if provided == expected.as_str() {
+            Ok(req)
         } else {
             Err(Status::unauthenticated("invalid authorization header"))
         }
@@ -183,12 +194,8 @@ impl Watcher for WatcherService {
         request: Request<ListChangesRequest>,
     ) -> Result<Response<ListChangesResponse>, Status> {
         let limit = request.get_ref().limit.max(1).min(10_000) as usize;
-        let queue = self
-            .open_queue()
-            .map_err(|err| Status::internal(err.to_string()))?;
-        let rows = queue
-            .fetch_batch(limit)
-            .map_err(|err| Status::internal(err.to_string()))?;
+        let queue = self.queue().map_err(internal_err)?;
+        let rows = queue.fetch_batch(limit).map_err(internal_err)?;
         let changes = rows.into_iter().map(change_to_proto).collect();
         Ok(Response::new(ListChangesResponse { changes }))
     }
@@ -198,12 +205,9 @@ impl Watcher for WatcherService {
         request: Request<AckChangesRequest>,
     ) -> Result<Response<AckChangesResponse>, Status> {
         let upto = request.get_ref().up_to_change_id;
-        let queue = self
-            .open_queue()
-            .map_err(|err| Status::internal(err.to_string()))?;
-        let count = queue
-            .ack_up_to(upto)
-            .map_err(|err| Status::internal(err.to_string()))?;
+        let queue = self.queue().map_err(internal_err)?;
+        let count = queue.ack_up_to(upto).map_err(internal_err)?;
+        queue.purge_acked().ok();
         Ok(Response::new(AckChangesResponse {
             acknowledged: count,
         }))
@@ -213,13 +217,10 @@ impl Watcher for WatcherService {
         &self,
         request: Request<GetStateRequest>,
     ) -> Result<Response<GetStateResponse>, Status> {
-        let name = request.get_ref().table_name.clone();
-        let queue = self
-            .open_queue()
-            .map_err(|err| Status::internal(err.to_string()))?;
+        let queue = self.queue().map_err(internal_err)?;
         let state = queue
-            .get_state(&name)
-            .map_err(|err| Status::internal(err.to_string()))?;
+            .get_state(&request.get_ref().table_name)
+            .map_err(internal_err)?;
         let resp = match state {
             Some(state) => GetStateResponse {
                 exists: true,
@@ -245,9 +246,7 @@ impl Watcher for WatcherService {
         if payload.table_name.is_empty() {
             return Err(Status::invalid_argument("table_name is required"));
         }
-        let queue = self
-            .open_queue()
-            .map_err(|err| Status::internal(err.to_string()))?;
+        let queue = self.queue().map_err(internal_err)?;
         let state = QueueState {
             table_name: payload.table_name,
             last_change_id: payload.last_change_id,
@@ -262,9 +261,7 @@ impl Watcher for WatcherService {
                 Some(payload.cursor)
             },
         };
-        queue
-            .set_state(&state)
-            .map_err(|err| Status::internal(err.to_string()))?;
+        queue.set_state(&state).map_err(internal_err)?;
         Ok(Response::new(SetStateResponse {}))
     }
 }
@@ -279,4 +276,8 @@ fn change_to_proto(row: crate::queue::ChangeRecord) -> Change {
         wal_frame: row.wal_frame.unwrap_or_default(),
         cursor: row.cursor.unwrap_or_default(),
     }
+}
+
+fn internal_err(err: anyhow::Error) -> Status {
+    Status::internal(err.to_string())
 }

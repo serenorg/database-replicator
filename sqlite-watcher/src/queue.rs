@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, Row};
-use serde::Serialize;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS changes (
@@ -27,7 +26,7 @@ CREATE TABLE IF NOT EXISTS state (
 );
 "#;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeOperation {
     Insert,
     Update,
@@ -43,7 +42,7 @@ impl ChangeOperation {
         }
     }
 
-    fn from_str(value: &str) -> Result<Self> {
+    pub fn from_str(value: &str) -> Result<Self> {
         match value {
             "insert" => Ok(ChangeOperation::Insert),
             "update" => Ok(ChangeOperation::Update),
@@ -107,10 +106,6 @@ impl ChangeQueue {
             path: path.to_path_buf(),
             conn,
         })
-    }
-
-    pub fn path(&self) -> &Path {
-        &self.path
     }
 
     pub fn enqueue(&self, change: &NewChange) -> Result<i64> {
@@ -192,6 +187,10 @@ impl ChangeQueue {
             ],
         )?;
         Ok(())
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
     }
 }
 
