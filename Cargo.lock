@@ -3063,6 +3063,7 @@ dependencies = [
  "clap",
  "dirs",
  "rusqlite",
+ "serde_json",
  "tempfile",
  "tracing",
  "tracing-subscriber",

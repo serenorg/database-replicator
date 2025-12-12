@@ -2,11 +2,14 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
-use sqlite_watcher::wal::{start_wal_watcher, WalWatcherConfig as TailConfig};
+use serde_json::json;
+use sqlite_watcher::change::RowChange;
+use sqlite_watcher::queue::{ChangeOperation, ChangeQueue};
+use sqlite_watcher::wal::{start_wal_watcher, WalEvent, WalWatcherConfig as TailConfig};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
@@ -34,6 +37,10 @@ struct Cli {
     /// Shared-secret token file used to authenticate RPC clients.
     #[arg(long = "token-file", value_name = "PATH")]
     token_file: Option<PathBuf>,
+
+    /// Path to the durable change queue database.
+    #[arg(long = "queue-db", value_name = "PATH")]
+    queue_db: Option<PathBuf>,
 
     /// Tracing filter (info,warn,debug,trace). Can also be provided via SQLITE_WATCHER_LOG.
     #[arg(
@@ -121,6 +128,7 @@ struct WatcherConfig {
     database_path: PathBuf,
     listen: ListenAddress,
     token_file: PathBuf,
+    queue_path: PathBuf,
     poll_interval: Duration,
     min_event_bytes: u64,
 }
@@ -135,11 +143,16 @@ impl TryFrom<Cli> for WatcherConfig {
             Some(path) => expand_home(path)?,
             None => default_token_path()?,
         };
+        let queue_path = match args.queue_db {
+            Some(path) => expand_home(path)?,
+            None => default_queue_path()?,
+        };
 
         Ok(Self {
             database_path,
             listen,
             token_file,
+            queue_path,
             poll_interval: Duration::from_millis(args.poll_interval_ms),
             min_event_bytes: args.min_event_bytes,
         })
@@ -161,6 +174,11 @@ fn ensure_sqlite_file(path: &Path) -> Result<PathBuf> {
 fn default_token_path() -> Result<PathBuf> {
     let home = dirs::home_dir().ok_or_else(|| anyhow!("unable to determine home directory"))?;
     Ok(home.join(".seren/sqlite-watcher/token"))
+}
+
+fn default_queue_path() -> Result<PathBuf> {
+    let home = dirs::home_dir().ok_or_else(|| anyhow!("unable to determine home directory"))?;
+    Ok(home.join(".seren/sqlite-watcher/changes.db"))
 }
 
 fn expand_home(path: PathBuf) -> Result<PathBuf> {
@@ -194,11 +212,13 @@ fn main() -> Result<()> {
         db = %config.database_path.display(),
         listen = %config.listen,
         token = %config.token_file.display(),
+        queue = %config.queue_path.display(),
         poll_ms = config.poll_interval.as_millis(),
         min_event_bytes = config.min_event_bytes,
         "sqlite-watcher starting"
     );
 
+    let queue = ChangeQueue::open(&config.queue_path)?;
     let (event_tx, event_rx) = mpsc::channel();
     let _wal_handle = start_wal_watcher(
         &config.database_path,
@@ -210,24 +230,55 @@ fn main() -> Result<()> {
     )?;
 
     for event in event_rx {
-        tracing::info!(
-            bytes_added = event.bytes_added,
-            wal_size = event.current_size,
-            "wal file grew"
-        );
+        match persist_wal_event(&queue, &event) {
+            Ok(change_id) => {
+                tracing::info!(
+                    bytes_added = event.bytes_added,
+                    wal_size = event.current_size,
+                    change_id,
+                    "queued wal growth event"
+                );
+            }
+            Err(err) => {
+                tracing::warn!(error = %err, "failed to persist wal event to queue");
+            }
+        }
     }
 
     Ok(())
+}
+
+fn persist_wal_event(queue: &ChangeQueue, event: &WalEvent) -> Result<i64> {
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| anyhow!("system clock drift: {err}"))?;
+    let row = RowChange {
+        table_name: "__wal__".to_string(),
+        operation: ChangeOperation::Insert,
+        primary_key: now.as_nanos().to_string(),
+        payload: Some(json!({
+            "kind": "wal_growth",
+            "bytes_added": event.bytes_added,
+            "current_size": event.current_size,
+            "recorded_at": now.as_secs_f64(),
+        })),
+        wal_frame: None,
+        cursor: None,
+    };
+    queue.enqueue(&row.into_new_change())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use clap::Parser;
+    use sqlite_watcher::queue::ChangeQueue;
+    use sqlite_watcher::wal::WalEvent;
+    use tempfile::{tempdir, NamedTempFile};
 
     #[test]
     fn parses_tcp_listener() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = NamedTempFile::new().unwrap();
         let cli = Cli::try_parse_from([
             "sqlite-watcher",
             "--db",
@@ -247,15 +298,33 @@ mod tests {
             ListenAddress::Tcp { host, port } if host == "127.0.0.1" && port == 6000
         ));
         assert!(config.token_file.ends_with("token"));
+        assert!(config.queue_path.ends_with("changes.db"));
     }
 
     #[test]
     #[cfg(unix)]
     fn parses_unix_listener_default() {
-        let tmp = tempfile::NamedTempFile::new().unwrap();
+        let tmp = NamedTempFile::new().unwrap();
         let cli =
             Cli::try_parse_from(["sqlite-watcher", "--db", tmp.path().to_str().unwrap()]).unwrap();
         let config = WatcherConfig::try_from(cli).unwrap();
         assert!(matches!(config.listen, ListenAddress::Unix(_)));
+    }
+
+    #[test]
+    fn persist_wal_events_into_queue() {
+        let dir = tempdir().unwrap();
+        let queue_path = dir.path().join("queue.db");
+        let queue = ChangeQueue::open(&queue_path).unwrap();
+
+        let event = WalEvent {
+            bytes_added: 2048,
+            current_size: 4096,
+        };
+        let change_id = persist_wal_event(&queue, &event).unwrap();
+        let batch = queue.fetch_batch(10).unwrap();
+        assert_eq!(batch.len(), 1);
+        assert_eq!(batch[0].change_id, change_id);
+        assert_eq!(batch[0].table_name, "__wal__");
     }
 }
