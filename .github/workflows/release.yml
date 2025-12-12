@@ -23,18 +23,26 @@ jobs:
             target: x86_64-unknown-linux-gnu
             artifact_name: database-replicator
             asset_name: database-replicator-linux-x64-binary
+            watcher_artifact: sqlite-watcher
+            watcher_asset: sqlite-watcher-linux-x64
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: database-replicator
             asset_name: database-replicator-macos-x64-binary
+            watcher_artifact: sqlite-watcher
+            watcher_asset: sqlite-watcher-macos-x64
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: database-replicator
             asset_name: database-replicator-macos-arm64-binary
+            watcher_artifact: sqlite-watcher
+            watcher_asset: sqlite-watcher-macos-arm64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: database-replicator.exe
             asset_name: database-replicator-windows-x64.exe
+            watcher_artifact: sqlite-watcher.exe
+            watcher_asset: sqlite-watcher-windows-x64.exe
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -75,6 +83,9 @@ jobs:
       - name: Build release binary
         run: cargo build --release --target ${{ matrix.target }} --verbose
 
+      - name: Build sqlite-watcher binary
+        run: cargo build --release --target ${{ matrix.target }} -p sqlite-watcher --verbose
+
       - name: Strip binary (Linux)
         if: matrix.os == 'ubuntu-latest'
         run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
@@ -89,10 +100,22 @@ jobs:
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} ${{ matrix.asset_name }}
           chmod +x ${{ matrix.asset_name }}
 
+      - name: Rename sqlite-watcher (Unix)
+        if: matrix.os != 'windows-latest'
+        run: |
+          cp target/${{ matrix.target }}/release/${{ matrix.watcher_artifact }} ${{ matrix.watcher_asset }}
+          chmod +x ${{ matrix.watcher_asset }}
+
       - name: Rename binary (Windows)
         if: matrix.os == 'windows-latest'
         run: |
           copy target\${{ matrix.target }}\release\${{ matrix.artifact_name }} ${{ matrix.asset_name }}
+        shell: cmd
+
+      - name: Rename sqlite-watcher (Windows)
+        if: matrix.os == 'windows-latest'
+        run: |
+          copy target\${{ matrix.target }}\release\${{ matrix.watcher_artifact }} ${{ matrix.watcher_asset }}
         shell: cmd
 
       - name: Upload artifact
@@ -100,6 +123,13 @@ jobs:
         with:
           name: ${{ matrix.asset_name }}
           path: ${{ matrix.asset_name }}
+          if-no-files-found: error
+
+      - name: Upload sqlite-watcher artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.watcher_asset }}
+          path: ${{ matrix.watcher_asset }}
           if-no-files-found: error
 
   create-release:
