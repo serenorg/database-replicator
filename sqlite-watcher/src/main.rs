@@ -2,14 +2,13 @@ use std::fmt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
-use serde_json::json;
-use sqlite_watcher::change::RowChange;
-use sqlite_watcher::queue::{ChangeOperation, ChangeQueue};
-use sqlite_watcher::wal::{start_wal_watcher, WalEvent, WalWatcherConfig as TailConfig};
+use sqlite_watcher::decoder::WalGrowthDecoder;
+use sqlite_watcher::queue::ChangeQueue;
+use sqlite_watcher::wal::{start_wal_watcher, WalWatcherConfig as TailConfig};
 use tracing_subscriber::EnvFilter;
 
 #[cfg(unix)]
@@ -219,6 +218,7 @@ fn main() -> Result<()> {
     );
 
     let queue = ChangeQueue::open(&config.queue_path)?;
+    let decoder = WalGrowthDecoder::default();
     let (event_tx, event_rx) = mpsc::channel();
     let _wal_handle = start_wal_watcher(
         &config.database_path,
@@ -230,42 +230,35 @@ fn main() -> Result<()> {
     )?;
 
     for event in event_rx {
-        match persist_wal_event(&queue, &event) {
-            Ok(change_id) => {
+        match process_wal_event(&decoder, &queue, &event) {
+            Ok(change_ids) if !change_ids.is_empty() => {
                 tracing::info!(
                     bytes_added = event.bytes_added,
                     wal_size = event.current_size,
-                    change_id,
+                    change_count = change_ids.len(),
                     "queued wal growth event"
                 );
             }
             Err(err) => {
                 tracing::warn!(error = %err, "failed to persist wal event to queue");
             }
+            _ => {}
         }
     }
 
     Ok(())
 }
 
-fn persist_wal_event(queue: &ChangeQueue, event: &WalEvent) -> Result<i64> {
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|err| anyhow!("system clock drift: {err}"))?;
-    let row = RowChange {
-        table_name: "__wal__".to_string(),
-        operation: ChangeOperation::Insert,
-        primary_key: now.as_nanos().to_string(),
-        payload: Some(json!({
-            "kind": "wal_growth",
-            "bytes_added": event.bytes_added,
-            "current_size": event.current_size,
-            "recorded_at": now.as_secs_f64(),
-        })),
-        wal_frame: None,
-        cursor: None,
-    };
-    queue.enqueue(&row.into_new_change())
+fn process_wal_event(
+    decoder: &WalGrowthDecoder,
+    queue: &ChangeQueue,
+    event: &sqlite_watcher::wal::WalEvent,
+) -> Result<Vec<i64>> {
+    let mut ids = Vec::new();
+    for row in decoder.decode(event) {
+        ids.push(queue.enqueue(&row.into_new_change())?);
+    }
+    Ok(ids)
 }
 
 #[cfg(test)]
@@ -273,7 +266,6 @@ mod tests {
     use super::*;
     use clap::Parser;
     use sqlite_watcher::queue::ChangeQueue;
-    use sqlite_watcher::wal::WalEvent;
     use tempfile::{tempdir, NamedTempFile};
 
     #[test]
@@ -316,15 +308,15 @@ mod tests {
         let dir = tempdir().unwrap();
         let queue_path = dir.path().join("queue.db");
         let queue = ChangeQueue::open(&queue_path).unwrap();
+        let decoder = WalGrowthDecoder::default();
 
-        let event = WalEvent {
+        let event = sqlite_watcher::wal::WalEvent {
             bytes_added: 2048,
             current_size: 4096,
         };
-        let change_id = persist_wal_event(&queue, &event).unwrap();
+        let change_ids = process_wal_event(&decoder, &queue, &event).unwrap();
         let batch = queue.fetch_batch(10).unwrap();
-        assert_eq!(batch.len(), 1);
-        assert_eq!(batch[0].change_id, change_id);
+        assert_eq!(batch.len(), change_ids.len());
         assert_eq!(batch[0].table_name, "__wal__");
     }
 }
