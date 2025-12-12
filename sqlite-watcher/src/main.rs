@@ -1,4 +1,6 @@
 use std::fmt;
+use std::fs;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::mpsc;
@@ -8,6 +10,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use sqlite_watcher::decoder::WalGrowthDecoder;
 use sqlite_watcher::queue::ChangeQueue;
+use sqlite_watcher::server::TcpServerHandle;
 use sqlite_watcher::wal::{start_wal_watcher, WalWatcherConfig as TailConfig};
 use tracing_subscriber::EnvFilter;
 
@@ -206,6 +209,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(&cli.log_filter)?;
     let config = WatcherConfig::try_from(cli)?;
+    let auth_token = read_token_file(&config.token_file)?;
 
     tracing::info!(
         db = %config.database_path.display(),
@@ -219,6 +223,7 @@ fn main() -> Result<()> {
 
     let queue = ChangeQueue::open(&config.queue_path)?;
     let decoder = WalGrowthDecoder::default();
+    let server_handle = start_grpc_server(&config.listen, &config.queue_path, &auth_token)?;
     let (event_tx, event_rx) = mpsc::channel();
     let _wal_handle = start_wal_watcher(
         &config.database_path,
@@ -246,6 +251,7 @@ fn main() -> Result<()> {
         }
     }
 
+    drop(server_handle);
     Ok(())
 }
 
@@ -259,6 +265,43 @@ fn process_wal_event(
         ids.push(queue.enqueue(&row.into_new_change())?);
     }
     Ok(ids)
+}
+
+fn read_token_file(path: &Path) -> Result<String> {
+    let contents = fs::read_to_string(path)
+        .with_context(|| format!("failed to read token file {}", path.display()))?;
+    let token = contents.trim().to_string();
+    if token.is_empty() {
+        bail!("token file {} is empty", path.display());
+    }
+    Ok(token)
+}
+
+fn start_grpc_server(
+    listen: &ListenAddress,
+    queue_path: &Path,
+    token: &str,
+) -> Result<Option<TcpServerHandle>> {
+    match listen {
+        ListenAddress::Tcp { host, port } => {
+            let addr: SocketAddr = format!("{}:{}", host, port)
+                .parse()
+                .with_context(|| format!("invalid tcp listen address {host}:{port}"))?;
+            let handle = TcpServerHandle::spawn(addr, queue_path.to_path_buf(), token.to_string())?;
+            Ok(Some(handle))
+        }
+        ListenAddress::Unix(path) => {
+            tracing::warn!(
+                path = %path.display(),
+                "unix socket gRPC transport is not yet implemented"
+            );
+            Ok(None)
+        }
+        ListenAddress::Pipe(name) => {
+            tracing::warn!(pipe = name, "named pipe transport is not yet implemented");
+            Ok(None)
+        }
+    }
 }
 
 #[cfg(test)]
