@@ -2,7 +2,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Context, Result};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection, OptionalExtension, Row};
+use serde::Serialize;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS changes (
@@ -26,7 +27,7 @@ CREATE TABLE IF NOT EXISTS state (
 );
 "#;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub enum ChangeOperation {
     Insert,
     Update,
@@ -47,7 +48,7 @@ impl ChangeOperation {
             "insert" => Ok(ChangeOperation::Insert),
             "update" => Ok(ChangeOperation::Update),
             "delete" => Ok(ChangeOperation::Delete),
-            other => Err(anyhow!("unknown change op: {other}")),
+            other => Err(anyhow!("unknown change operation '{other}'")),
         }
     }
 }
@@ -94,24 +95,28 @@ impl ChangeQueue {
                 format!("failed to create queue directory {}", parent.display())
             })?;
             #[cfg(unix)]
-            set_owner_perms(parent)?;
+            enforce_dir_perms(parent)?;
         }
         let conn = Connection::open(path)
             .with_context(|| format!("failed to open queue database {}", path.display()))?;
-        conn.pragma_update(None, "journal_mode", &"wal")
-            .context("failed to enable WAL for change queue")?;
+        conn.pragma_update(None, "journal_mode", &"wal").ok();
         conn.pragma_update(None, "synchronous", &"normal").ok();
         conn.execute_batch(SCHEMA)
-            .context("failed to initialize queue schema")?;
+            .context("failed to initialize change queue schema")?;
         Ok(Self {
             path: path.to_path_buf(),
             conn,
         })
     }
 
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
     pub fn enqueue(&self, change: &NewChange) -> Result<i64> {
         self.conn.execute(
-            "INSERT INTO changes(table_name, op, id, payload, wal_frame, cursor) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            "INSERT INTO changes(table_name, op, id, payload, wal_frame, cursor)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 change.table_name,
                 change.operation.as_str(),
@@ -127,26 +132,14 @@ impl ChangeQueue {
     pub fn fetch_batch(&self, limit: usize) -> Result<Vec<ChangeRecord>> {
         let mut stmt = self.conn.prepare(
             "SELECT change_id, table_name, op, id, payload, wal_frame, cursor
-             FROM changes
-             WHERE acked = 0
-             ORDER BY change_id ASC
-             LIMIT ?1",
+             FROM changes WHERE acked = 0 ORDER BY change_id ASC LIMIT ?1",
         )?;
         let mut rows = stmt.query([limit as i64])?;
-        let mut out = Vec::new();
+        let mut results = Vec::new();
         while let Some(row) = rows.next()? {
-            let op_str: String = row.get(2)?;
-            out.push(ChangeRecord {
-                change_id: row.get(0)?,
-                table_name: row.get(1)?,
-                operation: ChangeOperation::from_str(&op_str)?,
-                primary_key: row.get(3)?,
-                payload: row.get(4)?,
-                wal_frame: row.get(5)?,
-                cursor: row.get(6)?,
-            });
+            results.push(row_to_change(&row)?);
         }
-        Ok(out)
+        Ok(results)
     }
 
     pub fn ack_up_to(&self, change_id: i64) -> Result<u64> {
@@ -157,20 +150,20 @@ impl ChangeQueue {
         Ok(updated as u64)
     }
 
-    pub fn vacuum_acknowledged(&self) -> Result<u64> {
+    pub fn purge_acked(&self) -> Result<u64> {
         let deleted = self
             .conn
             .execute("DELETE FROM changes WHERE acked = 1", [])?;
         Ok(deleted as u64)
     }
 
-    pub fn get_state(&self, table_name: &str) -> Result<Option<QueueState>> {
+    pub fn get_state(&self, table: &str) -> Result<Option<QueueState>> {
         self.conn
             .prepare(
                 "SELECT table_name, last_change_id, last_wal_frame, cursor
                  FROM state WHERE table_name = ?1",
             )?
-            .query_row([table_name], |row| {
+            .query_row([table], |row| {
                 Ok(QueueState {
                     table_name: row.get(0)?,
                     last_change_id: row.get(1)?,
@@ -187,10 +180,10 @@ impl ChangeQueue {
             "INSERT INTO state(table_name, last_change_id, last_wal_frame, cursor, updated_at)
              VALUES (?1, ?2, ?3, ?4, CURRENT_TIMESTAMP)
              ON CONFLICT(table_name) DO UPDATE SET
-                last_change_id = excluded.last_change_id,
-                last_wal_frame = excluded.last_wal_frame,
-                cursor = excluded.cursor,
-                updated_at = CURRENT_TIMESTAMP",
+                 last_change_id = excluded.last_change_id,
+                 last_wal_frame = excluded.last_wal_frame,
+                 cursor = excluded.cursor,
+                 updated_at = CURRENT_TIMESTAMP",
             params![
                 state.table_name,
                 state.last_change_id,
@@ -200,15 +193,25 @@ impl ChangeQueue {
         )?;
         Ok(())
     }
+}
 
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
+fn row_to_change(row: &Row<'_>) -> Result<ChangeRecord> {
+    let op_str: String = row.get(2)?;
+    Ok(ChangeRecord {
+        change_id: row.get(0)?,
+        table_name: row.get(1)?,
+        operation: ChangeOperation::from_str(&op_str)?,
+        primary_key: row.get(3)?,
+        payload: row.get(4)?,
+        wal_frame: row.get(5)?,
+        cursor: row.get(6)?,
+    })
 }
 
 #[cfg(unix)]
-fn set_owner_perms(path: &Path) -> Result<()> {
+fn enforce_dir_perms(path: &Path) -> Result<()> {
     use std::os::unix::fs::PermissionsExt;
+
     let metadata = fs::metadata(path)?;
     let mut perms = metadata.permissions();
     perms.set_mode(0o700);
@@ -217,6 +220,6 @@ fn set_owner_perms(path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
-fn set_owner_perms(_path: &Path) -> Result<()> {
+fn enforce_dir_perms(_path: &Path) -> Result<()> {
     Ok(())
 }
