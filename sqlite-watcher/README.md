@@ -32,11 +32,11 @@ Flag summary:
 - `--log-level`: Tracing filter (also settable via `SQLITE_WATCHER_LOG`).
 - `--poll-interval-ms`: How often to check the WAL file for growth (default 500 ms). Lower values react faster but cost more syscalls.
 - `--min-event-bytes`: Minimum WAL byte growth before emitting an event. Use larger values to avoid spam when very small transactions occur.
-- `--listen` + `--token-file` now control the embedded gRPC server. Clients must send `Authorization: Bearer <token>` metadata when calling the `Watcher` service (see `proto/watcher.proto`). Unix sockets/pipes are placeholders until Ticket D is completed; TCP listens on `127.0.0.1:<port>`.
+- `--listen` + `--token-file` now control the embedded gRPC server. Clients must send `Authorization: Bearer <token>` metadata when calling the `Watcher` service (see `proto/watcher.proto`). TCP (`tcp:50051`) and Unix sockets (`unix:/tmp/sqlite-watcher.sock`) are available today; Windows named pipes currently fall back to TCP until native support lands.
 
 ## Cross-platform notes
 
-- **Linux/macOS**: Default listener is a Unix domain socket at `/tmp/sqlite-watcher.sock`. Ensure the target SQLite database enables WAL journaling.
+- **Linux/macOS**: Default listener is a Unix domain socket at `/tmp/sqlite-watcher.sock`. The watcher cleans up stale socket files on startup; point `--listen unix:/path` elsewhere if needed.
 - **Windows**: Unix sockets are disabled; pass `--listen tcp:50051` or `--listen pipe:SerenWatcher`. Named pipes allow local service accounts without opening TCP ports.
 - All platforms expect the token file to live under `~/.seren/sqlite-watcher/token` by default; create the directory with `0700` permissions so the watcher refuses to start if the secret is world-readable.
 - The current WAL watcher polls the `*.sqlite-wal` file for byte growth. To keep WAL history available, configure your writers with `PRAGMA journal_mode=WAL;` and raise `wal_autocheckpoint` (or disable it) so the SQLite engine does not aggressively truncate the log.

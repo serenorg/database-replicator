@@ -1,5 +1,5 @@
 use std::net::SocketAddr;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 
@@ -18,12 +18,19 @@ use crate::watcher_proto::{
     SetStateRequest, SetStateResponse,
 };
 
-pub struct TcpServerHandle {
+#[cfg(unix)]
+use tokio::net::UnixListener;
+#[cfg(unix)]
+use tokio_stream::wrappers::UnixListenerStream;
+
+pub struct ServerHandle {
     shutdown: Option<oneshot::Sender<()>>,
     thread: Option<JoinHandle<Result<()>>>,
+    #[cfg(unix)]
+    unix_path: Option<PathBuf>,
 }
 
-impl Drop for TcpServerHandle {
+impl Drop for ServerHandle {
     fn drop(&mut self) {
         if let Some(tx) = self.shutdown.take() {
             let _ = tx.send(());
@@ -31,42 +38,95 @@ impl Drop for TcpServerHandle {
         if let Some(handle) = self.thread.take() {
             let _ = handle.join();
         }
+        #[cfg(unix)]
+        if let Some(path) = self.unix_path.take() {
+            let _ = std::fs::remove_file(path);
+        }
     }
 }
 
-impl TcpServerHandle {
-    pub fn spawn(addr: SocketAddr, queue_path: PathBuf, token: String) -> Result<Self> {
-        let (shutdown_tx, shutdown_rx) = oneshot::channel();
-        let thread = thread::spawn(move || -> Result<()> {
-            let runtime = Builder::new_multi_thread()
-                .enable_all()
-                .build()
-                .context("failed to build tokio runtime")?;
-            runtime.block_on(async move {
-                let listener = tokio::net::TcpListener::bind(addr)
-                    .await
-                    .context("failed to bind tcp listener")?;
-                let queue_path = Arc::new(queue_path);
-                let svc = WatcherService::new(queue_path.clone());
-                let interceptor = AuthInterceptor {
-                    token: Arc::new(token),
-                };
-                Server::builder()
-                    .add_service(WatcherServer::with_interceptor(svc, interceptor))
-                    .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async move {
-                        let _ = shutdown_rx.await;
-                    })
-                    .await
-                    .context("grpc server exited with error")?;
-                Ok(())
-            })
-        });
+pub fn spawn_tcp_server(
+    addr: SocketAddr,
+    queue_path: PathBuf,
+    token: String,
+) -> Result<ServerHandle> {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let thread = thread::spawn(move || -> Result<()> {
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .context("failed to build tokio runtime")?;
+        runtime.block_on(async move {
+            let listener = tokio::net::TcpListener::bind(addr)
+                .await
+                .context("failed to bind tcp listener")?;
+            let queue_path = Arc::new(queue_path);
+            let svc = WatcherService::new(queue_path);
+            let interceptor = AuthInterceptor {
+                token: Arc::new(token),
+            };
+            Server::builder()
+                .add_service(WatcherServer::with_interceptor(svc, interceptor))
+                .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async move {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .context("grpc server exited with error")?;
+            Ok::<(), anyhow::Error>(())
+        })?;
+        Ok(())
+    });
 
-        Ok(Self {
-            shutdown: Some(shutdown_tx),
-            thread: Some(thread),
-        })
+    Ok(ServerHandle {
+        shutdown: Some(shutdown_tx),
+        thread: Some(thread),
+        #[cfg(unix)]
+        unix_path: None,
+    })
+}
+
+#[cfg(unix)]
+pub fn spawn_unix_server(path: &Path, queue_path: PathBuf, token: String) -> Result<ServerHandle> {
+    if path.exists() {
+        std::fs::remove_file(path)
+            .with_context(|| format!("failed to remove stale unix socket {}", path.display()))?;
     }
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .with_context(|| format!("failed to create unix socket dir {}", parent.display()))?;
+    }
+    let path_buf = path.to_path_buf();
+    let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let path_for_drop = path_buf.clone();
+    let thread = thread::spawn(move || -> Result<()> {
+        let runtime = Builder::new_multi_thread()
+            .enable_all()
+            .build()
+            .context("failed to build tokio runtime")?;
+        runtime.block_on(async move {
+            let listener = UnixListener::bind(&path_buf).context("failed to bind unix socket")?;
+            let queue_path = Arc::new(queue_path);
+            let svc = WatcherService::new(queue_path);
+            let interceptor = AuthInterceptor {
+                token: Arc::new(token),
+            };
+            Server::builder()
+                .add_service(WatcherServer::with_interceptor(svc, interceptor))
+                .serve_with_incoming_shutdown(UnixListenerStream::new(listener), async move {
+                    let _ = shutdown_rx.await;
+                })
+                .await
+                .context("grpc server exited with error")?;
+            Ok::<(), anyhow::Error>(())
+        })?;
+        Ok(())
+    });
+
+    Ok(ServerHandle {
+        shutdown: Some(shutdown_tx),
+        thread: Some(thread),
+        unix_path: Some(path_for_drop),
+    })
 }
 
 struct WatcherService {
@@ -80,6 +140,30 @@ impl WatcherService {
 
     fn open_queue(&self) -> Result<ChangeQueue> {
         ChangeQueue::open(&*self.queue_path)
+    }
+}
+
+#[derive(Clone)]
+struct AuthInterceptor {
+    token: Arc<String>,
+}
+
+impl Interceptor for AuthInterceptor {
+    fn call(&mut self, request: Request<()>) -> Result<Request<()>, Status> {
+        let header = request
+            .metadata()
+            .get("authorization")
+            .ok_or_else(|| Status::unauthenticated("missing authorization header"))?;
+        let expected = format!("Bearer {}", self.token.as_ref());
+        if header
+            .to_str()
+            .map(|value| value == expected)
+            .unwrap_or(false)
+        {
+            Ok(request)
+        } else {
+            Err(Status::unauthenticated("invalid authorization header"))
+        }
     }
 }
 
@@ -194,29 +278,5 @@ fn change_to_proto(row: crate::queue::ChangeRecord) -> Change {
         payload: row.payload.unwrap_or_default(),
         wal_frame: row.wal_frame.unwrap_or_default(),
         cursor: row.cursor.unwrap_or_default(),
-    }
-}
-
-#[derive(Clone)]
-struct AuthInterceptor {
-    token: Arc<String>,
-}
-
-impl Interceptor for AuthInterceptor {
-    fn call(&mut self, request: Request<()>) -> Result<Request<()>, Status> {
-        let header = request
-            .metadata()
-            .get("authorization")
-            .ok_or_else(|| Status::unauthenticated("missing authorization header"))?;
-        let expected = format!("Bearer {}", self.token.as_ref());
-        if header
-            .to_str()
-            .map(|value| value == expected)
-            .unwrap_or(false)
-        {
-            Ok(request)
-        } else {
-            Err(Status::unauthenticated("invalid authorization header"))
-        }
     }
 }

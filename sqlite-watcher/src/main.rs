@@ -10,7 +10,9 @@ use anyhow::{anyhow, bail, Context, Result};
 use clap::Parser;
 use sqlite_watcher::decoder::WalGrowthDecoder;
 use sqlite_watcher::queue::ChangeQueue;
-use sqlite_watcher::server::TcpServerHandle;
+#[cfg(unix)]
+use sqlite_watcher::server::spawn_unix_server;
+use sqlite_watcher::server::{spawn_tcp_server, ServerHandle};
 use sqlite_watcher::wal::{start_wal_watcher, WalWatcherConfig as TailConfig};
 use tracing_subscriber::EnvFilter;
 
@@ -281,21 +283,25 @@ fn start_grpc_server(
     listen: &ListenAddress,
     queue_path: &Path,
     token: &str,
-) -> Result<Option<TcpServerHandle>> {
+) -> Result<Option<ServerHandle>> {
     match listen {
         ListenAddress::Tcp { host, port } => {
             let addr: SocketAddr = format!("{}:{}", host, port)
                 .parse()
                 .with_context(|| format!("invalid tcp listen address {host}:{port}"))?;
-            let handle = TcpServerHandle::spawn(addr, queue_path.to_path_buf(), token.to_string())?;
+            let handle = spawn_tcp_server(addr, queue_path.to_path_buf(), token.to_string())?;
             Ok(Some(handle))
         }
         ListenAddress::Unix(path) => {
-            tracing::warn!(
-                path = %path.display(),
-                "unix socket gRPC transport is not yet implemented"
-            );
-            Ok(None)
+            #[cfg(unix)]
+            {
+                let handle = spawn_unix_server(path, queue_path.to_path_buf(), token.to_string())?;
+                Ok(Some(handle))
+            }
+            #[cfg(not(unix))]
+            {
+                bail!("unix sockets are not supported on this platform")
+            }
         }
         ListenAddress::Pipe(name) => {
             tracing::warn!(pipe = name, "named pipe transport is not yet implemented");

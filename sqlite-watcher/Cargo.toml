@@ -28,3 +28,4 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 [dev-dependencies]
 tempfile = "3.8"
 tokio = { version = "1.35", features = ["rt", "macros"] }
+tower = "0.4"
