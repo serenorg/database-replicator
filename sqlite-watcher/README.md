@@ -1,10 +1,17 @@
-# sqlite-watcher (alpha)
+# sqlite-watcher
 
-This crate currently ships the shared queue + gRPC server used by `database-replicator sync-sqlite`. The `sqlite-watcher` binary includes:
+This crate provides the building blocks for an upcoming sqlite-watcher binary. Issue #82 adds a durable queue plus a tonic-based gRPC server so other components can stream captured SQLite changes.
 
-- `serve`: start the queue-backed gRPC API so clients can pull change batches.
-- `enqueue`: helper for tests/smoke scripts to add sample changes to the queue database.
+## Components
 
-> **Note:** WAL tailing is still under active development; use the binary today to test queue + sync flows.
+- `queue.rs`: stores change rows and per-table checkpoints in `~/.seren/sqlite-watcher/changes.db`.
+- `proto/watcher.proto`: RPC definitions (`HealthCheck`, `ListChanges`, `AckChanges`, `GetState`, `SetState`).
+- `server.rs`: tonic server wrappers exposing the queue over TCP or Unix sockets with shared-secret authentication.
 
-See `sqlite-watcher-docs/installers.md` for per-OS service guidance and `scripts/test-sqlite-delta.sh` for the end-to-end smoke test.
+## Building & Testing
+
+```bash
+cargo test -p sqlite-watcher
+```
+
+The tests cover queue durability/state behavior. Server tests will be added once the consumer wiring lands.
