@@ -1,13 +1,11 @@
-use std::collections::HashMap;
-use std::path::{Path, PathBuf};
-use std::time::Duration;
-
 use anyhow::{anyhow, bail, Context, Result};
 use clap::ValueEnum;
 use sqlite_watcher::watcher_proto::watcher_client::WatcherClient;
 use sqlite_watcher::watcher_proto::{
     AckChangesRequest, GetStateRequest, HealthCheckRequest, ListChangesRequest, SetStateRequest,
 };
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use tokio_postgres::Client;
 use tonic::codegen::InterceptedService;
 use tonic::service::Interceptor;
@@ -17,7 +15,6 @@ use tower::service_fn;
 
 use crate::jsonb::writer::{delete_jsonb_rows, insert_jsonb_batch, upsert_jsonb_rows};
 
-const DEFAULT_BATCH_LIMIT: u32 = 500;
 const GLOBAL_STATE_KEY: &str = "_global";
 
 #[derive(Debug, Clone, Copy, ValueEnum, PartialEq, Eq)]
@@ -63,7 +60,7 @@ pub async fn run(opts: SyncSqliteOptions) -> Result<()> {
     let mut processed_any = false;
 
     loop {
-        let mut req = Request::new(ListChangesRequest {
+        let req = Request::new(ListChangesRequest {
             limit: opts.batch_size.max(1),
         });
         let changes = watcher
@@ -160,8 +157,8 @@ async fn apply_changes(
             change.table_name.clone(),
             TableState {
                 last_change_id: change.change_id,
-                wal_frame: change.wal_frame.clone(),
-                cursor: change.cursor.clone(),
+                wal_frame: non_empty_string(&change.wal_frame),
+                cursor: non_empty_string(&change.cursor),
             },
         );
     }
@@ -232,6 +229,14 @@ fn mode_string(mode: IncrementalMode) -> &'static str {
     match mode {
         IncrementalMode::Append => "append",
         IncrementalMode::AppendDeduped => "append_deduped",
+    }
+}
+
+fn non_empty_string(value: &str) -> Option<String> {
+    if value.is_empty() {
+        None
+    } else {
+        Some(value.to_owned())
     }
 }
 
@@ -399,8 +404,8 @@ mod tests {
                 op: "insert".into(),
                 primary_key: "1".into(),
                 payload: serde_json::to_vec(&serde_json::json!({"a":1})).unwrap(),
-                wal_frame: None,
-                cursor: None,
+                wal_frame: String::new(),
+                cursor: String::new(),
             },
             Change {
                 change_id: 2,
@@ -408,8 +413,8 @@ mod tests {
                 op: "delete".into(),
                 primary_key: "2".into(),
                 payload: Vec::new(),
-                wal_frame: None,
-                cursor: None,
+                wal_frame: String::new(),
+                cursor: String::new(),
             },
         ];
         let mut per_table: HashMap<String, TableBatch> = HashMap::new();
