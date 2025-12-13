@@ -139,7 +139,7 @@ database-replicator init \
   --target "postgresql://user:pass@host:5432/db"
 ```
 
-**[📖 Full SQLite Guide →](README-SQLite.md)**
+**[📖 Full SQLite Guide →](sqlite-watcher-docs/README-SQLite.md)**
 
 ---
 
@@ -302,7 +302,7 @@ docker run --rm -it \
 ### Database-Specific Guides
 
 - **[PostgreSQL to PostgreSQL](README-PostgreSQL.md)** - Zero-downtime replication with logical replication
-- **[SQLite to PostgreSQL](README-SQLite.md)** - One-time replication using JSONB storage
+- **[SQLite to PostgreSQL](sqlite-watcher-docs/README-SQLite.md)** - One-time replication using JSONB storage
 - **[MongoDB to PostgreSQL](README-MongoDB.md)** - One-time replication with periodic refresh support
 - **[MySQL/MariaDB to PostgreSQL](README-MySQL.md)** - One-time replication with periodic refresh support
 

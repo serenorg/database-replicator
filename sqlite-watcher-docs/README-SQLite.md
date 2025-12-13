@@ -596,3 +596,36 @@ No. The tool uses `SQLITE_OPEN_READ_ONLY` which allows concurrent readers. Other
 For issues or questions:
 - **GitHub Issues**: https://github.com/serenorg/database-replicator/issues
 - **Email**: support@seren.ai
+## Delta replication with sqlite-watcher
+
+Once you have completed the initial snapshot (`database-replicator init --source sqlite ...`), you can switch to incremental change capture:
+
+1. Install `sqlite-watcher` (see [sqlite-watcher-docs/installers.md](installers.md) for Linux systemd units, macOS launchd plists, and Windows service guidance).
+2. Start the watcher beside your `.sqlite` file (example for Linux/macOS):
+
+   ```bash
+   sqlite-watcher serve \
+     --queue-db ~/.seren/sqlite-watcher/changes.db \
+     --listen unix:/tmp/sqlite-watcher.sock \
+     --token-file ~/.seren/sqlite-watcher/token
+   ```
+
+3. Consume the change feed with the new command:
+
+   ```bash
+   database-replicator sync-sqlite \
+     --target "postgresql://user:pass@your-serendb.serendb.com:5432/app" \
+     --watcher-endpoint unix:/tmp/sqlite-watcher.sock \
+     --token-file ~/.seren/sqlite-watcher/token \
+     --incremental-mode append
+   ```
+
+   Use `--incremental-mode append_deduped` to maintain `_latest` tables (one row per primary key) in addition to the append-only history.
+
+4. Verify the smoke test if you have Docker available:
+
+   ```bash
+   scripts/test-sqlite-delta.sh
+   ```
+
+   The script spins up a temporary Postgres container, runs `sqlite-watcher`, and executes `database-replicator sync-sqlite` against the watcher feed. Windows users can follow the same steps manually (the script prints the equivalent commands at the end).

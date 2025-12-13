@@ -42,7 +42,7 @@ impl ChangeOperation {
         }
     }
 
-    fn from_str(value: &str) -> Result<Self> {
+    pub fn from_str(value: &str) -> Result<Self> {
         match value {
             "insert" => Ok(ChangeOperation::Insert),
             "update" => Ok(ChangeOperation::Update),
