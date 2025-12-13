@@ -1,7 +1,7 @@
 ## Summary
-- fix sqlite sync change-state handling by treating watcher wal_frame/cursor fields as optional strings and cleaning up unused code
-- implement FromStr for sqlite ChangeOperation and resolve needless borrow lints in queue/server modules
-- keep clippy happy by applying the suggested clamp change and ensuring proto tests build
+- vendor `protoc` via `protoc-bin-vendored` so sqlite-watcher can build on runners without system protobuf
+- update build script to set `PROTOC` before invoking `tonic_build`
+- refresh Cargo.lock to capture the new dependencies
 
 ## Testing
 - cargo clippy
