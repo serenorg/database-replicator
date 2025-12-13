@@ -596,6 +596,7 @@ No. The tool uses `SQLITE_OPEN_READ_ONLY` which allows concurrent readers. Other
 For issues or questions:
 - **GitHub Issues**: https://github.com/serenorg/database-replicator/issues
 - **Email**: support@seren.ai
+<<<<<<< HEAD:README-SQLite.md
 ## Delta replication with sqlite-watcher
 
 Once you have completed the initial snapshot (`database-replicator init --source sqlite ...`), you can switch to incremental change capture:

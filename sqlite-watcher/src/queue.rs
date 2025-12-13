@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use anyhow::{anyhow, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -41,8 +42,12 @@ impl ChangeOperation {
             ChangeOperation::Delete => "delete",
         }
     }
+}
 
-    pub fn from_str(value: &str) -> Result<Self> {
+impl FromStr for ChangeOperation {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
         match value {
             "insert" => Ok(ChangeOperation::Insert),
             "update" => Ok(ChangeOperation::Update),
@@ -98,8 +103,8 @@ impl ChangeQueue {
         }
         let conn = Connection::open(path)
             .with_context(|| format!("failed to open queue database {}", path.display()))?;
-        conn.pragma_update(None, "journal_mode", &"wal").ok();
-        conn.pragma_update(None, "synchronous", &"normal").ok();
+        conn.pragma_update(None, "journal_mode", "wal").ok();
+        conn.pragma_update(None, "synchronous", "normal").ok();
         conn.execute_batch(SCHEMA)
             .context("failed to initialize change queue schema")?;
         Ok(Self {
@@ -132,7 +137,7 @@ impl ChangeQueue {
         let mut rows = stmt.query([limit as i64])?;
         let mut results = Vec::new();
         while let Some(row) = rows.next()? {
-            results.push(row_to_change(&row)?);
+            results.push(row_to_change(row)?);
         }
         Ok(results)
     }

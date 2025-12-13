@@ -3257,28 +3257,20 @@ name = "sqlite-watcher"
 version = "0.1.0"
 dependencies = [
  "anyhow",
-<<<<<<< HEAD
  "base64 0.21.7",
  "clap",
  "dirs",
  "prost",
-=======
- "dirs",
- "rand 0.8.5",
->>>>>>> origin/main
  "rusqlite",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 1.0.69",
-<<<<<<< HEAD
  "tokio",
  "tokio-stream",
  "tonic",
  "tonic-build",
  "tower",
-=======
->>>>>>> origin/main
 ]
 
 [[package]]

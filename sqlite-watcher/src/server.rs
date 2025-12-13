@@ -193,7 +193,7 @@ impl Watcher for WatcherService {
         &self,
         request: Request<ListChangesRequest>,
     ) -> Result<Response<ListChangesResponse>, Status> {
-        let limit = request.get_ref().limit.max(1).min(10_000) as usize;
+        let limit = request.get_ref().limit.clamp(1, 10_000) as usize;
         let queue = self.queue().map_err(internal_err)?;
         let rows = queue.fetch_batch(limit).map_err(internal_err)?;
         let changes = rows.into_iter().map(change_to_proto).collect();
