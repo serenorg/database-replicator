@@ -5,6 +5,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Rust Version](https://img.shields.io/badge/rust-1.70%2B-blue.svg)](https://www.rust-lang.org)
 [![Latest Release](https://img.shields.io/github/v/release/serenorg/database-replicator)](https://github.com/serenorg/database-replicator/releases)
+[![SPONSORED BY DAYTONA STARTUP GRID](https://img.shields.io/badge/SPONSORED%20BY-DAYTONA%20STARTUP%20GRID-2ECC71?style=for-the-badge)](https://daytona.io/startups?utm_source=serendb.com)
 
 ## Universal database-to-PostgreSQL replication for AI agents
 
