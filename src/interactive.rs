@@ -741,6 +741,18 @@ pub async fn select_databases_and_tables(
                 println!("───────────────────────────────────────────────────────────────");
                 println!();
 
+                // Warn if ALL tables are schema-only (no data will be transferred)
+                let total_tables: usize = included_tables_by_db.values().map(|v| v.len()).sum();
+                if schema_only_count > 0 && schema_only_count == total_tables {
+                    println!(
+                        "⚠️  WARNING: ALL {} tables are marked as schema-only!",
+                        total_tables
+                    );
+                    println!("   This means NO DATA will be transferred - only table structures.");
+                    println!("   If this is unintentional, press Esc to go back and adjust.");
+                    println!();
+                }
+
                 let confirmed = Confirm::new("Proceed with this configuration?")
                     .with_default(true)
                     .with_help_message("Enter confirm, Esc go back")

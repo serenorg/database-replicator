@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.0.15] - 2025-12-31
+
+### Fixed
+
+- **Better error information on remote job failures**: When a remote replication job fails, the CLI now displays exit code, stderr, logs, and stdout (if returned by the API). When no detailed error info is available, provides troubleshooting guidance including common causes and suggests running with `--local` to debug.
+
+### Added
+
+- **Warning when all tables are schema-only**: Interactive mode now warns users when ALL selected tables are marked as schema-only (no data transfer). This prevents accidental configurations where users expect data to be replicated but only schema structures are transferred.
+
+- **Extended JobStatus fields**: Added `stdout`, `stderr`, `logs`, and `exit_code` fields to capture detailed error information from remote job execution.
+
 ## [7.0.12] - 2025-12-11
 
 ## [7.0.14] - 2025-12-11

@@ -48,6 +48,14 @@ pub struct JobStatus {
     pub completed_at: Option<String>,
     pub progress: Option<ProgressInfo>,
     pub error: Option<String>,
+    /// Stdout from the replication command (if available)
+    pub stdout: Option<String>,
+    /// Stderr from the replication command (if available)
+    pub stderr: Option<String>,
+    /// Recent log lines from the job execution
+    pub logs: Option<Vec<String>>,
+    /// Exit code from the replication command (if available)
+    pub exit_code: Option<i32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

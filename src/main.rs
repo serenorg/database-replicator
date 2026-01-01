@@ -1172,8 +1172,75 @@ async fn init_remote(
         "failed" => {
             let error_msg = final_status
                 .error
+                .clone()
                 .unwrap_or_else(|| "Unknown error".to_string());
             println!("\n✗ Replication failed: {}", error_msg);
+
+            // Display exit code if available
+            if let Some(exit_code) = final_status.exit_code {
+                println!("Exit code: {}", exit_code);
+            }
+
+            // Display stderr if available
+            if let Some(ref stderr) = final_status.stderr {
+                if !stderr.is_empty() {
+                    println!("\n--- stderr ---");
+                    println!("{}", stderr);
+                }
+            }
+
+            // Display recent logs if available
+            if let Some(ref logs) = final_status.logs {
+                if !logs.is_empty() {
+                    println!("\n--- Recent logs ---");
+                    for line in logs.iter().take(50) {
+                        println!("{}", line);
+                    }
+                }
+            }
+
+            // Display stdout if available and stderr wasn't shown
+            if final_status.stderr.is_none()
+                || final_status
+                    .stderr
+                    .as_ref()
+                    .map(|s| s.is_empty())
+                    .unwrap_or(true)
+            {
+                if let Some(ref stdout) = final_status.stdout {
+                    if !stdout.is_empty() {
+                        println!("\n--- stdout ---");
+                        // Show last 100 lines of stdout
+                        let lines: Vec<&str> = stdout.lines().collect();
+                        let start = if lines.len() > 100 {
+                            lines.len() - 100
+                        } else {
+                            0
+                        };
+                        for line in &lines[start..] {
+                            println!("{}", line);
+                        }
+                    }
+                }
+            }
+
+            // Provide guidance for common issues
+            if error_msg.contains("exit code 1")
+                && final_status.logs.is_none()
+                && final_status.stderr.is_none()
+            {
+                println!("\n--- Troubleshooting ---");
+                println!("The remote job failed but no detailed error information is available.");
+                println!("Common causes:");
+                println!("  • Database connection issues (firewall, credentials, SSL)");
+                println!("  • Permission errors on source or target database");
+                println!("  • Schema conflicts or constraint violations");
+                println!("  • Out of memory on the worker instance");
+                println!("\nTo debug locally, run with --local:");
+                println!("  database-replicator init --source <source> --target <target> --local");
+                println!("\nContact support with job ID: {}", final_status.job_id);
+            }
+
             anyhow::bail!("Replication failed");
         }
         _ => {
