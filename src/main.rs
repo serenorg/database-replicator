@@ -4,6 +4,7 @@
 use anyhow::Context;
 use clap::{Args, Parser, Subcommand};
 use database_replicator::commands;
+#[cfg(feature = "sqlite-sync")]
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -178,6 +179,7 @@ enum Commands {
         daemon_status: bool,
     },
     /// Consume sqlite-watcher change batches and apply them to SerenDB JSONB tables
+    #[cfg(feature = "sqlite-sync")]
     SyncSqlite {
         /// Target PostgreSQL/Seren connection string
         #[arg(long)]
@@ -767,6 +769,7 @@ async fn main() -> anyhow::Result<()> {
             )?;
             commands::verify(&source, &target, Some(filter)).await
         }
+        #[cfg(feature = "sqlite-sync")]
         Commands::SyncSqlite {
             target,
             watcher_endpoint,

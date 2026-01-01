@@ -4,6 +4,7 @@
 pub mod init;
 pub mod status;
 pub mod sync;
+#[cfg(feature = "sqlite-sync")]
 pub mod sync_sqlite;
 pub mod target;
 pub mod validate;

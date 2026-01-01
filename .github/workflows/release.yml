@@ -184,4 +184,6 @@ jobs:
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
-          cargo publish --no-verify --allow-dirty
+          # Publish without sqlite-sync feature since sqlite-watcher is not on crates.io
+          # Users get full functionality via GitHub releases; crates.io gets core features
+          cargo publish --no-verify --allow-dirty --no-default-features
