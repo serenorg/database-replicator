@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.1.1] - 2026-01-01
+
+### Fixed
+
+- **Connection closed after DROP DATABASE** (closes #93): When dropping and recreating a target database, the CREATE DATABASE command now uses a fresh connection to the `postgres` admin database instead of reusing the stale connection that was terminated when the database was dropped.
+
+- **SerenDB URL parsing for non-UUID hostnames** (closes #93): Remote execution no longer fails when the SerenDB target URL doesn't contain embedded UUIDs in the hostname. The code now gracefully falls back to using just the connection string.
+
 ## [7.1.0] - 2025-12-31
 
 ### Added
