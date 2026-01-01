@@ -1009,15 +1009,26 @@ async fn init_remote(
             Some(target.clone()), // Pass the connection string for remote API
         )
     } else if database_replicator::utils::is_serendb_target(&target) {
-        let (p_id, b_id, _) = database_replicator::utils::parse_serendb_url_for_ids(&target)
-            .context("Failed to parse SerenDB target URL for project, branch, and database IDs.")?;
-        (
-            Some(p_id),
-            Some(b_id),
-            None,
-            SerenTargetMode::Url,
-            Some(target.clone()),
-        )
+        // Try to extract project/branch IDs from the URL hostname
+        // Format: <database-id>.<branch-id>.<project-id>.serendb.com
+        // If the URL doesn't have this format, proceed without IDs
+        if let Some((p_id, b_id, _)) =
+            database_replicator::utils::parse_serendb_url_for_ids(&target)
+        {
+            (
+                Some(p_id),
+                Some(b_id),
+                None,
+                SerenTargetMode::Url,
+                Some(target.clone()),
+            )
+        } else {
+            // SerenDB URL without embedded IDs - proceed with just the connection string
+            tracing::debug!(
+                "SerenDB target URL doesn't contain embedded project/branch IDs, proceeding with connection string only"
+            );
+            (None, None, None, SerenTargetMode::Url, Some(target.clone()))
+        }
     } else {
         (None, None, None, SerenTargetMode::Url, Some(target.clone()))
     };
