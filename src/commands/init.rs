@@ -480,12 +480,17 @@ pub async fn init(
                                 if should_drop {
                                     drop_database_if_exists(target_url, &db_info.name).await?;
 
-                                    // Recreate the database
+                                    // Recreate the database using a fresh connection to 'postgres'
+                                    // (target_client was connected to the dropped database and is now dead)
+                                    let admin_url =
+                                        replace_database_in_url(target_url, "postgres")?;
+                                    let admin_client =
+                                        postgres::connect_with_retry(&admin_url).await?;
                                     let create_query = format!(
                                         "CREATE DATABASE {}",
                                         crate::utils::quote_ident(&db_info.name)
                                     );
-                                    target_client
+                                    admin_client
                                         .execute(&create_query, &[])
                                         .await
                                         .with_context(|| {
