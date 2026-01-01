@@ -1146,17 +1146,17 @@ pub async fn init_mongodb_to_postgres(mongo_url: &str, target_url: &str) -> Resu
         );
 
         if !rows.is_empty() {
-            // Batch insert all rows
-            crate::jsonb::writer::insert_jsonb_batch(
+            // Bulk load all rows using COPY for maximum throughput
+            crate::jsonb::writer::copy_jsonb_batch(
                 &target_client,
                 collection_name,
                 rows,
                 "mongodb",
             )
             .await
-            .with_context(|| format!("Failed to insert data into table '{}'", collection_name))?;
+            .with_context(|| format!("Failed to COPY data into table '{}'", collection_name))?;
 
-            tracing::info!("  ✓ Inserted all documents into '{}'", collection_name);
+            tracing::info!("  ✓ COPY loaded all documents into '{}'", collection_name);
         } else {
             tracing::info!(
                 "  ✓ Collection '{}' is empty (no documents to insert)",
@@ -1291,12 +1291,12 @@ pub async fn init_mysql_to_postgres(mysql_url: &str, target_url: &str) -> Result
         tracing::info!("  ✓ Created JSONB table '{}' in PostgreSQL", table_name);
 
         if !rows.is_empty() {
-            // Batch insert all rows
-            crate::jsonb::writer::insert_jsonb_batch(&target_client, table_name, rows, "mysql")
+            // Bulk load all rows using COPY for maximum throughput
+            crate::jsonb::writer::copy_jsonb_batch(&target_client, table_name, rows, "mysql")
                 .await
-                .with_context(|| format!("Failed to insert data into table '{}'", table_name))?;
+                .with_context(|| format!("Failed to COPY data into table '{}'", table_name))?;
 
-            tracing::info!("  ✓ Inserted all rows into '{}'", table_name);
+            tracing::info!("  ✓ COPY loaded all rows into '{}'", table_name);
         } else {
             tracing::info!("  ✓ Table '{}' is empty (no rows to insert)", table_name);
         }

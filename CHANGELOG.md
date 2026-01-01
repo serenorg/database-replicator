@@ -2,17 +2,23 @@
 
 All notable changes to this project will be documented in this file.
 
-## [7.0.15] - 2025-12-31
-
-### Fixed
-
-- **Better error information on remote job failures**: When a remote replication job fails, the CLI now displays exit code, stderr, logs, and stdout (if returned by the API). When no detailed error info is available, provides troubleshooting guidance including common causes and suggests running with `--local` to debug.
+## [7.1.0] - 2025-12-31
 
 ### Added
+
+- **COPY FROM STDIN for 5-10x faster JSONB migrations** (closes #92): SQLite, MongoDB, and MySQL migrations now use PostgreSQL's COPY protocol instead of batch INSERT statements. This provides massive throughput improvements for large datasets - a 7.2M row migration that took ~70 minutes now completes in ~10-15 minutes.
+
+- **Better error information on remote job failures**: When a remote replication job fails, the CLI now displays exit code, stderr, logs, and stdout (if returned by the API). When no detailed error info is available, provides troubleshooting guidance including common causes and suggests running with `--local` to debug.
 
 - **Warning when all tables are schema-only**: Interactive mode now warns users when ALL selected tables are marked as schema-only (no data transfer). This prevents accidental configurations where users expect data to be replicated but only schema structures are transferred.
 
 - **Extended JobStatus fields**: Added `stdout`, `stderr`, `logs`, and `exit_code` fields to capture detailed error information from remote job execution.
+
+### Fixed
+
+- **DROP DATABASE error "cannot drop the currently open database"**: The init command now connects to the `postgres` maintenance database before dropping target databases, fixing the PostgreSQL error that prevented database recreation.
+
+- **Windows build for sqlite-watcher**: Added `bundled-windows` feature to rusqlite dependency in sqlite-watcher, fixing Windows builds that failed due to missing `sqlite3.lib`.
 
 ## [7.0.12] - 2025-12-11
 

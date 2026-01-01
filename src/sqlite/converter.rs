@@ -422,13 +422,13 @@ pub async fn convert_table_batched(
         // Convert batch to JSONB
         let jsonb_rows = convert_batch_to_jsonb(rows, &id_column, total_rows, table)?;
 
-        // Insert batch to PostgreSQL
+        // COPY batch to PostgreSQL for maximum throughput
         if !jsonb_rows.is_empty() {
-            crate::jsonb::writer::insert_jsonb_batch(pg_client, table, jsonb_rows, source_type)
+            crate::jsonb::writer::copy_jsonb_batch(pg_client, table, jsonb_rows, source_type)
                 .await
                 .with_context(|| {
                     format!(
-                        "Failed to insert batch {} into PostgreSQL table '{}'",
+                        "Failed to COPY batch {} into PostgreSQL table '{}'",
                         batch_num, table
                     )
                 })?;
