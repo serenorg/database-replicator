@@ -5,7 +5,6 @@ use crate::migration::dump::remove_restricted_role_grants;
 use crate::{checkpoint, migration, postgres};
 use anyhow::{bail, Context, Result};
 use std::io::{self, Write};
-use tokio_postgres::Client;
 
 /// Initial replication command for snapshot schema and data copy
 ///
@@ -479,7 +478,7 @@ pub async fn init(
                                 };
 
                                 if should_drop {
-                                    drop_database_if_exists(&target_client, &db_info.name).await?;
+                                    drop_database_if_exists(target_url, &db_info.name).await?;
 
                                     // Recreate the database
                                     let create_query = format!(
@@ -768,12 +767,23 @@ fn prompt_drop_database(db_name: &str) -> Result<bool> {
 }
 
 /// Drops a database if it exists
-async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<()> {
+///
+/// NOTE: This function connects to the `postgres` database to issue the DROP command,
+/// because PostgreSQL does not allow dropping the currently connected database.
+async fn drop_database_if_exists(target_url: &str, db_name: &str) -> Result<()> {
     // Validate database name to prevent SQL injection
     crate::utils::validate_postgres_identifier(db_name)
         .with_context(|| format!("Invalid database name: '{}'", db_name))?;
 
     tracing::info!("  Dropping existing database '{}'...", db_name);
+
+    // Connect to 'postgres' database to issue DROP command
+    // (PostgreSQL doesn't allow dropping the currently connected database)
+    let admin_url = replace_database_in_url(target_url, "postgres")
+        .context("Failed to construct admin connection URL")?;
+    let admin_conn = postgres::connection::connect_with_retry(&admin_url)
+        .await
+        .context("Failed to connect to postgres database for DROP operation")?;
 
     // Terminate existing connections to the database
     // Skip connections owned by SUPERUSER roles (we can't terminate those on managed PostgreSQL)
@@ -785,7 +795,7 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
           AND sa.pid <> pg_backend_pid()
           AND NOT r.rolsuper
     ";
-    target_conn.execute(terminate_query, &[&db_name]).await?;
+    admin_conn.execute(terminate_query, &[&db_name]).await?;
 
     // Check if any connections remain (including SUPERUSER connections we couldn't terminate)
     let remaining_query = "
@@ -794,7 +804,7 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
         WHERE sa.datname = $1
           AND sa.pid <> pg_backend_pid()
     ";
-    let row = target_conn
+    let row = admin_conn
         .query_one(remaining_query, &[&db_name])
         .await
         .context("Failed to check remaining connections")?;
@@ -825,7 +835,7 @@ async fn drop_database_if_exists(target_conn: &Client, db_name: &str) -> Result<
         "DROP DATABASE IF EXISTS {}",
         crate::utils::quote_ident(db_name)
     );
-    target_conn
+    admin_conn
         .execute(&drop_query, &[])
         .await
         .with_context(|| format!("Failed to drop database '{}'", db_name))?;
