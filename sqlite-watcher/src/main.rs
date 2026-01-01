@@ -103,7 +103,9 @@ async fn serve(queue_db: Option<PathBuf>, listen: &str, token_file: Option<PathB
         #[cfg(unix)]
         WatcherEndpoint::Unix(path) => spawn_unix(&path, queue.path().to_path_buf(), token)?,
         #[cfg(not(unix))]
-        WatcherEndpoint::Unix(_) => bail!("Unix sockets are not supported on Windows. Use tcp:host:port instead."),
+        WatcherEndpoint::Unix(_) => {
+            bail!("Unix sockets are not supported on Windows. Use tcp:host:port instead.")
+        }
         WatcherEndpoint::Pipe(name) => bail!("named pipes are not yet supported ({name})"),
     };
     println!("Press Ctrl+C to stop sqlite-watcher");
