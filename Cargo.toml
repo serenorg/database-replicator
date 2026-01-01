@@ -54,7 +54,9 @@ libc = "0.2"
 rust_decimal = { version = "1.39", features = ["db-tokio-postgres"] }
 tonic = { version = "0.11", features = ["transport"] }
 tower = "0.4"
-sqlite-watcher = { path = "sqlite-watcher", optional = true }
+# Note: sqlite-watcher is local-only, not on crates.io
+# Users get sqlite-sync feature via GitHub releases; crates.io excludes it
+sqlite-watcher = { path = "sqlite-watcher", version = "0.1.0", optional = true }
 
 [features]
 default = ["sqlite-sync"]
