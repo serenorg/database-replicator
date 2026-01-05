@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.2.1] - 2026-01-05
+
+### Fixed
+
+- **Add-tables mode: drop existing tables before restore**: When using Add mode (`init --include-tables` on existing database), the specified tables are now dropped before schema restore. This fixes "relation already exists" errors when tables exist on the target.
+
 ## [7.2.0] - 2026-01-05
 
 ### Added
