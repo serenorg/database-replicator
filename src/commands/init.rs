@@ -465,19 +465,44 @@ pub async fn init(
                                 );
                             } else {
                                 // Database exists and has data
-                                let should_drop = if drop_existing {
+                                // Check if we have specific tables to add (--include-tables)
+                                let tables_to_add = filter.tables_for_database(&db_info.name);
+                                let has_table_filter = tables_to_add.is_some();
+
+                                let (should_drop, add_tables_mode) = if drop_existing {
                                     // Force drop with --drop-existing flag
-                                    true
+                                    (true, false)
                                 } else if skip_confirmation {
-                                    // Auto-confirm drop with --yes flag (non-interactive)
-                                    tracing::info!(
-                                        "  Auto-confirming drop for database '{}' (--yes flag)",
-                                        db_info.name
-                                    );
-                                    true
+                                    // Auto-confirm with --yes flag
+                                    if has_table_filter {
+                                        // With -y and --include-tables, default to Add mode
+                                        tracing::info!(
+                                            "  Auto-selecting Add mode for '{}' (-y flag with --include-tables)",
+                                            db_info.name
+                                        );
+                                        (false, true)
+                                    } else {
+                                        // With -y but no table filter, default to Drop
+                                        tracing::info!(
+                                            "  Auto-confirming drop for database '{}' (--yes flag)",
+                                            db_info.name
+                                        );
+                                        (true, false)
+                                    }
+                                } else if has_table_filter {
+                                    // Interactive mode with --include-tables: offer Add/Drop/Quit
+                                    let tables = tables_to_add.as_ref().unwrap();
+                                    match prompt_add_or_drop(&db_info.name, tables.len(), tables)? {
+                                        AddTablesChoice::Add => (false, true),
+                                        AddTablesChoice::Drop => (true, false),
+                                        AddTablesChoice::Quit => {
+                                            bail!("Aborted: User chose to quit");
+                                        }
+                                    }
                                 } else {
-                                    // Interactive mode: prompt user
-                                    prompt_drop_database(&db_info.name)?
+                                    // Interactive mode without table filter: original Drop/Abort prompt
+                                    let should_drop = prompt_drop_database(&db_info.name)?;
+                                    (should_drop, false)
                                 };
 
                                 if should_drop {
@@ -503,6 +528,13 @@ pub async fn init(
                                             )
                                         })?;
                                     tracing::info!("  Created database '{}'", db_info.name);
+                                } else if add_tables_mode {
+                                    tracing::info!(
+                                        "  Adding tables to existing database '{}'",
+                                        db_info.name
+                                    );
+                                    // Database exists, we're in add mode - proceed to dump/restore
+                                    // The filter will ensure only specified tables are processed
                                 } else {
                                     bail!("Aborted: Database '{}' already exists", db_info.name);
                                 }
@@ -772,6 +804,59 @@ fn prompt_drop_database(db_name: &str) -> Result<bool> {
     io::stdin().read_line(&mut input)?;
 
     Ok(input.trim().eq_ignore_ascii_case("y"))
+}
+
+/// User's choice when adding tables to existing database
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AddTablesChoice {
+    /// Add only the specified tables, keep existing data
+    Add,
+    /// Drop and recreate entire database
+    Drop,
+    /// Abort the operation
+    Quit,
+}
+
+/// Prompts user to choose between adding tables or dropping database
+fn prompt_add_or_drop(
+    db_name: &str,
+    table_count: usize,
+    tables: &[String],
+) -> Result<AddTablesChoice> {
+    println!();
+    println!("========================================");
+    println!("Database '{}' already exists with data.", db_name);
+    println!("========================================");
+    println!();
+    println!("You're adding {} table(s):", table_count);
+    for table in tables.iter().take(5) {
+        println!("  • {}", table);
+    }
+    if table_count > 5 {
+        println!("  ... and {} more", table_count - 5);
+    }
+    println!();
+    println!("Options:");
+    println!("  [A] Add tables to existing database (keeps existing data)");
+    println!("  [D] Drop and recreate database (deletes ALL existing data)");
+    println!("  [Q] Quit");
+    println!();
+    print!("Choice [A/D/Q]: ");
+    io::stdout().flush()?;
+
+    let mut input = String::new();
+    io::stdin().read_line(&mut input)?;
+    let choice = input.trim().to_lowercase();
+
+    match choice.as_str() {
+        "a" | "add" => Ok(AddTablesChoice::Add),
+        "d" | "drop" => Ok(AddTablesChoice::Drop),
+        "q" | "quit" | "" => Ok(AddTablesChoice::Quit),
+        _ => {
+            println!("Invalid choice '{}', aborting.", choice);
+            Ok(AddTablesChoice::Quit)
+        }
+    }
 }
 
 /// Drops a database if it exists
