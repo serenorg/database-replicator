@@ -422,6 +422,10 @@ pub async fn init(
         let source_db_url = replace_database_in_url(source_url, &db_info.name)?;
         let target_db_url = replace_database_in_url(target_url, &db_info.name)?;
 
+        // Track if we're in add-tables mode (adding to existing database without dropping)
+        let mut is_add_tables_mode = false;
+        let mut tables_to_drop_in_add_mode: Vec<String> = Vec::new();
+
         // Handle database creation atomically to avoid TOCTOU race condition
         // Scope the connection so it's dropped before dump/restore subprocess operations
         {
@@ -533,8 +537,11 @@ pub async fn init(
                                         "  Adding tables to existing database '{}'",
                                         db_info.name
                                     );
-                                    // Database exists, we're in add mode - proceed to dump/restore
-                                    // The filter will ensure only specified tables are processed
+                                    // Set the flag and store tables to drop before schema restore
+                                    is_add_tables_mode = true;
+                                    if let Some(tables) = tables_to_add.as_ref() {
+                                        tables_to_drop_in_add_mode = tables.clone();
+                                    }
                                 } else {
                                     bail!("Aborted: Database '{}' already exists", db_info.name);
                                 }
@@ -565,6 +572,25 @@ pub async fn init(
             &filter,
         )
         .await?;
+
+        // In add-tables mode, drop the specific tables first so restore_schema can recreate them
+        if is_add_tables_mode && !tables_to_drop_in_add_mode.is_empty() {
+            tracing::info!(
+                "  Dropping {} existing table(s) before restore...",
+                tables_to_drop_in_add_mode.len()
+            );
+            let db_client = postgres::connect_with_retry(&target_db_url).await?;
+            for table_name in &tables_to_drop_in_add_mode {
+                // Table name format is "schema.table" or just "table" (assumes public)
+                let drop_query = format!("DROP TABLE IF EXISTS {} CASCADE", table_name);
+                if let Err(e) = db_client.execute(&drop_query, &[]).await {
+                    tracing::warn!("  Warning: Failed to drop table {}: {}", table_name, e);
+                    // Continue anyway - the table might not exist
+                } else {
+                    tracing::info!("    Dropped table {}", table_name);
+                }
+            }
+        }
 
         tracing::info!("  Restoring schema for '{}'...", db_info.name);
         migration::restore_schema(&target_db_url, schema_file.to_str().unwrap()).await?;
