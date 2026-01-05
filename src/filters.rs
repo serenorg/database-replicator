@@ -248,6 +248,49 @@ impl ReplicationFilter {
         Ok(filtered)
     }
 
+    /// Gets the table names to check for a specific database (synchronous, no DB query)
+    ///
+    /// Extracts table names from include_tables filter for the given database.
+    /// Returns None if no include_tables filter is set (meaning check all tables).
+    /// Table names are returned in "schema.table" format (defaulting to "public" schema).
+    ///
+    /// # Arguments
+    ///
+    /// * `db_name` - Database name to extract tables for
+    ///
+    /// # Returns
+    ///
+    /// Some(Vec<String>) with table names if include_tables is set, None otherwise
+    pub fn tables_for_database(&self, db_name: &str) -> Option<Vec<String>> {
+        let include_tables = self.include_tables.as_ref()?;
+
+        let tables: Vec<String> = include_tables
+            .iter()
+            .filter_map(|full_name| {
+                // Format: "database.table" or "database.schema.table"
+                let parts: Vec<&str> = full_name.splitn(2, '.').collect();
+                if parts.len() == 2 && parts[0] == db_name {
+                    let table_part = parts[1];
+                    // If table_part contains a dot, it's "schema.table"
+                    // Otherwise, assume "public" schema
+                    if table_part.contains('.') {
+                        Some(table_part.to_string())
+                    } else {
+                        Some(format!("public.{}", table_part))
+                    }
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        if tables.is_empty() {
+            None
+        } else {
+            Some(tables)
+        }
+    }
+
     /// Gets list of tables to replicate for a given database
     pub async fn get_tables_to_replicate(
         &self,
@@ -477,5 +520,65 @@ mod tests {
             filter_b.fingerprint(),
             "Filters with different table rule schemas should produce different fingerprints"
         );
+    }
+
+    #[test]
+    fn test_tables_for_database_extracts_tables() {
+        let filter = ReplicationFilter::new(
+            None,
+            None,
+            Some(vec![
+                "mydb.users".to_string(),
+                "mydb.orders".to_string(),
+                "otherdb.products".to_string(),
+            ]),
+            None,
+        )
+        .unwrap();
+
+        let tables = filter.tables_for_database("mydb");
+        assert!(tables.is_some());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 2);
+        assert!(tables.contains(&"public.users".to_string()));
+        assert!(tables.contains(&"public.orders".to_string()));
+    }
+
+    #[test]
+    fn test_tables_for_database_returns_none_without_filter() {
+        let filter = ReplicationFilter::empty();
+        let tables = filter.tables_for_database("mydb");
+        assert!(tables.is_none());
+    }
+
+    #[test]
+    fn test_tables_for_database_returns_none_for_unmatched_db() {
+        let filter = ReplicationFilter::new(
+            None,
+            None,
+            Some(vec!["otherdb.users".to_string()]),
+            None,
+        )
+        .unwrap();
+
+        let tables = filter.tables_for_database("mydb");
+        assert!(tables.is_none());
+    }
+
+    #[test]
+    fn test_tables_for_database_preserves_schema() {
+        let filter = ReplicationFilter::new(
+            None,
+            None,
+            Some(vec!["mydb.analytics.events".to_string()]),
+            None,
+        )
+        .unwrap();
+
+        let tables = filter.tables_for_database("mydb");
+        assert!(tables.is_some());
+        let tables = tables.unwrap();
+        assert_eq!(tables.len(), 1);
+        assert!(tables.contains(&"analytics.events".to_string()));
     }
 }

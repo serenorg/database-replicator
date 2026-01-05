@@ -187,14 +187,16 @@ impl TablePermissionCheck {
     }
 }
 
-/// Check SELECT permission on all user tables in a database
+/// Check SELECT permission on user tables in a database
 ///
-/// Queries pg_tables to find all user tables (excluding pg_catalog and
-/// information_schema) and checks if current user has SELECT privilege.
+/// Queries pg_tables to find user tables and checks if current user has SELECT privilege.
+/// If `filtered_tables` is provided, only those specific tables are checked.
+/// Otherwise, all user tables (excluding pg_catalog and information_schema) are checked.
 ///
 /// # Arguments
 ///
 /// * `client` - Connected PostgreSQL client (must be connected to the target database)
+/// * `filtered_tables` - Optional list of specific tables to check (format: "schema.table")
 ///
 /// # Returns
 ///
@@ -211,44 +213,81 @@ impl TablePermissionCheck {
 /// # use database_replicator::postgres::{connect, check_table_select_permissions};
 /// # async fn example() -> Result<()> {
 /// let client = connect("postgresql://user:pass@localhost:5432/mydb").await?;
-/// let perms = check_table_select_permissions(&client).await?;
+/// // Check all tables
+/// let perms = check_table_select_permissions(&client, None).await?;
+/// // Or check specific tables
+/// let specific = vec!["public.users".to_string(), "public.orders".to_string()];
+/// let perms = check_table_select_permissions(&client, Some(&specific)).await?;
 /// if !perms.all_accessible() {
 ///     println!("Cannot read {} tables", perms.inaccessible_count());
 /// }
 /// # Ok(())
 /// # }
 /// ```
-pub async fn check_table_select_permissions(client: &Client) -> Result<TablePermissionCheck> {
-    // Query all user tables and check SELECT permission
-    let query = r#"
-        SELECT
-            schemaname,
-            tablename,
-            has_table_privilege(current_user, quote_ident(schemaname) || '.' || quote_ident(tablename), 'SELECT') as has_select
-        FROM pg_tables
-        WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
-        ORDER BY schemaname, tablename
-    "#;
-
-    let rows = client
-        .query(query, &[])
-        .await
-        .context("Failed to query table permissions")?;
-
+pub async fn check_table_select_permissions(
+    client: &Client,
+    filtered_tables: Option<&[String]>,
+) -> Result<TablePermissionCheck> {
     let mut accessible = Vec::new();
     let mut inaccessible = Vec::new();
 
-    for row in rows {
-        let schema: String = row.get(0);
-        let table: String = row.get(1);
-        let has_select: bool = row.get(2);
+    if let Some(tables) = filtered_tables {
+        // Check only the specified tables
+        for full_name in tables {
+            let parts: Vec<&str> = full_name.splitn(2, '.').collect();
+            let (schema, table) = if parts.len() == 2 {
+                (parts[0], parts[1])
+            } else {
+                ("public", parts[0])
+            };
 
-        let full_name = format!("{}.{}", schema, table);
+            let query = "SELECT has_table_privilege(current_user, $1, 'SELECT')";
+            let qualified_name = format!("{}.{}", schema, table);
 
-        if has_select {
-            accessible.push(full_name);
-        } else {
-            inaccessible.push(full_name);
+            match client.query_one(query, &[&qualified_name]).await {
+                Ok(row) => {
+                    let has_select: bool = row.get(0);
+                    if has_select {
+                        accessible.push(full_name.clone());
+                    } else {
+                        inaccessible.push(full_name.clone());
+                    }
+                }
+                Err(_) => {
+                    // Table might not exist or other error - treat as inaccessible
+                    inaccessible.push(full_name.clone());
+                }
+            }
+        }
+    } else {
+        // Query all user tables and check SELECT permission
+        let query = r#"
+            SELECT
+                schemaname,
+                tablename,
+                has_table_privilege(current_user, quote_ident(schemaname) || '.' || quote_ident(tablename), 'SELECT') as has_select
+            FROM pg_tables
+            WHERE schemaname NOT IN ('pg_catalog', 'information_schema')
+            ORDER BY schemaname, tablename
+        "#;
+
+        let rows = client
+            .query(query, &[])
+            .await
+            .context("Failed to query table permissions")?;
+
+        for row in rows {
+            let schema: String = row.get(0);
+            let table: String = row.get(1);
+            let has_select: bool = row.get(2);
+
+            let full_name = format!("{}.{}", schema, table);
+
+            if has_select {
+                accessible.push(full_name);
+            } else {
+                inaccessible.push(full_name);
+            }
         }
     }
 
@@ -299,7 +338,8 @@ mod tests {
         let url = std::env::var("TEST_SOURCE_URL").expect("TEST_SOURCE_URL not set");
         let client = connect(&url).await.unwrap();
 
-        let result = check_table_select_permissions(&client).await.unwrap();
+        // Test checking all tables (no filter)
+        let result = check_table_select_permissions(&client, None).await.unwrap();
 
         // Just verify the function runs without error
         // In a real database, results depend on actual permissions

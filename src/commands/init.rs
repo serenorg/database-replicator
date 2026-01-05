@@ -103,12 +103,18 @@ pub async fn init(
             // Run pre-flight checks before any destructive operations
             tracing::info!("Running pre-flight checks...");
 
-            // Get explicit database list from filters (include_databases or extracted from include_tables)
-            let databases = filter.databases_to_check();
+            // Extract database name from source URL for filtering
+            let source_db_name = crate::utils::parse_postgres_url(source_url)
+                .map(|parts| parts.database)
+                .unwrap_or_default();
+
+            // Get filtered tables for the source database (if --include-tables was specified)
+            let filtered_tables = filter.tables_for_database(&source_db_name);
+
             let preflight_result = crate::preflight::run_preflight_checks(
                 source_url,
                 target_url,
-                databases.as_deref(),
+                filtered_tables,
             )
             .await?;
 

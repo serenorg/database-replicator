@@ -154,7 +154,8 @@ impl PreflightResult {
 ///
 /// * `source_url` - PostgreSQL connection string for source
 /// * `target_url` - PostgreSQL connection string for target
-/// * `databases` - Optional list of databases to check permissions for
+/// * `filtered_tables` - Optional list of specific tables to check SELECT permissions on.
+///   Format: "schema.table". If None, all user tables are checked.
 ///
 /// # Returns
 ///
@@ -162,7 +163,7 @@ impl PreflightResult {
 pub async fn run_preflight_checks(
     source_url: &str,
     target_url: &str,
-    _databases: Option<&[String]>,
+    filtered_tables: Option<Vec<String>>,
 ) -> Result<PreflightResult> {
     let mut result = PreflightResult::new();
 
@@ -182,7 +183,7 @@ pub async fn run_preflight_checks(
     if let Some(url) = source_client_url {
         match crate::postgres::connect_with_retry(&url).await {
             Ok(client) => {
-                check_source_permissions(&mut result, &client).await;
+                check_source_permissions(&mut result, &client, filtered_tables.as_deref()).await;
                 // client is dropped here, closing the connection
             }
             Err(e) => {
@@ -350,7 +351,11 @@ fn check_version_compatibility(result: &mut PreflightResult) {
     }
 }
 
-async fn check_source_permissions(result: &mut PreflightResult, client: &Client) {
+async fn check_source_permissions(
+    result: &mut PreflightResult,
+    client: &Client,
+    filtered_tables: Option<&[String]>,
+) {
     // Check REPLICATION privilege (or AWS RDS rds_replication role)
     match crate::postgres::check_source_privileges(client).await {
         Ok(privs) => {
@@ -388,8 +393,8 @@ async fn check_source_permissions(result: &mut PreflightResult, client: &Client)
         }
     }
 
-    // Check table SELECT permissions
-    match crate::postgres::check_table_select_permissions(client).await {
+    // Check table SELECT permissions (only for filtered tables if specified)
+    match crate::postgres::check_table_select_permissions(client, filtered_tables).await {
         Ok(perms) => {
             if perms.all_accessible() {
                 result.source_permissions.push(CheckResult::pass(
