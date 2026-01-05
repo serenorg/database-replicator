@@ -46,12 +46,13 @@ rusqlite = "0.30"
 base64 = "0.21"
 mongodb = "3.4"
 bson = "2.9"
-mysql_async = "0.34"
+mysql_async = "0.36"
 dirs = "5.0"
 url = "2.5"
 chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 libc = "0.2"
-rust_decimal = { version = "1.39", features = ["db-tokio-postgres"] }
+# Disable default features to avoid pulling in rkyv (RUSTSEC-2026-0001)
+rust_decimal = { version = "1.39", default-features = false, features = ["db-tokio-postgres", "serde", "std"] }
 tonic = { version = "0.11", features = ["transport"] }
 tower = "0.4"
 # Note: sqlite-watcher is local-only, not on crates.io

@@ -1,0 +1,9 @@
+# ABOUTME: Configuration for cargo-audit security scanner
+# ABOUTME: Ignores vulnerabilities in optional dependencies we don't use
+
+[advisories]
+# RUSTSEC-2026-0001: rkyv vulnerability in Arc<T>/Rc<T> from_value on OOM
+# This is an OPTIONAL dependency of rust_decimal that we don't enable.
+# We only use rust_decimal's db-tokio-postgres feature, not rkyv serialization.
+# The rkyv crate appears in Cargo.lock but is never compiled into our binary.
+ignore = ["RUSTSEC-2026-0001"]
