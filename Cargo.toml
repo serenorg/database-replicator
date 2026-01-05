@@ -7,7 +7,7 @@ members = [
 
 [package]
 name = "database-replicator"
-version = "7.1.2"
+version = "7.1.3"
 edition = "2021"
 license = "Apache-2.0"
 description = "Universal database-to-PostgreSQL replication CLI. Supports PostgreSQL, SQLite, MongoDB, and MySQL."

@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.1.3] - 2026-01-05
+
+### Fixed
+
+- **Security audit failure resolved**: Added `.cargo/audit.toml` to ignore RUSTSEC-2026-0001 (rkyv vulnerability). The rkyv crate is an optional dependency of rust_decimal that we don't use - only db-tokio-postgres feature is enabled, not rkyv serialization.
+
+- **Dependency updates**: Upgraded mysql_async from 0.34 to 0.36, updated rust_decimal to explicitly disable default features.
+
 ## [7.1.2] - 2026-01-05
 
 ### Fixed
