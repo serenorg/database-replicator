@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.1.2] - 2026-01-05
+
+### Fixed
+
+- **Pre-flight checks now respect --include-tables filter** (closes #94): When running `init --local` with `--include-tables`, pre-flight checks now only validate SELECT permissions on the filtered tables instead of all tables in the database. Previously, users would get permission errors for tables they weren't even trying to replicate.
+
 ## [7.1.1] - 2026-01-01
 
 ### Fixed
