@@ -553,13 +553,9 @@ mod tests {
 
     #[test]
     fn test_tables_for_database_returns_none_for_unmatched_db() {
-        let filter = ReplicationFilter::new(
-            None,
-            None,
-            Some(vec!["otherdb.users".to_string()]),
-            None,
-        )
-        .unwrap();
+        let filter =
+            ReplicationFilter::new(None, None, Some(vec!["otherdb.users".to_string()]), None)
+                .unwrap();
 
         let tables = filter.tables_for_database("mydb");
         assert!(tables.is_none());

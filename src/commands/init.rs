@@ -111,12 +111,9 @@ pub async fn init(
             // Get filtered tables for the source database (if --include-tables was specified)
             let filtered_tables = filter.tables_for_database(&source_db_name);
 
-            let preflight_result = crate::preflight::run_preflight_checks(
-                source_url,
-                target_url,
-                filtered_tables,
-            )
-            .await?;
+            let preflight_result =
+                crate::preflight::run_preflight_checks(source_url, target_url, filtered_tables)
+                    .await?;
 
             preflight_result.print();
 
