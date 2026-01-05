@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.2.0] - 2026-01-05
+
+### Added
+
+- **Add tables to existing database without dropping** (closes #95): When using `init --include-tables` on a target database that already exists with data, users are now offered three choices:
+  - **[A] Add** - Add only the specified tables to the existing database (preserves existing data)
+  - **[D] Drop** - Drop and recreate the entire database (deletes all existing data)
+  - **[Q] Quit** - Abort the operation
+
+  This enables incremental table addition to existing replication setups without losing previously synced data. With `-y` flag and `--include-tables`, Add mode is automatically selected.
+
 ## [7.1.3] - 2026-01-05
 
 ### Fixed
