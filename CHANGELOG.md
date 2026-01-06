@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [7.2.2] - 2026-01-05
+
+### Improved
+
+- **Better error messages for publication/subscription failures**: Publication and subscription creation errors now extract the full PostgreSQL error including error code, message, detail, and hint. Previously, errors would show unhelpful "db error" messages instead of the actual PostgreSQL error (e.g., missing privileges, table not found).
+
 ## [7.2.1] - 2026-01-05
 
 ### Fixed

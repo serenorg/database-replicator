@@ -132,6 +132,37 @@ pub async fn create_publication(
     execute_publication_query(client, publication_name, &query).await
 }
 
+/// Extract detailed error message from tokio-postgres error
+fn extract_pg_error_details(e: &tokio_postgres::Error) -> String {
+    let error_msg = e.to_string();
+
+    if let Some(db_error) = e.as_db_error() {
+        // PostgreSQL returned a specific error - extract all details
+        let mut details = format!(
+            "PostgreSQL error {}: {}",
+            db_error.code().code(),
+            db_error.message()
+        );
+        if let Some(detail) = db_error.detail() {
+            details.push_str(&format!("\nDetail: {}", detail));
+        }
+        if let Some(hint) = db_error.hint() {
+            details.push_str(&format!("\nHint: {}", hint));
+        }
+        details
+    } else if let Some(source) = std::error::Error::source(e) {
+        // Check for underlying IO or TLS errors
+        format!("{} (caused by: {})", error_msg, source)
+    } else {
+        // Use debug format for more information when to_string() is unhelpful
+        if error_msg == "db error" || error_msg.len() < 20 {
+            format!("{:?}", e)
+        } else {
+            error_msg
+        }
+    }
+}
+
 async fn execute_publication_query(
     client: &Client,
     publication_name: &str,
@@ -143,7 +174,7 @@ async fn execute_publication_query(
             Ok(())
         }
         Err(e) => {
-            let err_str = e.to_string();
+            let err_str = extract_pg_error_details(&e);
             // Publication might already exist - that's okay
             if err_str.contains("already exists") {
                 tracing::info!("✓ Publication '{}' already exists", publication_name);
